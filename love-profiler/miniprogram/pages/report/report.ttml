@@ -1,0 +1,39 @@
+<view class="container">
+  <!-- 离屏 canvas，用于海报绘制 -->
+  <canvas canvas-id="poster" class="poster-canvas" />
+
+  <view tt:if="{{loading}}" class="loading-wrap">
+    <view class="spinner" />
+    <text class="loading-text">正在生成你的专属报告...</text>
+  </view>
+  <block tt:else>
+    <view class="type-card">
+      <text class="type-emoji">💝</text>
+      <text class="type-label">你的恋爱人格</text>
+      <text class="type-name">{{personalityType}}</text>
+    </view>
+    <view class="report-section">
+      <text class="section-title">📋 详细分析</text>
+      <text class="report-text">{{reportText}}</text>
+    </view>
+    <view class="actions">
+      <button class="btn-poster" bindtap="generatePoster">生成分享海报</button>
+      <button class="btn-share" open-type="share">分享给朋友</button>
+      <button class="btn-restart" bindtap="restart">再测一次</button>
+      <button tt:if="{{!isHistory}}" class="btn-history" bindtap="goHistory">历史记录</button>
+    </view>
+  </block>
+
+  <!-- 海报预览弹窗 -->
+  <view tt:if="{{showPoster}}" class="poster-modal">
+    <view class="poster-mask" bindtap="closePoster" />
+    <view class="poster-wrap">
+      <image src="{{posterPath}}" class="poster-img" mode="aspectFit" show-menu-by-longpress="true" />
+      <view class="poster-tip">长按图片可保存或分享</view>
+      <view class="poster-btns">
+        <button class="btn-save" bindtap="savePoster">保存到相册</button>
+        <button class="btn-close-poster" bindtap="closePoster">关闭</button>
+      </view>
+    </view>
+  </view>
+</view>

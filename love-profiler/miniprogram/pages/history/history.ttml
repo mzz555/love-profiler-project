@@ -1,0 +1,24 @@
+<view class="container">
+  <view tt:if="{{loading}}" class="state-wrap">
+    <text class="state-text">加载中...</text>
+  </view>
+  <view tt:elif="{{list.length === 0}}" class="state-wrap">
+    <text class="state-emoji">📭</text>
+    <text class="state-text">暂无历史记录</text>
+  </view>
+  <scroll-view tt:else scroll-y class="list">
+    <view
+      tt:for="{{list}}"
+      tt:key="id"
+      class="item"
+      bindtap="viewReport"
+      data-session-id="{{item.session_id}}"
+    >
+      <view class="item-header">
+        <text class="type-tag">{{item.personality_type}}</text>
+        <text class="date">{{item.created_at}}</text>
+      </view>
+      <text class="summary">{{item.summary}}</text>
+    </view>
+  </scroll-view>
+</view>

@@ -1,0 +1,111 @@
+<view class="page">
+
+  <!-- Hero -->
+  <view class="hero">
+    <view class="aurora aurora-1" />
+    <view class="aurora aurora-2" />
+
+    <view class="stars">
+      <view class="star s1" /><view class="star s2" /><view class="star s3" />
+      <view class="star s4" /><view class="star s5" /><view class="star s6" />
+      <view class="star s7" /><view class="star s8" /><view class="star s9" />
+      <view class="star s10" /><view class="star s11" /><view class="star s12" />
+      <view class="shooting-star" />
+    </view>
+
+    <view class="particles">
+      <view class="particle p1" /><view class="particle p2" />
+      <view class="particle p3" /><view class="particle p4" />
+      <view class="particle p5" /><view class="particle p6" />
+      <view class="particle p7" /><view class="particle p8" />
+    </view>
+
+    <view class="hero-content">
+      <text class="app-icon">💕</text>
+      <text class="app-name">恋爱人格测评</text>
+      <text class="app-desc">读懂你的情感密码，遇见更好的亲密关系</text>
+
+      <!-- 打字机文字 -->
+      <view class="typewriter-wrap">
+        <text class="typewriter-text">{{typewriterText}}</text><text class="cursor" hidden="{{!showCursor}}">|</text>
+      </view>
+
+      <view class="hero-dots">
+        <view class="dot dot-1" /><view class="dot dot-2" /><view class="dot dot-3" />
+      </view>
+    </view>
+  </view>
+
+  <!-- 模式选择 -->
+  <view class="modes">
+    <text class="modes-title">选择测评模式</text>
+
+    <view class="mode-card mode-active card-1" bindtap="startQuick">
+      <view class="mode-header">
+        <view class="mode-icon-wrap icon-quick">
+          <text class="mode-icon">⚡</text>
+        </view>
+        <view class="mode-info">
+          <text class="mode-name">快速测评</text>
+          <text class="mode-meta">7轮对话 · 约10分钟</text>
+        </view>
+        <view class="badge badge-go">
+          <text class="badge-text">立即开始 →</text>
+        </view>
+      </view>
+      <text class="mode-desc">通过7段自然对话，AI为你生成专属恋爱人格报告，揭示你在亲密关系中的核心模式。</text>
+      <view class="mode-tags">
+        <text class="tag">恋爱风格</text>
+        <text class="tag">依恋类型</text>
+        <text class="tag">情感需求</text>
+      </view>
+    </view>
+
+    <view class="mode-card mode-disabled card-2" bindtap="comingSoon">
+      <view class="mode-header">
+        <view class="mode-icon-wrap icon-deep">
+          <text class="mode-icon">🔮</text>
+        </view>
+        <view class="mode-info">
+          <text class="mode-name">深度解析</text>
+          <text class="mode-meta">15轮对话 · 约30分钟</text>
+        </view>
+        <view class="badge badge-soon">
+          <text class="badge-text">即将推出</text>
+        </view>
+      </view>
+      <text class="mode-desc">更长周期的沉浸式探索，从童年依恋到当下模式，生成全维度情感报告。</text>
+      <view class="mode-tags">
+        <text class="tag">童年依恋</text>
+        <text class="tag">情感创伤</text>
+        <text class="tag">关系模式</text>
+      </view>
+    </view>
+
+    <view class="mode-card mode-disabled card-3" bindtap="comingSoon">
+      <view class="mode-header">
+        <view class="mode-icon-wrap icon-pair">
+          <text class="mode-icon">🫂</text>
+        </view>
+        <view class="mode-info">
+          <text class="mode-name">双人配对</text>
+          <text class="mode-meta">两人同步测评</text>
+        </view>
+        <view class="badge badge-soon">
+          <text class="badge-text">即将推出</text>
+        </view>
+      </view>
+      <text class="mode-desc">邀请另一半同步完成测评，AI分析你们的情感契合度与相处建议。</text>
+      <view class="mode-tags">
+        <text class="tag">契合指数</text>
+        <text class="tag">相处建议</text>
+        <text class="tag">冲突预测</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="footer" bindtap="goHistory">
+    <text class="footer-text">查看历史测评记录 →</text>
+  </view>
+
+</view>

@@ -1,0 +1,5 @@
+page {
+  background-color: #FFF5F8;
+  font-family: -apple-system, sans-serif;
+  box-sizing: border-box;
+}

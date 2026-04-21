@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/chat/chat",
+    "pages/unlock/unlock",
+    "pages/report/report",
+    "pages/history/history"
+  ],
+  "window": {
+    "navigationBarTitleText": "恋爱人格测评",
+    "navigationBarBackgroundColor": "#FF6B9D",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#FFF5F8"
+  }
+}

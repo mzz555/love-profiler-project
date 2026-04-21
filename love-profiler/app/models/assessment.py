@@ -1,0 +1,30 @@
+"""
+Assessment model — stores a completed love-personality assessment result.
+"""
+
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.database import Base
+
+
+class Assessment(Base):
+    __tablename__ = "assessments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # Psychological signals serialised as JSON string
+    signals: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    personality_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    report_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # status: "pending" | "complete"
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
