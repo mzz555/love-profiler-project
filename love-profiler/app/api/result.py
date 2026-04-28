@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.agents.agent2_analysis import generate_report
+from app.agents.agent2_analysis import generate_report, generate_report_from_scores
 from app.limiter import limiter
 from app.database import get_db
 from app.middleware.auth import get_current_user_id
@@ -97,8 +97,12 @@ async def get_result(
         )
 
     try:
-        signals = json.loads(assessment.signals)
-        analysis = await generate_report(signals)
+        if assessment.mode == "quiz":
+            dimension_scores = json.loads(assessment.dimension_scores or "{}")
+            analysis = await generate_report_from_scores(dimension_scores)
+        else:
+            signals = json.loads(assessment.signals)
+            analysis = await generate_report(signals)
     except LLMError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
