@@ -6,32 +6,32 @@
   50%       { opacity: 1;    transform: scale(1.4); }
 }
 @keyframes float {
-  0%, 100% { transform: translateY(0rpx); }
-  50%       { transform: translateY(-20rpx); }
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
 }
 @keyframes auroraDrift {
-  0%, 100% { transform: translate(0rpx, 0rpx) scale(1);      opacity: 0.14; }
-  33%       { transform: translate(70rpx, -35rpx) scale(1.12); opacity: 0.26; }
-  66%       { transform: translate(-30rpx, 20rpx) scale(0.92); opacity: 0.18; }
+  0%, 100% { transform: translate(0, 0) scale(1);       opacity: 0.14; }
+  33%       { transform: translate(35px, -18px) scale(1.12); opacity: 0.26; }
+  66%       { transform: translate(-15px, 10px) scale(0.92); opacity: 0.18; }
 }
 @keyframes particleFloat {
-  0%   { transform: translateY(0rpx) scale(1);    opacity: 0; }
+  0%   { transform: translateY(0) scale(1);      opacity: 0; }
   8%   { opacity: 0.85; }
   88%  { opacity: 0.3; }
-  100% { transform: translateY(-300rpx) scale(0.3); opacity: 0; }
+  100% { transform: translateY(-150px) scale(0.3); opacity: 0; }
 }
 @keyframes shootStar {
-  0%, 80%  { transform: translate(0rpx, 0rpx) scaleX(0.5);    opacity: 0; }
+  0%, 80%  { transform: translate(0, 0) scaleX(0.5);       opacity: 0; }
   82%      { opacity: 1; }
-  93%      { transform: translate(560rpx, 220rpx) scaleX(10);  opacity: 0; }
+  93%      { transform: translate(280px, 110px) scaleX(10); opacity: 0; }
   100%     { opacity: 0; }
 }
 @keyframes heroFade {
-  from { opacity: 0; transform: translateY(-28rpx); }
+  from { opacity: 0; transform: translateY(-14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(70rpx); }
+  from { opacity: 0; transform: translateY(35px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes iconBounce {
@@ -63,7 +63,7 @@
 }
 /* 打字机区域入场 */
 @keyframes twFadeIn {
-  from { opacity: 0; transform: translateY(12rpx); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -90,7 +90,7 @@
 .aurora {
   position: absolute;
   border-radius: 50%;
-  filter: blur(70rpx);
+  filter: blur(35px);
   will-change: transform, opacity;
 }
 .aurora-1 {

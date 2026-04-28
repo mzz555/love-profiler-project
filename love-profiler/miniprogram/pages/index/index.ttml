@@ -47,13 +47,13 @@
         </view>
         <view class="mode-info">
           <text class="mode-name">快速测评</text>
-          <text class="mode-meta">7轮对话 · 约10分钟</text>
+          <text class="mode-meta">30道题 · 约5分钟</text>
         </view>
         <view class="badge badge-go">
           <text class="badge-text">立即开始 →</text>
         </view>
       </view>
-      <text class="mode-desc">通过7段自然对话，AI为你生成专属恋爱人格报告，揭示你在亲密关系中的核心模式。</text>
+      <text class="mode-desc">回答30道选择题，AI为你生成专属恋爱人格报告，揭示你在亲密关系中的核心模式。</text>
       <view class="mode-tags">
         <text class="tag">恋爱风格</text>
         <text class="tag">依恋类型</text>
