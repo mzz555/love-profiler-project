@@ -15,18 +15,20 @@
         </view>
       </view>
     </scroll-view>
-    <view class="progress-bar">
-      <view class="progress-fill" style="width: {{(questionNum / totalQuestions) * 100}}%" />
-    </view>
-    <text class="round-label">第 {{questionNum}} / {{totalQuestions}} 题</text>
-    <view tt:if="{{options.length > 0 && !isComplete}}" class="options-wrap">
-      <view
-        tt:for="{{options}}" tt:key="index"
-        class="option-btn"
-        bindtap="pickOption"
-        data-letter="{{item.letter}}"
-        data-text="{{item.text}}"
-      >{{item.text}}</view>
+    <view class="bottom-area">
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{(questionNum / totalQuestions) * 100}}%" />
+      </view>
+      <view class="round-label">第 {{questionNum}} / {{totalQuestions}} 题</view>
+      <view tt:if="{{options.length > 0 && !isComplete}}" class="options-wrap">
+        <view
+          tt:for="{{options}}" tt:key="index"
+          class="option-btn"
+          bindtap="pickOption"
+          data-letter="{{item.letter}}"
+          data-text="{{item.text}}"
+        >{{item.text}}</view>
+      </view>
     </view>
   </block>
 </view>
