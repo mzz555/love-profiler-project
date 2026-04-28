@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import auth, chat, history, pay, result, start, unlock, ws_chat
+from app.api import auth, chat, history, pay, quiz, result, start, unlock, ws_chat
 from app.database import create_tables
 from app.limiter import limiter
 from app.services.session_store import cleanup_expired_sessions
@@ -58,6 +58,7 @@ app.include_router(pay.router)
 app.include_router(unlock.router)
 app.include_router(ws_chat.router)
 app.include_router(history.router)
+app.include_router(quiz.router)
 
 if os.environ.get("DEV_MODE", "").lower() == "true":
     from app.api import dev_auth, dev_pay
