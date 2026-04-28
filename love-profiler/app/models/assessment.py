@@ -16,13 +16,13 @@ class Assessment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     session_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    # Psychological signals serialised as JSON string
     signals: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     personality_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     report_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # status: "pending" | "complete"
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="chat")
+    dimension_scores: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
