@@ -1,22 +1,15 @@
 <view class="container">
   <view class="header">
-    <text class="emoji">🔐</text>
-    <text class="title">解锁你的专属报告</text>
-    <text class="subtitle">测评已完成，选择一种方式查看你的恋爱人格分析</text>
+    <text class="emoji">✨</text>
+    <text class="title">你的专属报告已生成</text>
+    <text class="subtitle">看完一则短视频广告，即可免费查看你的恋爱人格分析</text>
   </view>
   <view class="options">
-    <view class="option-card paid">
-      <view class="option-badge">推荐</view>
-      <text class="option-icon">💳</text>
-      <text class="option-title">¥9.9 解锁完整报告</text>
-      <text class="option-desc">包含详细人格分析、建议与匹配策略</text>
-      <button class="option-btn paid-btn" loading="{{paying}}" bindtap="payWithMoney">立即购买</button>
-    </view>
     <view class="option-card ad">
       <text class="option-icon">🎬</text>
       <text class="option-title">看广告免费解锁</text>
-      <text class="option-desc">观看一则短视频广告，即可查看基础报告</text>
-      <button class="option-btn ad-btn" loading="{{watching}}" bindtap="watchAd">观看广告</button>
+      <text class="option-desc">观看一则短视频，立即查看完整报告</text>
+      <button class="option-btn ad-btn" loading="{{watching}}" bindtap="watchAd">免费查看报告</button>
     </view>
   </view>
   <text class="note">报告永久保存，随时可回看</text>
