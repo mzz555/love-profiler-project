@@ -14,32 +14,19 @@
           <view class="dot" /><view class="dot" /><view class="dot" />
         </view>
       </view>
-      <view tt:if="{{isTyping}}" id="typing-bubble" class="msg-row assistant">
-        <view class="avatar">AI</view>
-        <view class="bubble assistant"><text>{{currentTyping}}</text></view>
-      </view>
     </scroll-view>
     <view class="progress-bar">
-      <view class="progress-fill" style="width: {{(roundNum / 5) * 100}}%" />
+      <view class="progress-fill" style="width: {{(questionNum / totalQuestions) * 100}}%" />
     </view>
-    <text class="round-label">第 {{roundNum}} / 5 轮</text>
-    <view tt:if="{{options.length > 0}}" class="options-wrap">
+    <text class="round-label">第 {{questionNum}} / {{totalQuestions}} 题</text>
+    <view tt:if="{{options.length > 0 && !isComplete}}" class="options-wrap">
       <view
         tt:for="{{options}}" tt:key="index"
         class="option-btn"
         bindtap="pickOption"
-        data-text="{{item}}"
-      >{{item}}</view>
-    </view>
-    <view tt:else class="input-area">
-      <input class="input" value="{{inputValue}}"
-        placeholder="{{isComplete ? '对话已完成' : '说说你的想法...'}}"
-        bindinput="onInput" bindconfirm="sendMessage"
-        disabled="{{isComplete || sending}}"
-        confirm-type="send" maxlength="200" adjust-position
-      />
-      <button class="send-btn" bindtap="sendMessage"
-        disabled="{{!inputValue || sending || isComplete}}">发送</button>
+        data-letter="{{item.letter}}"
+        data-text="{{item.text}}"
+      >{{item.text}}</view>
     </view>
   </block>
 </view>
