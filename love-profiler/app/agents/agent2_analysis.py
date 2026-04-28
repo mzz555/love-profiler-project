@@ -126,3 +126,81 @@ async def generate_report(signals: dict) -> AnalysisResult:
         report_text=report_text,
         summary=summary,
     )
+
+
+_LOVE_LANGUAGE_NAMES: dict[str, str] = {
+    "T1": "言语肯定",
+    "T2": "精心时刻",
+    "T3": "用心小惊喜",
+    "T4": "服务行动",
+    "T5": "身体接触",
+}
+
+_AGENT2_QUIZ_SYSTEM_PROMPT = (
+    "你是一位专业的情感心理分析师。根据以下用户的恋爱测评维度得分，"
+    "用温暖、专业的语气撰写一份详细的恋爱人格分析报告。"
+    "报告必须包含五个部分：1)依恋风格分析 2)边界与冲突模式 3)主导爱的语言解读 "
+    "4)沟通风格特点 5)成长建议。"
+    "全文600字以内，使用中文，每个部分用小标题区分。"
+)
+
+
+def _map_personality_from_scores(scores: dict) -> str:
+    """Map dimension scores to a personality type label."""
+    attachment = scores.get("attachment", 0)
+    boundary = scores.get("boundary", 0)
+    conflict = scores.get("conflict", 0)
+    avg = (attachment + boundary + conflict) / 3
+    if avg >= 6:
+        return "安全型"
+    elif avg >= 0:
+        return "成长型"
+    else:
+        return "焦虑/回避型"
+
+
+async def generate_report_from_scores(dimension_scores: dict) -> AnalysisResult:
+    """Generate personality report from quiz dimension scores.
+
+    Args:
+        dimension_scores: Computed scores from quiz_scorer.compute_scores().
+
+    Returns:
+        AnalysisResult with personality_type, report_text, and summary.
+
+    Raises:
+        LLMError: If the LLM API call fails.
+    """
+    personality_type = _map_personality_from_scores(dimension_scores)
+
+    love_lang = dimension_scores.get("love_language", {})
+    primary_code = love_lang.get("primary", "T1")
+    primary_name = _LOVE_LANGUAGE_NAMES.get(primary_code, primary_code)
+
+    style = dimension_scores.get("style", {})
+
+    user_message = (
+        f"用户恋爱测评维度得分（满分/最高分12，负分表示该维度问题倾向）：\n"
+        f"- 依恋安全感：{dimension_scores.get('attachment', 0)} 分\n"
+        f"- 边界清晰度：{dimension_scores.get('boundary', 0)} 分\n"
+        f"- 冲突健康度：{dimension_scores.get('conflict', 0)} 分\n"
+        f"- 主导爱的语言：{primary_name}（{primary_code}，得分 {love_lang.get(primary_code, 0)}）\n"
+        f"  各语言得分：言语肯定={love_lang.get('T1',0)} 精心时刻={love_lang.get('T2',0)} "
+        f"用心小惊喜={love_lang.get('T3',0)} 服务行动={love_lang.get('T4',0)} "
+        f"身体接触={love_lang.get('T5',0)}\n"
+        f"- 沟通风格：直接性 {style.get('directness', 0)} 分，分享欲 {style.get('sharing', 0)} 分\n\n"
+        f"初步判断依恋类型：{personality_type}\n\n"
+        "请撰写详细的恋爱人格分析报告。"
+    )
+
+    report_text = await chat_completion(
+        system_prompt=_AGENT2_QUIZ_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    summary = report_text.split("。")[0] + "。" if "。" in report_text else report_text[:50]
+    return AnalysisResult(
+        personality_type=personality_type,
+        report_text=report_text,
+        summary=summary,
+    )
