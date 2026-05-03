@@ -27,6 +27,7 @@ Page({
   },
 
   goStart() {
+    // reLaunch 故意清空页面栈，开始新测评时不保留历史导航路径
     tt.reLaunch({ url: '/pages/chat/chat' });
   },
 });

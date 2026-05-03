@@ -69,7 +69,7 @@ page { background: #12002A; }
 }
 
 /* ── List ────────────────────────────────────────── */
-.list { flex: 1; min-height: 0; }
+.list { flex: 1; min-height: 0; height: 0; }
 .list-bottom-pad { height: 40rpx; }
 
 /* ── History Card ────────────────────────────────── */
