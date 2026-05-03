@@ -1,18 +1,54 @@
 <view class="container">
-  <view class="header">
-    <text class="emoji">✨</text>
-    <text class="title">你的专属报告已生成</text>
-    <text class="subtitle">看完一则短视频广告，即可免费查看你的恋爱人格分析</text>
+  <view class="bg-orb bg-orb-1" />
+  <view class="bg-orb bg-orb-2" />
+  <view class="bg-orb bg-orb-3" />
+
+  <view class="unlock-header">
+    <text class="unlock-icon">✨</text>
+    <text class="unlock-title">你的专属报告已生成</text>
+    <text class="unlock-sub">观看一则短视频广告，即可免费查看你的恋爱人格分析</text>
   </view>
-  <view class="options">
-    <view class="option-card ad">
-      <text class="option-icon">🎬</text>
-      <text class="option-title">看广告免费解锁</text>
-      <text class="option-desc">观看一则短视频，立即查看完整报告</text>
-      <button class="option-btn ad-btn" loading="{{watching}}" bindtap="watchAd">免费查看报告</button>
+
+  <view class="preview-card">
+    <view class="preview-lock-bar">
+      <text class="lock-badge">🔒 报告已就绪</text>
+    </view>
+    <text class="preview-type-name">{{personalityType || '你的恋爱人格'}}</text>
+    <text class="preview-type-code">5 大维度深度解读</text>
+    <view class="preview-text-wrap">
+      <text class="preview-text">解锁后查看你在五大维度上的专属解读，了解你在亲密关系中的依恋风格、边界感知、冲突应对模式、情感需求倾向与表达风格……</text>
+      <view class="preview-fade">
+        <text class="preview-fade-hint">解锁后查看完整报告</text>
+      </view>
     </view>
   </view>
-  <text class="note">报告永久保存，随时可回看</text>
+
+  <view class="dim-chips">
+    <text class="chip chip-red">🫂 依恋风格</text>
+    <text class="chip chip-blue">🌊 边界感</text>
+    <text class="chip chip-purple">⚡ 冲突模式</text>
+    <text class="chip chip-pink">💝 情感需求</text>
+    <text class="chip chip-yellow">🎭 表达风格</text>
+  </view>
+
+  <view class="value-row">
+    <view class="value-item">
+      <text class="value-num">5</text>
+      <text class="value-label">维度解读</text>
+    </view>
+    <view class="value-item">
+      <text class="value-num">AI</text>
+      <text class="value-label">专属分析</text>
+    </view>
+    <view class="value-item">
+      <text class="value-num">永久</text>
+      <text class="value-label">保存可回看</text>
+    </view>
+  </view>
+
+  <button class="cta-btn" loading="{{watching}}" bindtap="watchAd">🎬 免费观看广告 · 立即解锁</button>
+  <text class="note-text">约 15 秒短视频 · 看完即解锁</text>
+
   <view tt:if="{{isDev}}" class="dev-section">
     <button class="dev-btn" bindtap="devUnlock">🛠 开发模式直接解锁</button>
   </view>

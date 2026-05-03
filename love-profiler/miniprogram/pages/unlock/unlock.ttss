@@ -1,18 +1,106 @@
-.container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 60rpx 40rpx; background: linear-gradient(180deg, #FFF5F8 0%, #FFE8F0 100%); }
-.header { display: flex; flex-direction: column; align-items: center; margin-bottom: 60rpx; }
-.emoji { font-size: 96rpx; margin-bottom: 24rpx; }
-.title { font-size: 44rpx; font-weight: 700; color: #1A1A2E; margin-bottom: 16rpx; }
-.subtitle { font-size: 28rpx; color: #888; text-align: center; line-height: 1.6; }
-.options { width: 100%; display: flex; flex-direction: column; gap: 32rpx; margin-bottom: 48rpx; }
-.option-card { background: #fff; border-radius: 32rpx; padding: 48rpx 40rpx; display: flex; flex-direction: column; align-items: center; position: relative; box-shadow: 0 4rpx 24rpx rgba(255,107,157,0.1); }
-.option-card.paid { border: 2rpx solid #FF6B9D; }
-.option-badge { position: absolute; top: -20rpx; background: #FF6B9D; color: #fff; font-size: 22rpx; font-weight: 600; padding: 6rpx 24rpx; border-radius: 20rpx; }
-.option-icon { font-size: 72rpx; margin-bottom: 20rpx; }
-.option-title { font-size: 34rpx; font-weight: 700; color: #1A1A2E; margin-bottom: 12rpx; }
-.option-desc { font-size: 26rpx; color: #888; text-align: center; line-height: 1.5; margin-bottom: 32rpx; }
-.option-btn { width: 100%; height: 88rpx; border-radius: 44rpx; font-size: 32rpx; font-weight: 600; border: none; line-height: 88rpx; }
-.paid-btn { background: linear-gradient(135deg, #FF6B9D, #FF8FAB); color: #fff; }
-.ad-btn { background: #fff; color: #FF6B9D; border: 2rpx solid #FF6B9D; }
-.note { font-size: 24rpx; color: #bbb; }
-.dev-section { margin-top: 48rpx; width: 100%; }
-.dev-btn { width: 100%; height: 72rpx; background: #f0f0f0; color: #888; border-radius: 36rpx; font-size: 26rpx; border: 2rpx dashed #ccc; line-height: 72rpx; }
+page { background: #12002A; }
+
+.container {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #12002A 0%, #260042 35%, #1C0038 65%, #0D001E 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60rpx 40rpx 60rpx;
+  position: relative;
+}
+
+/* ── Ambient Orbs ───────────────────────────────── */
+.bg-orb { position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; }
+.bg-orb-1 { width: 600rpx; height: 600rpx; top: -100rpx; right: -150rpx; background: radial-gradient(circle, rgba(194,24,91,0.20) 0%, transparent 70%); }
+.bg-orb-2 { width: 500rpx; height: 500rpx; bottom: 240rpx; left: -140rpx; background: radial-gradient(circle, rgba(123,31,162,0.16) 0%, transparent 70%); }
+.bg-orb-3 { width: 360rpx; height: 360rpx; bottom: -60rpx; right: -60rpx; background: radial-gradient(circle, rgba(255,64,129,0.12) 0%, transparent 70%); }
+
+/* ── Header ─────────────────────────────────────── */
+.unlock-header {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center;
+  margin-bottom: 36rpx;
+}
+.unlock-icon { font-size: 72rpx; margin-bottom: 16rpx; }
+.unlock-title { font-size: 38rpx; font-weight: 700; color: #fff; letter-spacing: 1rpx; margin-bottom: 12rpx; }
+.unlock-sub { font-size: 26rpx; color: rgba(248,187,208,0.6); text-align: center; line-height: 1.6; }
+
+/* ── Preview Card ────────────────────────────────── */
+.preview-card {
+  position: relative; z-index: 1; width: 100%;
+  background: linear-gradient(135deg, rgba(194,24,91,0.12), rgba(123,31,162,0.08));
+  border: 1rpx solid rgba(255,64,129,0.2);
+  border-radius: 24rpx; padding: 28rpx;
+  margin-bottom: 28rpx;
+  display: flex; flex-direction: column; gap: 12rpx;
+}
+.preview-lock-bar { display: flex; align-items: center; }
+.lock-badge {
+  background: rgba(255,64,129,0.15);
+  border: 1rpx solid rgba(255,64,129,0.35);
+  border-radius: 20rpx; padding: 4rpx 18rpx;
+  font-size: 22rpx; color: #FF6B9D; font-weight: 600;
+}
+.preview-type-name { font-size: 36rpx; font-weight: 700; color: #fff; }
+.preview-type-code { font-size: 22rpx; color: rgba(255,255,255,0.35); }
+.preview-text-wrap { position: relative; overflow: hidden; border-radius: 8rpx; }
+.preview-text {
+  display: block;
+  font-size: 26rpx; color: rgba(255,255,255,0.22);
+  line-height: 1.7; padding-bottom: 60rpx;
+}
+.preview-fade {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 130rpx;
+  background: linear-gradient(180deg, transparent 0%, rgba(13,0,30,0.97) 65%);
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 12rpx;
+}
+.preview-fade-hint { font-size: 20rpx; color: rgba(255,255,255,0.28); letter-spacing: 1rpx; }
+
+/* ── Dimension Chips ─────────────────────────────── */
+.dim-chips {
+  position: relative; z-index: 1; width: 100%;
+  display: flex; flex-wrap: wrap; gap: 12rpx; justify-content: center;
+  margin-bottom: 32rpx;
+}
+.chip { border-radius: 20rpx; padding: 6rpx 20rpx; font-size: 22rpx; font-weight: 500; }
+.chip-red    { background: rgba(255,123,110,0.12); border: 1rpx solid rgba(255,123,110,0.3); color: #FF7B6E; }
+.chip-blue   { background: rgba(79,195,247,0.12);  border: 1rpx solid rgba(79,195,247,0.3);  color: #4FC3F7; }
+.chip-purple { background: rgba(206,147,216,0.12); border: 1rpx solid rgba(206,147,216,0.3); color: #CE93D8; }
+.chip-pink   { background: rgba(244,143,177,0.12); border: 1rpx solid rgba(244,143,177,0.3); color: #F48FB1; }
+.chip-yellow { background: rgba(255,183,77,0.12);  border: 1rpx solid rgba(255,183,77,0.3);  color: #FFB74D; }
+
+/* ── Value Row ───────────────────────────────────── */
+.value-row {
+  position: relative; z-index: 1; width: 100%;
+  display: flex; justify-content: center; gap: 60rpx;
+  margin-bottom: 36rpx;
+}
+.value-item { display: flex; flex-direction: column; align-items: center; gap: 6rpx; }
+.value-num  { font-size: 36rpx; font-weight: 700; color: #FF4081; }
+.value-label { font-size: 20rpx; color: rgba(255,255,255,0.35); }
+
+/* ── CTA Button ──────────────────────────────────── */
+.cta-btn {
+  position: relative; z-index: 1; width: 100%;
+  background: linear-gradient(135deg, #FF4081, #C2185B);
+  color: #fff; border-radius: 50rpx;
+  height: 96rpx; line-height: 96rpx;
+  font-size: 32rpx; font-weight: 700; border: none;
+  box-shadow: 0 6rpx 24rpx rgba(255,64,129,0.45);
+  margin-bottom: 16rpx;
+}
+.note-text {
+  position: relative; z-index: 1;
+  font-size: 22rpx; color: rgba(255,255,255,0.25);
+  margin-bottom: 40rpx;
+}
+
+/* ── Dev Section ─────────────────────────────────── */
+.dev-section { position: relative; z-index: 1; width: 100%; }
+.dev-btn {
+  width: 100%; height: 72rpx; line-height: 72rpx;
+  background: transparent; color: rgba(255,255,255,0.25);
+  border-radius: 36rpx; font-size: 26rpx;
+  border: 1rpx dashed rgba(255,255,255,0.15);
+}

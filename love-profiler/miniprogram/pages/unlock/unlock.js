@@ -1,14 +1,17 @@
 const app = getApp();
 
 Page({
-  data: { watching: false, isDev: false },
+  data: { watching: false, isDev: false, personalityType: '' },
 
   onLoad() {
     if (!app.globalData.assessmentId) {
       tt.redirectTo({ url: '/pages/index/index' });
       return;
     }
-    this.setData({ isDev: app.isDev || false });
+    this.setData({
+      isDev: app.isDev || false,
+      personalityType: app.globalData.personalityType || '',
+    });
   },
 
   async devUnlock() {
