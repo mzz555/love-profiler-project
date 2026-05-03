@@ -18,7 +18,7 @@ def test_extract_type_name_white_corner_bracket():
     assert _extract_type_name('你是『安稳探索者』，拥有') == '安稳探索者'
 
 def test_extract_type_name_curly_quotes():
-    assert _extract_type_name('你是"细腻感知者"，') == '细腻感知者'
+    assert _extract_type_name('你是“细腻感知者”，') == '细腻感知者'
 
 def test_extract_type_name_none_input():
     assert _extract_type_name(None) == ''

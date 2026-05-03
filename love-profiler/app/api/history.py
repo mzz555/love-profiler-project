@@ -23,7 +23,7 @@ router = APIRouter(prefix="/history", tags=["history"])
 def _extract_type_name(report_text: str | None) -> str:
     if not report_text:
         return ""
-    m = re.search(r'你是[「『"""](.+?)[」』"""]', report_text)
+    m = re.search(r'你是[「『“”](.+?)[」』“”]', report_text)
     return m.group(1) if m else ""
 
 
