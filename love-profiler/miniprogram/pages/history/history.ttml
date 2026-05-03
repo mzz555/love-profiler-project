@@ -1,24 +1,49 @@
 <view class="container">
+  <view class="bg-orb bg-orb-1" />
+  <view class="bg-orb bg-orb-2" />
+  <view class="bg-orb bg-orb-3" />
+
+  <!-- Loading -->
   <view tt:if="{{loading}}" class="state-wrap">
-    <text class="state-text">加载中...</text>
+    <view class="loading-pulse-ring" />
+    <view class="loading-pulse-ring loading-ring-delay" />
+    <text class="loading-heart">💗</text>
+    <text class="state-text">加载中…</text>
   </view>
+
+  <!-- Empty state -->
   <view tt:elif="{{list.length === 0}}" class="state-wrap">
-    <text class="state-emoji">📭</text>
-    <text class="state-text">暂无历史记录</text>
+    <text class="state-emoji">💌</text>
+    <text class="state-title">还没有测评记录</text>
+    <text class="state-text">完成第一次测评后，报告会保存在这里</text>
+    <button class="start-btn" bindtap="goStart">开始测评</button>
   </view>
-  <scroll-view tt:else scroll-y class="list">
-    <view
-      tt:for="{{list}}"
-      tt:key="id"
-      class="item"
-      bindtap="viewReport"
-      data-session-id="{{item.session_id}}"
-    >
-      <view class="item-header">
-        <text class="type-tag">{{item.personality_type}}</text>
-        <text class="date">{{item.created_at}}</text>
-      </view>
-      <text class="summary">{{item.summary}}</text>
+
+  <!-- List -->
+  <block tt:else>
+    <view class="page-header">
+      <text class="page-title">历史测评记录</text>
+      <text class="count-badge">共 {{list.length}} 次</text>
     </view>
-  </scroll-view>
+    <scroll-view scroll-y class="list">
+      <view
+        tt:for="{{list}}"
+        tt:key="id"
+        class="hist-card {{index === 0 ? 'latest' : 'older'}}"
+        bindtap="viewReport"
+        data-session-id="{{item.session_id}}"
+      >
+        <view class="card-top">
+          <view class="card-left">
+            <text class="type-name">{{item.type_name || item.personality_type}}</text>
+            <text class="type-meta">{{item.personality_type}} · {{item.created_at}}</text>
+          </view>
+          <text class="view-btn {{index === 0 ? 'primary' : 'ghost'}}">查看报告 →</text>
+        </view>
+        <view class="card-divider" />
+        <text class="card-summary">{{item.summary}}</text>
+      </view>
+      <view class="list-bottom-pad" />
+    </scroll-view>
+  </block>
 </view>

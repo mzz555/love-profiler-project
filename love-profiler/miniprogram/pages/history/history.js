@@ -25,4 +25,8 @@ Page({
     const sessionId = e.currentTarget.dataset.sessionId;
     tt.navigateTo({ url: '/pages/report/report?session_id=' + sessionId });
   },
+
+  goStart() {
+    tt.reLaunch({ url: '/pages/chat/chat' });
+  },
 });
