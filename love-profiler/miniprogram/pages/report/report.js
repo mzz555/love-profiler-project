@@ -59,6 +59,41 @@ function _emptyParsed() {
   };
 }
 
+const _DIM_KEY_MAP = {
+  D1: '依恋', D2: '边界', D3: '冲突', D4: '情感需求', D5: '风格表达',
+};
+
+function _sectionsToDisplay(sections) {
+  const result = _emptyParsed();
+  result.typeName = sections.type_name || '';
+  result.portrait = { title: '开篇画像', text: sections.portrait || '' };
+
+  const dims = sections.dimensions || {};
+  ['D1', 'D2', 'D3', 'D4', 'D5'].forEach((key, idx) => {
+    const d = dims[key];
+    if (!d || !d.text) return;
+    const cfg = DIM_CONFIGS[idx] || DIM_CONFIGS[0];
+    result.dimensions.push({
+      name: d.title || _DIM_KEY_MAP[key],
+      text: d.text,
+      emoji: cfg.emoji,
+      color: cfg.color,
+      bg: cfg.bg,
+      index: result.dimensions.length,
+    });
+  });
+
+  const insightTexts = (sections.insights || []).map(i => i.text).filter(Boolean);
+  result.insights = {
+    title: '深层洞察',
+    text: insightTexts.join('\n\n'),
+    hasContent: insightTexts.length > 0,
+  };
+
+  result.ending = { title: '写在最后', text: sections.closing || '' };
+  return result;
+}
+
 function _makeDim(cfg, name, text, index) {
   return { name, text, emoji: cfg.emoji, color: cfg.color, bg: cfg.bg, index };
 }
@@ -224,8 +259,10 @@ Page({
         return;
       }
 
-      const { personality_type: personalityType, report_text: reportText } = res;
-      const parsed = _parseReport(reportText);
+      const { personality_type: personalityType, report_text: reportText, sections } = res;
+      const parsed = (sections && sections.portrait)
+        ? _sectionsToDisplay(sections)
+        : _parseReport(reportText);
       this.setData({
         loading: false,
         personalityType,
