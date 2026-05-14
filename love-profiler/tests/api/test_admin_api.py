@@ -187,3 +187,180 @@ def test_admin_root_redirects(client, monkeypatch):
     resp = client.get("/admin", follow_redirects=False)
     assert resp.status_code in (301, 302, 307, 308)
     assert "/static/admin/index.html" in resp.headers.get("location", "")
+
+
+# ── X-Admin-Token 认证路径 ─────────────────────────────
+def test_admin_token_header_grants_access(client, monkeypatch):
+    """DEV_MODE 关闭时，正确的 X-Admin-Token 应放行。"""
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.setenv("ADMIN_TOKEN", "secret-token-x")
+    resp = client.get("/admin/api/overview", headers={"X-Admin-Token": "secret-token-x"})
+    assert resp.status_code == 200
+
+
+def test_admin_wrong_token_returns_404(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.setenv("ADMIN_TOKEN", "secret-token-x")
+    resp = client.get("/admin/api/overview", headers={"X-Admin-Token": "wrong"})
+    assert resp.status_code == 404
+
+
+# ── AI 调用日志面板 ───────────────────────────────────
+def _make_ai_log(db_session, **overrides):
+    """构造一条 AiCallLog 用于日志面板测试。"""
+    from app.models.ai_call_log import AiCallLog
+    defaults = dict(
+        agent="agent_a", model="doubao-test", temperature=0.1,
+        session_id="log-test-sess", user_id=None,
+        status="success", error_message=None, http_status_code=None,
+        retry_index=0,
+        system_prompt_len=100,
+        messages_json='[{"role":"user","content":"hi"}]',
+        response_preview='{"choices":[{"message":{"content":"hello"}}]}',
+        response_len=50,
+        duration_ms=120,
+        prompt_tokens=42, completion_tokens=7, total_tokens=49,
+    )
+    defaults.update(overrides)
+    log = AiCallLog(**defaults)
+    db_session.add(log)
+    db_session.commit()
+    db_session.refresh(log)
+    return log
+
+
+def test_log_detail_returns_parsed_messages_and_response(client, db_session, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    log = _make_ai_log(db_session)
+
+    resp = client.get(f"/admin/logs/api/{log.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == log.id
+    assert data["agent"] == "agent_a"
+    # messages_json 是合法 JSON → 应被解析回 list
+    assert isinstance(data["messages"], list)
+    assert data["messages"][0]["role"] == "user"
+    # response_preview 是合法 JSON → 也被解析
+    assert isinstance(data["response"], dict)
+
+
+def test_log_detail_handles_non_json_fields(client, db_session, monkeypatch):
+    """messages_json / response_preview 非合法 JSON 时应原样字符串透传。"""
+    monkeypatch.setenv("DEV_MODE", "true")
+    log = _make_ai_log(
+        db_session,
+        messages_json="this is not json",
+        response_preview="plain text response",
+    )
+
+    resp = client.get(f"/admin/logs/api/{log.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["messages"] == "this is not json"
+    assert data["response"] == "plain text response"
+
+
+def test_log_detail_404_when_missing(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.get("/admin/logs/api/999999")
+    assert resp.status_code == 404
+
+
+def test_logs_api_returns_stats_and_rows(client, db_session, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    _make_ai_log(db_session, agent="agent_a", status="success", total_tokens=100)
+    _make_ai_log(db_session, agent="agent_b", status="success", total_tokens=50)
+    _make_ai_log(db_session, agent="agent_b", status="error",
+                 error_message="boom", http_status_code=500, total_tokens=0)
+
+    resp = client.get("/admin/logs/api")
+    assert resp.status_code == 200
+    data = resp.json()
+    # 今天 3 条全在今日，success=2 / error=1
+    assert data["stats"]["total"] == 3
+    assert data["stats"]["success"] == 2
+    assert data["stats"]["error"] == 1
+    assert data["stats"]["total_tokens"] == 150
+    assert len(data["rows"]) == 3
+
+
+def test_logs_api_filters_by_agent_and_status(client, db_session, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    _make_ai_log(db_session, agent="agent_a", status="success")
+    _make_ai_log(db_session, agent="agent_b", status="success")
+    _make_ai_log(db_session, agent="agent_b", status="error")
+
+    resp_a = client.get("/admin/logs/api?agent=agent_a")
+    assert resp_a.status_code == 200
+    assert all(r["agent"] == "agent_a" for r in resp_a.json()["rows"])
+    assert len(resp_a.json()["rows"]) == 1
+
+    resp_b_err = client.get("/admin/logs/api?agent=agent_b&status=error")
+    assert resp_b_err.status_code == 200
+    rows = resp_b_err.json()["rows"]
+    assert len(rows) == 1
+    assert rows[0]["status"] == "error"
+
+
+# ── 控制台日志读取 ─────────────────────────────────────
+def test_console_logs_reads_recent_lines(client, tmp_path, monkeypatch):
+    """logs/app.log 存在时应返回末 N 行。"""
+    monkeypatch.setenv("DEV_MODE", "true")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "logs").mkdir()
+    log_file = tmp_path / "logs" / "app.log"
+    log_file.write_text("\n".join(f"line-{i}" for i in range(1, 51)), encoding="utf-8")
+
+    resp = client.get("/admin/console?lines=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exists"] is True
+    assert len(data["lines"]) == 10
+    assert data["lines"][-1] == "line-50"
+
+
+def test_console_logs_returns_empty_when_file_missing(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    monkeypatch.chdir(tmp_path)  # tmp_path 下没有 logs/app.log
+
+    resp = client.get("/admin/console")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exists"] is False
+    assert data["lines"] == []
+
+
+def test_console_logs_handles_read_error(client, tmp_path, monkeypatch):
+    """读取异常时应返回 exists=True + 错误信息（不抛 500）。"""
+    monkeypatch.setenv("DEV_MODE", "true")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "logs").mkdir()
+    log_path = tmp_path / "logs" / "app.log"
+    log_path.write_text("placeholder", encoding="utf-8")
+
+    # 让 open() 抛非 FileNotFoundError 的异常，走 526 兜底
+    import builtins
+    real_open = builtins.open
+
+    def boom_open(path, *args, **kwargs):
+        if str(path).endswith("app.log"):
+            raise PermissionError("simulated denial")
+        return real_open(path, *args, **kwargs)
+    monkeypatch.setattr(builtins, "open", boom_open)
+
+    resp = client.get("/admin/console")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exists"] is True
+    assert data["lines"] and "读取失败" in data["lines"][0]
+
+
+# ── HTML 日志面板 ─────────────────────────────────────
+def test_logs_dashboard_renders_html(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.get("/admin/logs")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # 简单 sanity 检查：HTML 不应为空
+    assert len(resp.text) > 100
