@@ -1,39 +1,437 @@
 <view class="container">
-  <!-- 离屏 canvas，用于海报绘制 -->
-  <canvas canvas-id="poster" class="poster-canvas" />
+  <!-- Offscreen canvases: always in DOM so native buffer is ready before drawing -->
+  <canvas canvas-id="poster"    class="poster-canvas" />
+  <canvas canvas-id="d123-gauge" class="chart-canvas-offscreen" style="width:630px;height:166px;" />
+  <canvas canvas-id="combined-radar" class="chart-canvas-offscreen" style="width:640px;height:640px;" />
 
+  <!-- Ambient background orbs -->
+  <view class="bg-orb bg-orb-1" />
+  <view class="bg-orb bg-orb-2" />
+  <view class="bg-orb bg-orb-3" />
+
+  <!-- ─── Loading State ─── -->
   <view tt:if="{{loading}}" class="loading-wrap">
-    <view class="spinner" />
-    <text class="loading-text">正在生成你的专属报告...</text>
+    <view tt:if="{{heroImageUrl}}" class="hero-portrait-wrap {{heroImageReady ? 'show' : ''}}">
+      <view class="hero-portrait-glow" />
+      <image class="hero-portrait-img" src="{{heroImageUrl}}" mode="aspectFill" />
+    </view>
+    <view tt:else>
+      <view class="loading-pulse-ring" />
+      <view class="loading-pulse-ring loading-ring-delay" />
+      <text class="loading-heart">💗</text>
+    </view>
+    <text class="loading-title">正在解读你的恋爱密码</text>
+    <text class="loading-sub">AI 正在为你撰写专属报告</text>
   </view>
+
+  <!-- ─── Streaming State ─── -->
+  <view tt:elif="{{streaming}}" class="streaming-wrap">
+
+    <!-- 头部：人格卡片（仿图片样式） -->
+    <view class="str-hero-card">
+      <view class="str-hero-left">
+        <view class="str-code-badge">
+          <text class="str-code-text">{{ personalityType }}</text>
+        </view>
+        <text class="str-hero-name">{{ streamingTypeName }}</text>
+        <view tt:if="{{streamingTypeTagline}}" class="str-tagline-badge">
+          <text class="str-tagline-text">{{ streamingTypeTagline }}</text>
+        </view>
+        <!-- D1/D2/D3 段落解码标签：安全型依恋 · 清晰边界 · 问题冲突模式 -->
+        <view tt:if="{{segmentDecode.length}}" class="str-segments">
+          <view tt:for="{{segmentDecode}}" tt:key="code"
+                class="str-seg-pill {{item.is_neutral ? 'seg-neutral' : (item.is_healthy ? 'seg-healthy' : 'seg-problem')}}">
+            <text class="str-seg-text">{{item.label_cn}}</text>
+          </view>
+        </view>
+        <view class="str-status-mini">
+          <view tt:if="{{!streamingDone}}" class="str-blink-dot" />
+          <text class="str-status-mini-text">{{ !streamingDone ? '正在解读中…' : '✓ 解读完成' }}</text>
+        </view>
+      </view>
+      <view class="str-hero-right">
+        <image tt:if="{{heroImageUrl}}" class="str-hero-char {{heroImageReady ? 'show' : ''}}" src="{{heroImageUrl}}" mode="aspectFit" />
+        <view tt:else class="str-hero-char-placeholder" />
+      </view>
+    </view>
+
+
+    <!-- ── 三图表（始终跟随 dimChartReady，不依赖 section 文字）── -->
+    <view tt:if="{{dimChartReady}}" class="rpt-charts-block">
+      <view class="rpt-chart-row">
+        <view class="rpt-chart-card rpt-chart-card-combined">
+          <view class="rpt-chart-card-hd">
+            <view class="rpt-cc-icon-wrap rpt-cc-combined"><text class="rpt-cc-icon">🕸</text></view>
+            <view>
+              <text class="rpt-cc-title">恋爱人格全维雷达</text>
+              <text class="rpt-cc-sub">10 项维度综合画像</text>
+            </view>
+          </view>
+          <image tt:if="{{chartImgCombined}}" src="{{chartImgCombined}}" class="rpt-chart-combined" mode="aspectFit" />
+          <view tt:else class="rpt-chart-ph"><text class="rpt-chart-ph-txt">图表生成中…</text></view>
+        </view>
+        <view class="rpt-chart-card">
+          <view class="rpt-chart-card-hd">
+            <view class="rpt-cc-icon-wrap rpt-cc-d123"><text class="rpt-cc-icon">📊</text></view>
+            <view>
+              <text class="rpt-cc-title">依恋 · 边界 · 冲突</text>
+              <text class="rpt-cc-sub">综合量尺（-12 ~ +12）</text>
+            </view>
+          </view>
+          <image tt:if="{{chartImgD123}}" src="{{chartImgD123}}" class="rpt-chart-d123" mode="aspectFit" />
+          <view tt:else class="rpt-chart-ph"><text class="rpt-chart-ph-txt">图表生成中…</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ── 分段流式报告（新格式）── -->
+
+    <view tt:if="{{sec.Opening}}" class="rpt-sec-card rpt-opening">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-opening"><text class="rpt-sec-icon">✦</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-opening">开篇画像</text>
+          <view class="rpt-sec-line rpt-ln-opening" />
+        </view>
+      </view>
+      <text class="rpt-sec-body">{{sec.Opening}}<text tt:if="{{!streamingDone && curSec==='Opening'}}" class="rpt-cursor">▋</text></text>
+    </view>
+
+    <!-- 五维度分区标题 -->
+    <view tt:if="{{sec.Attachment || sec.Boundary || sec.Conflict || sec.Language || sec.Style}}" class="rpt-dims-divider">
+      <view class="rpt-dims-div-line" />
+      <view class="rpt-dims-div-badge">
+        <text class="rpt-dims-div-icon">🔍</text>
+        <text class="rpt-dims-div-label">五维度解读</text>
+      </view>
+      <view class="rpt-dims-div-line" />
+    </view>
+
+    <view tt:if="{{sec.Attachment}}" class="rpt-sec-card rpt-d1">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-d1"><text class="rpt-sec-icon">🫂</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-d1">依恋模式</text>
+          <view class="rpt-sec-line rpt-ln-d1" />
+        </view>
+      </view>
+      <text class="rpt-sec-body">{{sec.Attachment}}<text tt:if="{{!streamingDone && curSec==='Attachment'}}" class="rpt-cursor">▋</text></text>
+    </view>
+
+    <view tt:if="{{sec.Boundary}}" class="rpt-sec-card rpt-d2">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-d2"><text class="rpt-sec-icon">🌊</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-d2">边界感知</text>
+          <view class="rpt-sec-line rpt-ln-d2" />
+        </view>
+      </view>
+      <text class="rpt-sec-body">{{sec.Boundary}}<text tt:if="{{!streamingDone && curSec==='Boundary'}}" class="rpt-cursor">▋</text></text>
+    </view>
+
+    <view tt:if="{{sec.Conflict}}" class="rpt-sec-card rpt-d3">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-d3"><text class="rpt-sec-icon">⚡</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-d3">冲突风格</text>
+          <view class="rpt-sec-line rpt-ln-d3" />
+        </view>
+      </view>
+      <text class="rpt-sec-body">{{sec.Conflict}}<text tt:if="{{!streamingDone && curSec==='Conflict'}}" class="rpt-cursor">▋</text></text>
+    </view>
+
+    <view tt:if="{{sec.Language}}" class="rpt-sec-card rpt-d4">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-d4"><text class="rpt-sec-icon">💝</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-d4">爱的语言</text>
+          <view class="rpt-sec-line rpt-ln-d4" />
+        </view>
+      </view>
+      <text class="rpt-sec-body">{{sec.Language}}<text tt:if="{{!streamingDone && curSec==='Language'}}" class="rpt-cursor">▋</text></text>
+    </view>
+
+    <view tt:if="{{sec.Style}}" class="rpt-sec-card rpt-d5">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-d5"><text class="rpt-sec-icon">🎭</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-d5">表达风格</text>
+          <view class="rpt-sec-line rpt-ln-d5" />
+        </view>
+      </view>
+      <text class="rpt-sec-body">{{sec.Style}}<text tt:if="{{!streamingDone && curSec==='Style'}}" class="rpt-cursor">▋</text></text>
+    </view>
+
+    <!-- 深层洞察分区标题 -->
+    <view tt:if="{{highlights.length > 0}}" class="rpt-dims-divider">
+      <view class="rpt-dims-div-line" />
+      <view class="rpt-dims-div-badge rpt-badge-hl">
+        <text class="rpt-dims-div-icon">🔮</text>
+        <text class="rpt-dims-div-label">深层洞察</text>
+      </view>
+      <view class="rpt-dims-div-line" />
+    </view>
+
+    <view tt:if="{{highlights.length > 0}}" class="rpt-sec-card rpt-hl">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-hl"><text class="rpt-sec-icon">🔮</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-hl">深层洞察</text>
+          <view class="rpt-sec-line rpt-ln-hl" />
+        </view>
+      </view>
+      <view tt:for="{{highlights}}" tt:key="idx" class="rpt-hl-item">
+        <view class="rpt-hl-num {{item.isPositive ? 'rpt-hl-num-pos' : ''}} {{item.severity === 'high' ? 'rpt-hl-num-high' : ''}}">
+          <text class="rpt-hl-num-text">{{item.idx}}</text>
+        </view>
+        <view class="rpt-hl-content">
+          <text tt:if="{{item.title}}" class="rpt-hl-title {{item.isPositive ? 'rpt-hl-title-pos' : ''}} {{item.severity === 'high' ? 'rpt-hl-title-high' : ''}}">{{item.title}}</text>
+          <text tt:if="{{item.text}}" class="rpt-hl-text">{{item.text}}<text tt:if="{{!streamingDone && curSec==='Highlight' && item.idx===highlights[highlights.length-1].idx}}" class="rpt-cursor">▋</text></text>
+          <text tt:elif="{{!streamingDone}}" class="rpt-hl-text-pending">正在生成…</text>
+        </view>
+      </view>
+    </view>
+
+    <view tt:if="{{sec.Suggestion}}" class="rpt-sec-card rpt-suggestion">
+      <view class="rpt-sec-header">
+        <view class="rpt-sec-icon-wrap rpt-iw-suggestion"><text class="rpt-sec-icon">🌱</text></view>
+        <view class="rpt-sec-hd-col">
+          <text class="rpt-sec-label rpt-lbl-suggestion">给你的建议</text>
+          <view class="rpt-sec-line rpt-ln-suggestion" />
+        </view>
+      </view>
+      <text class="rpt-sec-body">{{sec.Suggestion}}<text tt:if="{{!streamingDone && curSec==='Suggestion'}}" class="rpt-cursor">▋</text></text>
+    </view>
+
+    <!-- 旧格式兜底（portrait_chunk） -->
+    <view tt:if="{{!sec.Title && streamingText}}" class="str-card">
+      <view class="str-text-wrap">
+        <text class="str-text">{{ streamingText }}</text><text tt:if="{{!streamingDone}}" class="str-cursor">▋</text>
+      </view>
+    </view>
+
+    <!-- 生成完成后显示解锁按钮 -->
+    <view tt:if="{{streamingDone}}" class="str-unlock-section">
+      <view class="unlock-label-row">
+        <view class="unlock-divider" />
+        <text class="unlock-label">解锁更多测评</text>
+        <view class="unlock-divider" />
+      </view>
+      <view class="unlock-cards">
+        <view class="unlock-card unlock-card-deep" bindtap="goDeep">
+          <text class="unlock-card-icon">◈</text>
+          <text class="unlock-card-title">深度版</text>
+          <text class="unlock-card-desc">多维度全面解析</text>
+          <view class="unlock-card-badge"><text class="unlock-badge-text">即将上线</text></view>
+        </view>
+        <view class="unlock-card unlock-card-couple" bindtap="goCouple">
+          <text class="unlock-card-icon">∞</text>
+          <text class="unlock-card-title">双人版</text>
+          <text class="unlock-card-desc">两人契合度解析</text>
+          <view class="unlock-card-badge"><text class="unlock-badge-text">即将上线</text></view>
+        </view>
+      </view>
+      <view class="str-restart-row">
+        <button class="str-btn-restart" bindtap="restart">再测一次</button>
+      </view>
+    </view>
+
+  </view>
+
+  <!-- ─── Main Content ─── -->
   <block tt:else>
-    <view class="type-card">
-      <text class="type-emoji">💝</text>
-      <text class="type-label">你的恋爱人格</text>
-      <text class="type-name">{{personalityType}}</text>
-    </view>
-    <view class="report-section">
-      <text class="section-title">📋 详细分析</text>
-      <text class="report-text">{{reportText}}</text>
-    </view>
-    <view class="actions">
-      <button class="btn-poster" bindtap="generatePoster">生成分享海报</button>
-      <button class="btn-share" open-type="share">分享给朋友</button>
-      <button class="btn-restart" bindtap="restart">再测一次</button>
-      <button tt:if="{{!isHistory}}" class="btn-history" bindtap="goHistory">历史记录</button>
+    <view class="content-wrap">
+
+      <!-- Hero Card: Personality Type -->
+      <view class="hero-card">
+        <view class="hero-deco-circle hero-circle-1" />
+        <view class="hero-deco-circle hero-circle-2" />
+        <view class="hero-top-row">
+          <view class="hero-badge">
+            <text class="hero-badge-text">恋爱人格</text>
+          </view>
+          <text class="hero-code-tag">{{ personalityType }}</text>
+        </view>
+        <text class="hero-type-name">{{ parsed.typeName || personalityType }}</text>
+        <view class="hero-divider">
+          <view class="hero-divider-line" />
+          <text class="hero-divider-gem">✦</text>
+          <view class="hero-divider-line" />
+        </view>
+        <text class="hero-tagline">{{ parsed.typeTagline }}</text>
+        <view class="hero-stars-row">
+          <text class="hero-star">✦</text>
+          <text class="hero-star hero-star-lg">✦</text>
+          <text class="hero-star">✦</text>
+        </view>
+      </view>
+
+      <!-- Section 1: 开篇画像 -->
+      <view tt:if="{{hasPortrait}}" class="section-card portrait-card">
+        <view class="card-accent portrait-accent" />
+        <view class="section-header">
+          <view class="section-icon-wrap portrait-icon-bg">
+            <text class="section-icon-emoji">🪞</text>
+          </view>
+          <view class="section-title-col">
+            <text class="section-num">01</text>
+            <text class="section-title">{{ parsed.portrait.title }}</text>
+          </view>
+        </view>
+        <view class="section-divider" />
+        <text class="section-body">{{ parsed.portrait.text }}</text>
+      </view>
+
+      <!-- Section 2: 五维度解读 -->
+      <view tt:if="{{hasDimensions}}" class="section-card dims-card">
+        <view class="card-accent dims-accent" />
+        <view class="section-header">
+          <view class="section-icon-wrap dims-icon-bg">
+            <text class="section-icon-emoji">🔮</text>
+          </view>
+          <view class="section-title-col">
+            <text class="section-num">02</text>
+            <text class="section-title">五维度解读</text>
+          </view>
+        </view>
+        <view class="section-divider" />
+        <view class="dims-list">
+          <view
+            tt:for="{{parsed.dimensions}}"
+            tt:key="index"
+            class="dim-item"
+            style="border-left-color: {{item.color}}; background-color: {{item.bg}}"
+          >
+            <view class="dim-header-row">
+              <text class="dim-emoji">{{item.emoji}}</text>
+              <text class="dim-name" style="color: {{item.color}}">{{item.name}}</text>
+            </view>
+            <text class="dim-body">{{item.text}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- Section 3: 复合诊断洞察 (conditional) -->
+      <view tt:if="{{hasInsights}}" class="section-card insights-card">
+        <view class="card-accent insights-accent" />
+        <view class="section-header">
+          <view class="section-icon-wrap insights-icon-bg">
+            <text class="section-icon-emoji">🌌</text>
+          </view>
+          <view class="section-title-col">
+            <text class="section-num">03</text>
+            <text class="section-title">{{ parsed.insights.title }}</text>
+          </view>
+        </view>
+        <view class="section-divider" />
+        <text class="section-body insights-body">{{ parsed.insights.text }}</text>
+      </view>
+
+      <!-- Section 4: 关系建议 -->
+      <view tt:if="{{hasAdvice}}" class="section-card advice-card">
+        <view class="card-accent advice-accent" />
+        <view class="section-header">
+          <view class="section-icon-wrap advice-icon-bg">
+            <text class="section-icon-emoji">🌱</text>
+          </view>
+          <view class="section-title-col">
+            <text class="section-num">{{ hasInsights ? '04' : '03' }}</text>
+            <text class="section-title">{{ parsed.advice.title }}</text>
+          </view>
+        </view>
+        <view class="section-divider" />
+        <view class="advice-list">
+          <view
+            tt:for="{{parsed.advice.items}}"
+            tt:key="index"
+            class="advice-item"
+          >
+            <view class="advice-num-badge">
+              <text class="advice-num-text">{{item.num}}</text>
+            </view>
+            <text class="advice-item-text">{{item.text}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- Section 5: 结尾 -->
+      <view tt:if="{{hasEnding}}" class="section-card ending-card">
+        <view class="ending-top-deco">
+          <text class="ending-deco-gem">❤</text>
+        </view>
+        <text class="ending-body">{{ parsed.ending.text }}</text>
+        <view class="ending-signature">
+          <view class="ending-sig-line" />
+          <text class="ending-sig-text">— 恋爱侧写</text>
+        </view>
+      </view>
+
+      <!-- Fallback: raw text if parsing completely failed -->
+      <view tt:if="{{!hasPortrait && !hasDimensions && reportText}}" class="section-card fallback-card">
+        <view class="card-accent portrait-accent" />
+        <view class="section-header">
+          <view class="section-icon-wrap portrait-icon-bg">
+            <text class="section-icon-emoji">📖</text>
+          </view>
+          <view class="section-title-col">
+            <text class="section-num">01</text>
+            <text class="section-title">你的专属报告</text>
+          </view>
+        </view>
+        <view class="section-divider" />
+        <text class="section-body">{{ reportText }}</text>
+      </view>
+
+      <!-- Action Buttons -->
+      <view class="actions">
+        <button class="btn-primary" bindtap="generatePoster">🖼 生成分享海报</button>
+        <button class="btn-secondary" open-type="share">💌 分享给朋友</button>
+        <view class="btn-row">
+          <button class="btn-ghost btn-ghost-half" bindtap="restart">再测一次</button>
+          <button tt:if="{{!isHistory}}" class="btn-ghost btn-ghost-half" bindtap="goHistory">历史记录</button>
+        </view>
+      </view>
+
+      <!-- 解锁更多 -->
+      <view class="unlock-section">
+        <view class="unlock-label-row">
+          <view class="unlock-divider" />
+          <text class="unlock-label">解锁更多测评</text>
+          <view class="unlock-divider" />
+        </view>
+        <view class="unlock-cards">
+          <view class="unlock-card unlock-card-deep" bindtap="goDeep">
+            <text class="unlock-card-icon">◈</text>
+            <text class="unlock-card-title">深度版</text>
+            <text class="unlock-card-desc">多维度全面解析</text>
+            <view class="unlock-card-badge"><text class="unlock-badge-text">即将上线</text></view>
+          </view>
+          <view class="unlock-card unlock-card-couple" bindtap="goCouple">
+            <text class="unlock-card-icon">∞</text>
+            <text class="unlock-card-title">双人版</text>
+            <text class="unlock-card-desc">两人契合度解析</text>
+            <view class="unlock-card-badge"><text class="unlock-badge-text">即将上线</text></view>
+          </view>
+        </view>
+      </view>
+
+      <!-- Bottom spacing -->
+      <view class="bottom-space" />
+
     </view>
   </block>
 
-  <!-- 海报预览弹窗 -->
+  <!-- ─── Poster Preview Modal ─── -->
   <view tt:if="{{showPoster}}" class="poster-modal">
     <view class="poster-mask" bindtap="closePoster" />
     <view class="poster-wrap">
       <image src="{{posterPath}}" class="poster-img" mode="aspectFit" show-menu-by-longpress="true" />
-      <view class="poster-tip">长按图片可保存或分享</view>
+      <text class="poster-tip">长按图片可保存或分享</text>
       <view class="poster-btns">
         <button class="btn-save" bindtap="savePoster">保存到相册</button>
         <button class="btn-close-poster" bindtap="closePoster">关闭</button>
       </view>
     </view>
   </view>
+
 </view>

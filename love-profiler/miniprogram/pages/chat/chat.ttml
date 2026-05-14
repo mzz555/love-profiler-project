@@ -1,34 +1,106 @@
-<view class="container">
+<!-- catchTouchmove="noop" 双重拦截横滑返回手势 -->
+<view class="page" catchTouchmove="noop">
+
+  <!-- ── Loading ───────────────────────────── -->
   <view tt:if="{{starting}}" class="loading-wrap">
-    <view class="loading-dot" /><view class="loading-dot" /><view class="loading-dot" />
+    <view class="loading-ring" />
+    <view class="loading-ring loading-ring-2" />
+    <text class="loading-icon">💗</text>
+    <text class="loading-title">正在加载题目</text>
+    <text class="loading-sub">为你准备专属问题中…</text>
   </view>
+
   <block tt:else>
-    <scroll-view class="msg-list" scroll-y scroll-into-view="{{scrollId}}" scroll-with-animation>
-      <view tt:for="{{messages}}" tt:key="index" id="msg-{{index}}" class="msg-row {{item.role}}">
-        <view tt:if="{{item.role === 'assistant'}}" class="avatar">AI</view>
-        <view class="bubble {{item.role}}"><text>{{item.content}}</text></view>
+
+    <!-- Top Nav -->
+    <view class="top-nav">
+      <view class="nav-btn" bindtap="goBack">
+        <text class="nav-back-icon">‹</text>
       </view>
-      <view tt:if="{{sending}}" class="msg-row assistant">
-        <view class="avatar">AI</view>
-        <view class="bubble assistant typing">
-          <view class="dot" /><view class="dot" /><view class="dot" />
+      <view class="progress-wrap">
+        <view class="progress-track">
+          <view class="progress-fill" style="width: {{(questionNum / totalQuestions) * 100}}%" />
         </view>
       </view>
-    </scroll-view>
-    <view class="bottom-area">
-      <view class="progress-bar">
-        <view class="progress-fill" style="width: {{(questionNum / totalQuestions) * 100}}%" />
+      <view tt:if="{{!isComplete}}" class="nav-btn" bindtap="randomPick">
+        <text class="nav-random-icon">🎲</text>
       </view>
-      <view class="round-label">第 {{questionNum}} / {{totalQuestions}} 题</view>
-      <view tt:if="{{options.length > 0 && !isComplete}}" class="options-wrap">
-        <view
-          tt:for="{{options}}" tt:key="index"
-          class="option-btn"
-          bindtap="pickOption"
-          data-letter="{{item.letter}}"
-          data-text="{{item.text}}"
-        >{{item.text}}</view>
+      <view tt:if="{{!isComplete}}" class="nav-btn" bindtap="closeQuiz">
+        <text class="nav-close-icon">×</text>
+      </view>
+      <view tt:elif class="nav-btn-placeholder" />
+    </view>
+
+    <!-- Question Zone -->
+    <view tt:if="{{!isComplete}}" class="question-zone">
+      <text class="question-count"><text class="q-num-hi">{{questionNum}}</text><text class="q-num-sep"> / {{totalQuestions}}</text></text>
+      <view tt:for="{{[questionNum]}}" tt:key="*this" class="question-motion">
+        <text class="question-stem">{{currentStem}}</text>
       </view>
     </view>
+
+    <!-- Display Card -->
+    <view tt:if="{{!isComplete && options.length > 0}}" class="display-area">
+      <view tt:for="{{[questionKey]}}" tt:key="*this" class="display-card-motion">
+        <view class="display-card display-pos-{{sliderPos}}">
+          <view class="display-content {{contentAnimClass}}">
+            <text tt:if="{{displayText}}" class="display-option-text">{{displayText}}</text>
+            <text tt:else class="display-hint-text">← 滑动选择答案 →</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Orb Selector -->
+    <view class="orb-zone" tt:if="{{!isComplete && options.length > 0}}">
+      <view
+        class="orb-track"
+        id="orb-track"
+        bindtouchstart="onSliderTouchStart"
+        catchTouchmove="onSliderTouchMove"
+        bindtouchend="onSliderTouchEnd"
+      >
+        <view class="orb-connector" />
+        <view
+          tt:for="{{options}}"
+          tt:key="index"
+          class="orb-wrap {{sliderPos === index ? 'orb-wrap-active' : ''}}"
+        >
+          <view
+            class="orb orb-c-{{index}} orb-d-{{orbDists[index]}} {{isDragging ? 'orb-dragging' : ''}} {{!item.text ? 'orb-empty' : ''}}"
+            bindtap="onOrbTap"
+            data-idx="{{index}}"
+          >
+            <view tt:if="{{orbDists[index] === 0 && !isDragging && item.text}}" class="orb-ripple orb-ripple-c-{{index}}" />
+            <view tt:if="{{orbDists[index] === 0 && !isDragging && item.text}}" class="orb-ripple orb-ripple-delay orb-ripple-c-{{index}}" />
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Bottom Row -->
+    <view class="bottom-row" tt:if="{{!isComplete}}">
+      <view
+        class="btn-prev {{questionNum <= 1 ? 'btn-prev-disabled' : ''}}"
+        bindtap="goToPrevQuestion"
+      >
+        <text class="btn-prev-icon">↩</text>
+        <text class="btn-prev-label">上一题</text>
+      </view>
+      <view class="btn-confirm {{(sending || !displayText) ? 'btn-confirm-disabled' : ''}}" bindtap="onConfirm">
+        <text class="btn-confirm-icon">✓</text>
+      </view>
+    </view>
+
+    <!-- 提交中 -->
+    <view class="completing-wrap" tt:if="{{isComplete}}">
+      <view class="completing-ring" />
+      <view class="completing-ring completing-ring-2" />
+      <text class="completing-icon">✨</text>
+      <text class="completing-title">全部完成！</text>
+      <text class="completing-sub">正在为你解读恋爱人格…</text>
+    </view>
+
   </block>
+
 </view>

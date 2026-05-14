@@ -1,30 +1,27 @@
-page { background: #12002A; }
+page { background: #08080F; }
 
 .container {
   height: 100vh;
-  background: linear-gradient(160deg, #12002A 0%, #260042 35%, #1C0038 65%, #0D001E 100%);
-  display: flex;
-  flex-direction: column;
-  position: relative;
+  background: linear-gradient(175deg, #06060E 0%, #080812 20%, #0A0A18 50%, #0C0B1E 100%);
+  display: flex; flex-direction: column; position: relative;
+  animation: pageIn 0.45s ease-out both;
 }
 
 /* ── Ambient Orbs ───────────────────────────────── */
 .bg-orb { position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; }
-.bg-orb-1 { width: 600rpx; height: 600rpx; top: -100rpx; right: -150rpx; background: radial-gradient(circle, rgba(194,24,91,0.18) 0%, transparent 70%); }
-.bg-orb-2 { width: 500rpx; height: 500rpx; bottom: 200rpx; left: -140rpx; background: radial-gradient(circle, rgba(123,31,162,0.14) 0%, transparent 70%); }
-.bg-orb-3 { width: 360rpx; height: 360rpx; bottom: -60rpx; right: -60rpx; background: radial-gradient(circle, rgba(255,64,129,0.10) 0%, transparent 70%); }
+.bg-orb-1 { width: 600rpx; height: 600rpx; top: -100rpx; right: -150rpx; background: radial-gradient(circle, rgba(100,35,170,0.12) 0%, transparent 70%); }
+.bg-orb-2 { width: 500rpx; height: 500rpx; bottom: 200rpx; left: -140rpx; background: radial-gradient(circle, rgba(180,130,60,0.06) 0%, transparent 70%); }
+.bg-orb-3 { width: 360rpx; height: 360rpx; bottom: -60rpx; right: -60rpx; background: radial-gradient(circle, rgba(60,120,190,0.04) 0%, transparent 70%); }
 
 /* ── Loading / Empty State ───────────────────────── */
 .state-wrap {
-  flex: 1; min-height: 0;
-  position: relative; z-index: 1;
+  flex: 1; min-height: 0; position: relative; z-index: 1;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 16rpx;
 }
 .loading-pulse-ring {
-  position: absolute;
-  width: 140rpx; height: 140rpx; border-radius: 50%;
-  border: 2rpx solid rgba(255,64,129,0.4);
+  position: absolute; width: 140rpx; height: 140rpx; border-radius: 50%;
+  border: 2rpx solid rgba(200,160,80,0.35);
   animation: pulse-expand 2s ease-out infinite;
 }
 .loading-ring-delay { animation-delay: 1s; }
@@ -37,35 +34,33 @@ page { background: #12002A; }
   0%, 100% { transform: scale(1); }
   50%       { transform: scale(1.15); }
 }
-
-/* ── Empty State ─────────────────────────────────── */
 .state-emoji { font-size: 80rpx; opacity: 0.7; }
-.state-title { font-size: 32rpx; font-weight: 600; color: #F8BBD0; }
-.state-text  { font-size: 26rpx; color: rgba(255,255,255,0.35); text-align: center; line-height: 1.7; padding: 0 48rpx; }
+.state-title { font-size: 32rpx; font-weight: 600; color: rgba(220,200,170,0.8); }
+.state-text  { font-size: 26rpx; color: rgba(255,255,255,0.25); text-align: center; line-height: 1.7; padding: 0 48rpx; }
 .start-btn {
   margin-top: 16rpx;
-  background: linear-gradient(135deg, #FF4081, #C2185B);
-  color: #fff; border-radius: 40rpx;
+  background: linear-gradient(135deg, #C8A050, #A07830);
+  color: #0A0A14; border-radius: 40rpx;
   height: 80rpx; line-height: 80rpx;
   font-size: 28rpx; font-weight: 600; border: none;
   padding: 0 48rpx;
-  box-shadow: 0 4rpx 16rpx rgba(255,64,129,0.35);
+  box-shadow: 0 4rpx 16rpx rgba(200,160,80,0.25);
 }
 
 /* ── Page Header ─────────────────────────────────── */
 .page-header {
   flex-shrink: 0; position: relative; z-index: 2;
   padding: 24rpx 32rpx 16rpx;
-  background: rgba(18,0,42,0.75);
-  border-bottom: 1rpx solid rgba(255,255,255,0.06);
+  background: rgba(8,8,15,0.85);
+  border-bottom: 1rpx solid rgba(255,255,255,0.05);
   display: flex; justify-content: space-between; align-items: center;
 }
-.page-title { font-size: 34rpx; font-weight: 700; color: #fff; letter-spacing: 0.5rpx; }
+.page-title { font-size: 34rpx; font-weight: 700; color: rgba(240,225,200,0.9); letter-spacing: 0.5rpx; }
 .count-badge {
-  background: rgba(255,64,129,0.12);
-  border: 1rpx solid rgba(255,64,129,0.25);
+  background: rgba(200,160,80,0.10);
+  border: 1rpx solid rgba(200,160,80,0.20);
   border-radius: 20rpx; padding: 4rpx 16rpx;
-  font-size: 22rpx; color: #FF6B9D;
+  font-size: 22rpx; color: #D4B068;
 }
 
 /* ── List ────────────────────────────────────────── */
@@ -74,37 +69,33 @@ page { background: #12002A; }
 
 /* ── History Card ────────────────────────────────── */
 .hist-card {
-  margin: 16rpx 24rpx 0;
-  border-radius: 20rpx; padding: 24rpx 24rpx 20rpx;
+  margin: 16rpx 24rpx 0; border-radius: 24rpx;
+  padding: 24rpx 24rpx 20rpx;
   display: flex; flex-direction: column; gap: 14rpx;
 }
 .hist-card.latest {
-  background: linear-gradient(135deg, rgba(194,24,91,0.14), rgba(123,31,162,0.10));
-  border: 1rpx solid rgba(255,64,129,0.25);
+  background: linear-gradient(155deg, rgba(200,160,80,0.08), rgba(160,128,184,0.06));
+  border: 1rpx solid rgba(200,160,80,0.18);
 }
 .hist-card.older {
-  background: rgba(255,255,255,0.04);
-  border: 1rpx solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+  border: 1rpx solid rgba(255,255,255,0.05);
 }
-
-/* ── Card Top Row ────────────────────────────────── */
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16rpx; }
 .card-left { flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
-.type-name { font-size: 30rpx; font-weight: 700; color: #fff; }
-.type-meta { font-size: 20rpx; color: rgba(255,255,255,0.3); }
+.type-name { font-size: 30rpx; font-weight: 700; color: rgba(240,225,200,0.9); }
+.type-meta { font-size: 20rpx; color: rgba(255,255,255,0.25); }
 .view-btn {
   flex-shrink: 0; border-radius: 20rpx; padding: 6rpx 18rpx;
   font-size: 22rpx; font-weight: 600; white-space: nowrap;
 }
 .view-btn.primary {
-  background: linear-gradient(135deg, #FF4081, #7B1FA2); color: #fff;
+  background: linear-gradient(135deg, #C8A050, #A07830); color: #0A0A14;
 }
 .view-btn.ghost {
-  background: rgba(255,255,255,0.06);
-  border: 1rpx solid rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.04);
+  border: 1rpx solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.35);
 }
-
-/* ── Card Divider & Summary ──────────────────────── */
-.card-divider { height: 1rpx; background: rgba(255,255,255,0.07); }
-.card-summary { font-size: 24rpx; color: rgba(255,255,255,0.42); line-height: 1.7; display: block; }
+.card-divider { height: 1rpx; background: rgba(255,255,255,0.05); }
+.card-summary { font-size: 24rpx; color: rgba(255,255,255,0.35); line-height: 1.7; display: block; }

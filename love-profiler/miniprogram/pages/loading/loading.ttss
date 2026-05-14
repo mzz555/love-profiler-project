@@ -1,0 +1,145 @@
+/* ── Base ────────────────────────────────────────── */
+page { background: #08080F; }
+
+.container {
+  width: 100vw; height: 100vh;
+  background: linear-gradient(175deg, #06060E 0%, #080812 20%, #0A0A18 50%, #0C0B1E 100%);
+  position: relative; overflow: hidden;
+  animation: pageIn 0.45s ease-out both;
+}
+
+/* ── Ambient Orbs ───────────────────────────────── */
+.bg-orb { position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; }
+.bg-orb-1 { width: 600rpx; height: 600rpx; top: -100rpx; right: -150rpx; background: radial-gradient(circle, rgba(100,35,170,0.14) 0%, transparent 70%); }
+.bg-orb-2 { width: 500rpx; height: 500rpx; bottom: 240rpx; left: -140rpx; background: radial-gradient(circle, rgba(180,130,60,0.08) 0%, transparent 70%); }
+.bg-orb-3 { width: 360rpx; height: 360rpx; bottom: -60rpx; right: -60rpx; background: radial-gradient(circle, rgba(60,120,190,0.06) 0%, transparent 70%); }
+
+/* ── Loading Layer ──────────────────────────────── */
+.loading-layer {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 2;
+}
+
+/* ── Heart Pulse ────────────────────────────────── */
+.heart-stage {
+  position: relative; width: 240rpx; height: 240rpx;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 48rpx;
+}
+.heart-core {
+  font-size: 88rpx; z-index: 2;
+  animation: heart-beat 1.2s ease-in-out infinite;
+}
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  15%      { transform: scale(1.18); }
+  30%      { transform: scale(1); }
+  45%      { transform: scale(1.12); }
+  60%      { transform: scale(1); }
+}
+
+/* ── Orbit Ring ─────────────────────────────────── */
+.orbit-ring {
+  position: absolute; top: 0; left: 0; width: 240rpx; height: 240rpx;
+  animation: orbit-spin 4s linear infinite;
+}
+@keyframes orbit-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.orbit-dot {
+  position: absolute; width: 16rpx; height: 16rpx; border-radius: 50%;
+  animation: orbit-counter 4s linear infinite;
+}
+@keyframes orbit-counter {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+.orbit-dot:nth-child(1) { top: 6rpx;   left: 50%; margin-left: -8rpx; background: #C8A050; box-shadow: 0 0 16rpx rgba(200,160,80,0.6); }
+.orbit-dot:nth-child(2) { top: 22rpx;  right: 18rpx; background: #8898B0; box-shadow: 0 0 16rpx rgba(140,160,190,0.6); }
+.orbit-dot:nth-child(3) { bottom: 22rpx; right: 18rpx; background: #A080B8; box-shadow: 0 0 16rpx rgba(160,128,184,0.6); }
+.orbit-dot:nth-child(4) { bottom: 6rpx; left: 50%; margin-left: -8rpx; background: #C08090; box-shadow: 0 0 16rpx rgba(200,130,140,0.6); }
+.orbit-dot:nth-child(5) { bottom: 22rpx; left: 18rpx; background: #8BA888; box-shadow: 0 0 16rpx rgba(140,168,140,0.6); }
+
+/* ── Status Text ────────────────────────────────── */
+.status-text {
+  font-size: 32rpx; font-weight: 600;
+  color: #D4B068; letter-spacing: 2rpx;
+  margin-bottom: 16rpx;
+  text-shadow: 0 0 20rpx rgba(200,160,80,0.3);
+}
+.status-sub {
+  font-size: 24rpx; color: rgba(200,160,80,0.45); letter-spacing: 1rpx;
+}
+
+/* ── Progress Bar ───────────────────────────────── */
+.progress-wrap {
+  width: 360rpx; height: 4rpx;
+  background: rgba(255,255,255,0.06); border-radius: 2rpx;
+  margin-top: 44rpx; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 2rpx;
+  background: linear-gradient(90deg, #C8A050, #D4B068, #C8A050);
+  background-size: 200% 100%;
+  animation: progress-shimmer 2s linear infinite;
+  transition: width 0.4s ease;
+}
+@keyframes progress-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* ── Floating Sparkles ──────────────────────────── */
+.sparkle {
+  position: absolute; width: 8rpx; height: 8rpx; border-radius: 50%;
+  background: rgba(200,160,80,0.5);
+  animation: float-up 3s ease-in infinite; opacity: 0;
+}
+.sparkle:nth-child(1)  { left: 12%; bottom: -20rpx; animation-delay: 0s; }
+.sparkle:nth-child(2)  { left: 28%; bottom: -20rpx; animation-delay: 0.6s; width: 6rpx; height: 6rpx; }
+.sparkle:nth-child(3)  { left: 44%; bottom: -20rpx; animation-delay: 1.2s; }
+.sparkle:nth-child(4)  { left: 60%; bottom: -20rpx; animation-delay: 1.8s; width: 6rpx; height: 6rpx; }
+.sparkle:nth-child(5)  { left: 76%; bottom: -20rpx; animation-delay: 2.4s; }
+.sparkle:nth-child(6)  { left: 90%; bottom: -20rpx; animation-delay: 0.3s; width: 10rpx; height: 10rpx; }
+.sparkle:nth-child(7)  { left: 18%; bottom: -20rpx; animation-delay: 0.9s; width: 10rpx; height: 10rpx; }
+.sparkle:nth-child(8)  { left: 52%; bottom: -20rpx; animation-delay: 1.5s; }
+.sparkle:nth-child(9)  { left: 68%; bottom: -20rpx; animation-delay: 2.1s; width: 10rpx; height: 10rpx; }
+.sparkle:nth-child(10) { left: 84%; bottom: -20rpx; animation-delay: 2.7s; }
+@keyframes float-up {
+  0%   { transform: translateY(0) scale(0); opacity: 0; }
+  20%  { opacity: 0.8; }
+  60%  { opacity: 0.3; }
+  100% { transform: translateY(-100vh) scale(1.5); opacity: 0; }
+}
+
+/* ── Image Layer ────────────────────────────────── */
+.image-layer {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 3; opacity: 0; transform: scale(0.85);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  pointer-events: none;
+}
+.image-layer.show { opacity: 1; transform: scale(1); pointer-events: auto; }
+.image-result { width: 100%; height: 100%; }
+.image-glow {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  box-shadow: inset 0 0 120rpx rgba(200,160,80,0.12);
+  pointer-events: none; z-index: 1;
+}
+
+/* ── Bottom actions ──────────────────────────────── */
+.image-actions {
+  position: absolute; bottom: 60rpx; left: 40rpx; right: 40rpx;
+  z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 20rpx;
+}
+.btn-enter {
+  width: 320rpx; height: 76rpx; line-height: 76rpx; text-align: center;
+  background: linear-gradient(135deg, #C8A050, #A07830);
+  color: #0A0A14; border-radius: 38rpx;
+  font-size: 28rpx; font-weight: 700; border: none;
+  box-shadow: 0 6rpx 28rpx rgba(200,160,80,0.35);
+  letter-spacing: 2rpx;
+}
+.btn-hint { font-size: 22rpx; color: rgba(200,160,80,0.4); letter-spacing: 1rpx; }

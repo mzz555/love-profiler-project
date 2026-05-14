@@ -1,15 +1,17 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/gender/gender",
     "pages/chat/chat",
     "pages/unlock/unlock",
+    "pages/loading/loading",
     "pages/report/report",
     "pages/history/history"
   ],
   "window": {
-    "navigationBarTitleText": "恋爱人格测评",
-    "navigationBarBackgroundColor": "#FF6B9D",
+    "navigationBarTitleText": "恋爱深度侧写",
+    "navigationBarBackgroundColor": "#08080F",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#FFF5F8"
+    "backgroundColor": "#08080F"
   }
 }

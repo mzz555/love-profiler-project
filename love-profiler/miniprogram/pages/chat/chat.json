@@ -1,1 +1,4 @@
-{"navigationBarTitleText": "恋爱对话"}
+{
+  "navigationBarTitleText": "恋爱对话",
+  "disableSwipeBack": true
+}

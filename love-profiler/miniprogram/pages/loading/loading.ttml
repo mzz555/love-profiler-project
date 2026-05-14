@@ -1,0 +1,51 @@
+<view class="container">
+  <view class="bg-orb bg-orb-1" />
+  <view class="bg-orb bg-orb-2" />
+  <view class="bg-orb bg-orb-3" />
+
+  <!-- Loading Layer -->
+  <view tt:if="{{!imageReady}}" class="loading-layer">
+    <!-- Floating sparkles -->
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+    <view class="sparkle" />
+
+    <!-- Central heart with orbiting dots -->
+    <view class="heart-stage">
+      <view class="orbit-ring">
+        <view class="orbit-dot" />
+        <view class="orbit-dot" />
+        <view class="orbit-dot" />
+        <view class="orbit-dot" />
+        <view class="orbit-dot" />
+      </view>
+      <text class="heart-core">💗</text>
+    </view>
+
+    <text class="status-text">{{statusText}}</text>
+    <text class="status-sub">{{statusSub}}</text>
+
+    <view class="progress-wrap">
+      <view class="progress-fill" style="width: {{progressPct}}%" />
+    </view>
+  </view>
+
+  <!-- Image Layer -->
+  <view class="image-layer {{imageReady ? 'show' : ''}}">
+    <image class="image-result" src="{{imageUrl}}" mode="aspectFill" />
+    <view class="image-glow" />
+  </view>
+
+  <!-- Action buttons after image shown -->
+  <view tt:if="{{imageReady}}" class="image-actions">
+    <view class="btn-enter" bindtap="viewReport">✨ 查看完整报告</view>
+    <text class="btn-hint">点击按钮查看完整报告</text>
+  </view>
+</view>

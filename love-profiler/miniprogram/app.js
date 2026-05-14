@@ -51,6 +51,19 @@ App({
   },
 
   /**
+   * 创建 WebSocket 连接，自动附加 token 到 query string。
+   * @returns {SocketTask}
+   */
+  connectSocket({ path }) {
+    const wsBase = BASE_URL.replace(/^http/, 'ws');
+    const token = this.globalData.token;
+    const url = token
+      ? `${wsBase}${path}?token=${encodeURIComponent(token)}`
+      : `${wsBase}${path}`;
+    return tt.connectSocket({ url });
+  },
+
+  /**
    * 统一 HTTP 请求，自动附加 Authorization 头。
    * @returns {Promise<any>} 响应 data
    */
