@@ -4,35 +4,57 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Love Profiler · 管理后台</title>
+<script>
+  // 提前应用主题，避免首屏闪烁
+  (function(){
+    var t = localStorage.getItem('admin-theme') || 'dark';
+    if (t === 'light') document.documentElement.setAttribute('data-theme','light');
+  })();
+</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0f1117;--card:#161b27;--border:#1e2535;--text:#e2e8f0;
   --muted:#64748b;--accent:#3b82f6;--green:#4ade80;--red:#f87171;
   --teal:#4FAFAF;--sidebar:220px;
+  --hover:#161b27;--row-edit:rgba(59,130,246,.06);--row-stripe:#0e1520;
+  --topbar-h1:#f1f5f9;--input-bg:#161b27;--code-bg:#0a0d14;--code-text:#a5f3fc;
+  --section-h1:#f1f5f9;--badge-pending-bg:#1e293b;--badge-pending-color:#94a3b8;
+}
+:root[data-theme="light"]{
+  --bg:#F5F0EB;--card:#FFFFFF;--border:#E0DAD3;--text:#2A2A3A;
+  --muted:#8A857F;--accent:#4FAFAF;--green:#15803D;--red:#DC2626;
+  --teal:#4FAFAF;
+  --hover:#F0EBE5;--row-edit:rgba(79,175,175,.08);--row-stripe:#F0EBE5;
+  --topbar-h1:#1C1C2E;--input-bg:#FFFFFF;--code-bg:#F8F5F1;--code-text:#1C1C2E;
+  --section-h1:#1C1C2E;--badge-pending-bg:#E8E4DF;--badge-pending-color:#6A6A7A;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
      background:var(--bg);color:var(--text);font-size:14px;
      display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .topbar{height:48px;border-bottom:1px solid var(--border);
         display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
-.topbar h1{font-size:15px;font-weight:600;color:#f1f5f9}
+.topbar h1{font-size:15px;font-weight:600;color:var(--topbar-h1)}
 .topbar .sub{color:var(--muted);font-size:12px}
 .topbar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .btn{background:#1e40af;color:#fff;border:none;padding:5px 12px;
      border-radius:6px;cursor:pointer;font-size:12px;text-decoration:none}
 .btn:hover{background:#1d4ed8}
 .btn-sm{padding:3px 10px;font-size:11px}
+.btn-theme{background:transparent;border:1px solid var(--border);color:var(--text);
+           padding:3px 8px;border-radius:6px;cursor:pointer;font-size:14px;line-height:1;
+           transition:background .15s}
+.btn-theme:hover{background:var(--hover)}
 .layout{display:flex;flex:1;overflow:hidden}
 .sidebar{width:var(--sidebar);border-right:1px solid var(--border);
          overflow-y:auto;flex-shrink:0;padding:8px 0}
 .nav-group-label{font-size:10px;color:var(--muted);text-transform:uppercase;
                  letter-spacing:.06em;padding:12px 16px 4px}
 .nav-item{display:flex;align-items:center;gap:8px;padding:7px 16px;
-          cursor:pointer;color:#94a3b8;font-size:13px;border-left:3px solid transparent;
+          cursor:pointer;color:var(--muted);font-size:13px;border-left:3px solid transparent;
           transition:background .1s,color .1s}
-.nav-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
-.nav-item.active{background:rgba(59,130,246,.10);color:#93c5fd;
+.nav-item:hover{background:var(--hover);color:var(--text)}
+.nav-item.active{background:rgba(79,175,175,.10);color:var(--accent);
                  border-left-color:var(--accent)}
 .nav-item .icon{font-size:14px;width:20px;text-align:center}
 .nav-divider{height:1px;background:var(--border);margin:6px 8px}
@@ -42,7 +64,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
            border-radius:10px;padding:16px}
 .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;
             letter-spacing:.05em;margin-bottom:6px}
-.stat-val{font-size:26px;font-weight:700;color:#f1f5f9}
+.stat-val{font-size:26px;font-weight:700;color:var(--section-h1)}
 .stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
 .stat-val.green{color:var(--green)}.stat-val.red{color:var(--red)}
 .stat-val.teal{color:var(--teal)}
@@ -52,28 +74,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .seg-complete{background:#4ade80}.seg-analyzed{background:#3b82f6}
 .seg-pending{background:#94a3b8}.seg-generating{background:#fbbf24}
 .seg-paid{background:#4ade80}.seg-failed{background:#f87171}
-.section-title{font-size:16px;font-weight:600;color:#f1f5f9;margin-bottom:16px}
+.section-title{font-size:16px;font-weight:600;color:var(--section-h1);margin-bottom:16px}
 .tbl-toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
-.search-input{background:var(--card);border:1px solid var(--border);color:var(--text);
+.search-input{background:var(--input-bg);border:1px solid var(--border);color:var(--text);
               padding:6px 12px;border-radius:6px;font-size:13px;outline:none;flex:1;
               max-width:300px}
 .search-input:focus{border-color:var(--accent)}
-.select-sm{background:var(--card);border:1px solid var(--border);color:var(--text);
+.select-sm{background:var(--input-bg);border:1px solid var(--border);color:var(--text);
            padding:5px 8px;border-radius:6px;font-size:12px;outline:none}
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
 thead tr{border-bottom:1px solid var(--border)}
 th{text-align:left;padding:8px 10px;color:var(--muted);font-weight:500;
    font-size:11px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
-td{padding:8px 10px;border-bottom:1px solid #0e1520;vertical-align:middle;
+td{padding:8px 10px;border-bottom:1px solid var(--row-stripe);vertical-align:middle;
    max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr.clickable{cursor:pointer}
-tr.clickable:hover td{background:#161b27}
-tr.editing td{background:rgba(59,130,246,.06)}
+tr.clickable:hover td{background:var(--hover)}
+tr.editing td{background:var(--row-edit)}
 .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600}
 .badge-success,.badge-complete,.badge-paid,.badge-analyzed{background:#14532d;color:#4ade80}
 .badge-error,.badge-failed{background:#450a0a;color:#f87171}
-.badge-pending{background:#1e293b;color:#94a3b8}
+.badge-pending{background:var(--badge-pending-bg);color:var(--badge-pending-color)}
 .badge-generating{background:#422006;color:#fb923c}
 .badge-high{background:#450a0a;color:#fca5a5}
 .badge-moderate{background:#422006;color:#fdba74}
@@ -81,9 +103,9 @@ tr.editing td{background:rgba(59,130,246,.06)}
 .mono{font-family:"SF Mono","Fira Code",monospace;font-size:11px}
 .dim{color:var(--muted)}
 .bool-true{color:var(--green)}.bool-false{color:var(--red)}
-.edit-input{background:#1e293b;border:1px solid var(--accent);color:var(--text);
+.edit-input{background:var(--input-bg);border:1px solid var(--accent);color:var(--text);
             padding:3px 7px;border-radius:4px;font-size:13px;width:100%;outline:none}
-.edit-textarea{background:#1e293b;border:1px solid var(--accent);color:var(--text);
+.edit-textarea{background:var(--input-bg);border:1px solid var(--accent);color:var(--text);
                padding:4px 7px;border-radius:4px;font-size:12px;width:100%;
                min-height:60px;resize:vertical;outline:none}
 .row-actions{display:flex;gap:6px;white-space:nowrap}
@@ -100,7 +122,7 @@ tr.editing td{background:rgba(59,130,246,.06)}
 .pagination button{background:var(--card);border:1px solid var(--border);
                    color:var(--text);padding:4px 12px;border-radius:5px;
                    cursor:pointer;font-size:12px}
-.pagination button:hover:not(:disabled){background:#1e293b}
+.pagination button:hover:not(:disabled){background:var(--hover)}
 .pagination button:disabled{opacity:.4;cursor:default}
 .pg-info{color:var(--muted)}
 .detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;
@@ -114,17 +136,17 @@ tr.editing td{background:rgba(59,130,246,.06)}
 .dp-hdr h3{font-size:15px;font-weight:600;flex:1}
 .dp-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
 .dp-body{padding:20px;flex:1}
-.dp-section{background:#0f1117;border:1px solid var(--border);
+.dp-section{background:var(--bg);border:1px solid var(--border);
             border-radius:8px;padding:14px;margin-bottom:14px}
 .dp-section h4{font-size:10px;color:var(--muted);text-transform:uppercase;
                letter-spacing:.05em;margin-bottom:10px}
 .kv{display:grid;grid-template-columns:140px 1fr;gap:4px 8px;font-size:12px}
 .kv .k{color:var(--muted)}.kv .v{color:var(--text);word-break:break-all}
 details summary{cursor:pointer;color:var(--accent);font-size:12px;margin-bottom:6px}
-pre.json{background:#0a0d14;border:1px solid var(--border);border-radius:6px;
+pre.json{background:var(--code-bg);border:1px solid var(--border);border-radius:6px;
          padding:10px;font-size:11px;font-family:"SF Mono","Fira Code",monospace;
          overflow-x:auto;white-space:pre-wrap;word-break:break-all;
-         max-height:320px;overflow-y:auto;color:#a5f3fc;margin-top:6px}
+         max-height:320px;overflow-y:auto;color:var(--code-text);margin-top:6px}
 .toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;
        font-size:13px;color:#fff;z-index:200;opacity:0;transition:opacity .2s;
        pointer-events:none}
@@ -150,6 +172,7 @@ pre.json{background:#0a0d14;border:1px solid var(--border);border-radius:6px;
     <span class="sub" style="margin-left:10px">内部工具</span>
   </div>
   <div class="topbar-right">
+    <button class="btn-theme" id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
     <a href="/admin/logs" target="_blank" class="btn btn-sm">AI 监控 ↗</a>
     <button class="btn btn-sm" onclick="refreshCurrent()">刷新</button>
   </div>
@@ -610,6 +633,24 @@ async function apiFetch(url, method='GET', body=null) {
     return null;
   }
 }
+
+// ─── Theme switcher ──────────────────────────────────
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('themeBtn').textContent = '☀️';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('themeBtn').textContent = '🌙';
+  }
+}
+function toggleTheme() {
+  const cur = localStorage.getItem('admin-theme') || 'dark';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('admin-theme', next);
+  applyTheme(next);
+}
+applyTheme(localStorage.getItem('admin-theme') || 'dark');
 
 loadOverview();
 </script>
