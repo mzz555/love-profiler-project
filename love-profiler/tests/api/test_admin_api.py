@@ -86,3 +86,10 @@ def test_assessment_status_invalid_source_returns_422(client, db_session, monkey
     resp = client.put(f"/admin/api/assessments/{a.id}", json={"status": "analyzed"})
     assert resp.status_code == 422
     assert "pending" in resp.json()["detail"]
+
+
+def test_update_empty_body_returns_400(client, monkeypatch):
+    """空 body 应返回 400，不应导致 503。"""
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.put("/admin/api/base_love_type/1", json={})
+    assert resp.status_code == 400

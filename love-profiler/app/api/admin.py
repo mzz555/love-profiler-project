@@ -209,6 +209,9 @@ def _update_row(
         raise HTTPException(status_code=403,
                             detail=f"表 {table_name} 为只读，不允许修改")
 
+    if not update_data:
+        raise HTTPException(status_code=400, detail="没有提供任何字段")
+
     invalid = set(update_data.keys()) - editable
     if invalid:
         raise HTTPException(status_code=400,
