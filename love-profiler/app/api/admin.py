@@ -276,6 +276,108 @@ def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
 # Data endpoints
 # ---------------------------------------------------------------------------
 
+@router.get("", include_in_schema=False)
+@router.get("/", include_in_schema=False)
+async def admin_root(_: None = Depends(require_admin)) -> RedirectResponse:
+    """管理面板入口，重定向到前端 SPA。"""
+    return RedirectResponse(url="/static/admin/index.html")
+
+
+@router.get("/api/overview", include_in_schema=False)
+async def admin_overview(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+) -> dict:
+    """各业务表统计数据 + 最近 5 条 assessments。"""
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    result: dict = {"tables": {}, "recent_assessments": []}
+
+    for table in ("users", "assessments", "orders", "ai_call_logs"):
+        cfg = TABLE_CONFIG[table]
+        ts_col = cfg["created_at_col"]
+        try:
+            total = db.execute(text(f'SELECT COUNT(*) FROM "{table}"')).scalar() or 0
+            today_count = 0
+            if ts_col:
+                today_count = db.execute(
+                    text(f'SELECT COUNT(*) FROM "{table}" WHERE "{ts_col}" >= :ts'),
+                    {"ts": today_start},
+                ).scalar() or 0
+            result["tables"][table] = {"total": total, "today": today_count}
+        except OperationalError:
+            result["tables"][table] = {"total": 0, "today": 0}
+
+    # assessments 状态分布
+    try:
+        rows = db.execute(
+            text("SELECT status, COUNT(*) AS cnt FROM assessments GROUP BY status")
+        ).fetchall()
+        result["tables"]["assessments"]["by_status"] = {r.status: r.cnt for r in rows}
+    except OperationalError:
+        pass
+
+    # orders 状态分布
+    try:
+        rows = db.execute(
+            text("SELECT status, COUNT(*) AS cnt FROM orders GROUP BY status")
+        ).fetchall()
+        result["tables"]["orders"]["by_status"] = {r.status: r.cnt for r in rows}
+    except OperationalError:
+        pass
+
+    # 最近 5 条 assessments
+    try:
+        rows = db.execute(
+            text("SELECT id, session_id, personality_type, status, created_at "
+                 "FROM assessments ORDER BY id DESC LIMIT 5")
+        ).fetchall()
+        result["recent_assessments"] = [dict(r._mapping) for r in rows]
+    except OperationalError:
+        pass
+
+    return result
+
+
+@router.get("/api/{table_name}", include_in_schema=False)
+async def admin_table_list(
+    table_name: str = Path(...),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    q: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+) -> dict:
+    if table_name not in TABLE_CONFIG:
+        raise HTTPException(status_code=404, detail=f"未知的表: {table_name}")
+    return _query_table(db, table_name, TABLE_CONFIG[table_name], page, limit, q)
+
+
+@router.get("/api/{table_name}/{record_id}", include_in_schema=False)
+async def admin_table_detail(
+    table_name: str = Path(...),
+    record_id: str = Path(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+) -> dict:
+    if table_name not in TABLE_CONFIG:
+        raise HTTPException(status_code=404, detail=f"未知的表: {table_name}")
+    return _get_row(db, table_name, TABLE_CONFIG[table_name], record_id)
+
+
+@router.put("/api/{table_name}/{record_id}", include_in_schema=False)
+async def admin_table_update(
+    table_name: str = Path(...),
+    record_id: str = Path(...),
+    body: dict = Body(...),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+) -> dict:
+    if table_name not in TABLE_CONFIG:
+        raise HTTPException(status_code=404, detail=f"未知的表: {table_name}")
+    return _update_row(db, table_name, TABLE_CONFIG[table_name], record_id, body)
+
+
 @router.get("/logs/api/{log_id}", include_in_schema=False)
 async def log_detail(
     log_id: int = Path(...),
