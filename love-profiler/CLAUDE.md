@@ -87,6 +87,23 @@ Assessment status 流转：`pending` → `analyzed`（Agent A 成功后）→ `c
 
 应用启动时 SQLAlchemy 自动建表（业务表）；questions 表由 `supabase db push` 管理。
 
+### Supabase Migrations 规范
+
+`supabase/migrations/` 命名格式：`{YYYYMMDD}_{动作}_{表名}.sql`
+
+**核心规则：一个 migration SQL 文件只建/改一张表。**
+
+如果一个改动涉及多张表，拆成多个 migration（同日期按字母序自然排序）：
+
+✅ 正确：
+- `20260514_create_dimension_meta.sql`
+- `20260514_create_segment_decode.sql`
+
+❌ 错误：
+- `20260514_add_dimension_meta_and_segment_decode.sql`（一文件建两表）
+
+**历史遗留**：上述 ❌ 的文件已存在并应用过，**不追溯拆分**（需要 down migration，风险大）。未来新增 migration 严格遵守一文件一表。
+
 ### 评分规则（Agent A 逻辑基础）
 
 完整规则见 `docs/superpowers/specs/2026-04-30-scoring-rules.md`，核心摘要：
@@ -174,3 +191,23 @@ WebSocket 消息类型：`meta` / `section_start` / `section_chunk` / `section_e
 - `client` — FastAPI TestClient，DB 依赖已替换为测试引擎
 - `auth_headers` — 创建测试用户并返回有效的 `Authorization: Bearer ...` 头
 - `user_id` — 创建测试用户并返回其整数 id
+
+### Git 工作流
+
+**每次 commit 前必须看完整 `git status`，untracked 区也要看完**。对每个 untracked 文件做出显式分类决策：
+
+| untracked 路径 | 处理 |
+|---------------|------|
+| 项目核心代码/资源（`app/`、`miniprogram/`、`static/`、`docs/`、`supabase/`、`scripts/`） | **必须 add 并 commit** |
+| 本地工具状态（`.superpowers/`、`.vscode/`、`.idea/`） | 加进 `.gitignore` |
+| 临时输出/日志（`logs/`、`*.tmp`、`__pycache__/`） | 加进 `.gitignore` |
+| 含密钥（`.env`、`*.pem`、`credentials*`） | **永远不能 commit**，确认在 `.gitignore` 内 |
+
+**反模式**：
+- 只 `git add <具体文件>` 后直接 commit，不看 untracked 区——容易漏掉新增的 .py / 资源目录
+- `git add -u` 只 stage 已跟踪的修改，**新文件全部漏掉**
+- 看 `git status --short` 只关注 M/D 行忽略 ?? 行
+
+**历史教训（2026-05-14）**：工作区累积 ~60 个文件改动 + 多个整目录 untracked（含 `agent_a.py` / `agent_b.py` / `ws_result.py` 等核心代码），从未版本化。用了 6 个 commit 才整理干净。
+
+不主动 push（Claude Code 默认安全规则）：必须用户明确说 "push" 才执行 `git push`。
