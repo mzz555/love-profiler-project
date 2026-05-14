@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *.db
-sessions/
 logs/
 .pytest_cache/
+scripts/*.txt
+.superpowers/
