@@ -252,3 +252,175 @@ def test_result_returns_generating_not_502_on_agent_b_start(client, db_session):
 def test_result_requires_auth(client):
     response = client.post("/result", json={"session_id": "any"})
     assert response.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# 解锁与诊断缺失分支
+# ---------------------------------------------------------------------------
+
+def _make_paid_order(db_session, user_id: int, assessment_id: int):
+    """让 access_control.is_unlocked() 返回 True。"""
+    from app.models.order import Order
+    o = Order(
+        user_id=user_id, assessment_id=assessment_id,
+        out_trade_no=f"unlock-{assessment_id}",
+        amount=0, status="paid",
+    )
+    db_session.add(o)
+    db_session.commit()
+
+
+def test_result_returns_402_when_not_unlocked(client, db_session, monkeypatch):
+    """关掉 DEV_MODE 且无 paid order → 402。"""
+    monkeypatch.setenv("DEV_MODE", "false")
+    user, headers = _make_user_and_token(db_session, "o_result_402")
+    a = _make_analyzed_assessment(db_session, user.id, "sess-402")
+
+    response = client.post("/result", json={"session_id": a.session_id}, headers=headers)
+    assert response.status_code == 402
+
+
+def test_result_returns_400_when_diagnosis_missing(client, db_session):
+    """analyzed 状态但 diagnosis_json 为空 → 400（兜底分支，正常流程不应出现）。"""
+    user, headers = _make_user_and_token(db_session, "o_result_no_diag")
+    a = Assessment(
+        user_id=user.id, session_id="sess-no-diag",
+        signals="{}", status="analyzed", diagnosis_json=None,
+    )
+    db_session.add(a)
+    db_session.commit()
+
+    response = client.post("/result", json={"session_id": a.session_id}, headers=headers)
+    assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# /result/stream SSE endpoint
+# ---------------------------------------------------------------------------
+
+def _read_sse_events(response):
+    """把 SSE 字节流切回 dict 列表。"""
+    events = []
+    for line in response.iter_lines():
+        if isinstance(line, bytes):
+            line = line.decode()
+        if line.startswith("data: "):
+            events.append(json.loads(line[6:]))
+    return events
+
+
+def test_stream_returns_404_for_unknown_session(client, db_session):
+    _, headers = _make_user_and_token(db_session, "o_stream_404")
+    response = client.post(
+        "/result/stream", json={"session_id": "nonexistent"}, headers=headers,
+    )
+    assert response.status_code == 404
+
+
+def test_stream_returns_400_when_pending(client, db_session):
+    user, headers = _make_user_and_token(db_session, "o_stream_pending")
+    a = Assessment(
+        user_id=user.id, session_id="sess-stream-pending",
+        signals="{}", status="pending",
+    )
+    db_session.add(a)
+    db_session.commit()
+    response = client.post(
+        "/result/stream", json={"session_id": a.session_id}, headers=headers,
+    )
+    assert response.status_code == 400
+
+
+def test_stream_returns_402_when_not_unlocked(client, db_session, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
+    user, headers = _make_user_and_token(db_session, "o_stream_402")
+    a = _make_analyzed_assessment(db_session, user.id, "sess-stream-402")
+    response = client.post(
+        "/result/stream", json={"session_id": a.session_id}, headers=headers,
+    )
+    assert response.status_code == 402
+
+
+def test_stream_returns_400_when_diagnosis_missing(client, db_session):
+    user, headers = _make_user_and_token(db_session, "o_stream_no_diag")
+    a = Assessment(
+        user_id=user.id, session_id="sess-stream-no-diag",
+        signals="{}", status="analyzed", diagnosis_json=None,
+    )
+    db_session.add(a)
+    db_session.commit()
+    response = client.post(
+        "/result/stream", json={"session_id": a.session_id}, headers=headers,
+    )
+    assert response.status_code == 400
+
+
+def test_stream_cached_replays_report(client, db_session):
+    """status=complete + report_text 命中缓存重放路径，纯 SSE chunk 流。"""
+    user, headers = _make_user_and_token(db_session, "o_stream_cached")
+    a = _make_complete_assessment(db_session, user.id, "sess-stream-cached")
+
+    with client.stream(
+        "POST", "/result/stream",
+        json={"session_id": a.session_id}, headers=headers,
+    ) as response:
+        assert response.status_code == 200
+        events = _read_sse_events(response)
+
+    types = [e["type"] for e in events]
+    assert types[-1] == "done"
+    assert events[-1]["personality_type"] == "S-CL-H"
+    # 中间至少有一个 chunk
+    chunks = [e for e in events if e["type"] == "chunk"]
+    assert chunks and "".join(c["text"] for c in chunks) == a.report_text
+
+
+def test_stream_runs_agent_b_and_persists(client, db_session):
+    """status=analyzed → 跑 Agent B → 写库 status=complete + SSE done。"""
+    from unittest.mock import patch, AsyncMock
+
+    user, headers = _make_user_and_token(db_session, "o_stream_run_b")
+    a = _make_analyzed_assessment(db_session, user.id, "sess-stream-run-b")
+
+    fake_text = "--Title--稳重的航标 这是 Agent B 写出来的报告正文"
+    with patch(
+        "app.api.result.agent_b_run",
+        new=AsyncMock(return_value=fake_text),
+    ):
+        with client.stream(
+            "POST", "/result/stream",
+            json={"session_id": a.session_id}, headers=headers,
+        ) as response:
+            assert response.status_code == 200
+            events = _read_sse_events(response)
+
+    types = [e["type"] for e in events]
+    assert types[-1] == "done"
+    # 验证 chunk 重组后 = 原文
+    chunks = [e for e in events if e["type"] == "chunk"]
+    assert "".join(c["text"] for c in chunks) == fake_text
+
+
+def test_stream_returns_sse_error_when_agent_b_fails(client, db_session):
+    """Agent B 抛 AgentBError → SSE 应吐 error event 且不中断 200 响应。"""
+    from unittest.mock import patch, AsyncMock
+    from app.agents.agent_b import AgentBError
+
+    user, headers = _make_user_and_token(db_session, "o_stream_b_fail")
+    a = _make_analyzed_assessment(db_session, user.id, "sess-stream-b-fail")
+
+    with patch(
+        "app.api.result.agent_b_run",
+        new=AsyncMock(side_effect=AgentBError("simulated")),
+    ):
+        with client.stream(
+            "POST", "/result/stream",
+            json={"session_id": a.session_id}, headers=headers,
+        ) as response:
+            assert response.status_code == 200
+            events = _read_sse_events(response)
+
+    types = [e["type"] for e in events]
+    assert "error" in types
+    # error 之后不应再有 done
+    assert types[-1] == "error"
