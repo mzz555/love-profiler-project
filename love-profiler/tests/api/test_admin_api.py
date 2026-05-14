@@ -10,18 +10,21 @@ import pytest
 
 
 # ── 权限测试 ──────────────────────────────────────────
-def test_overview_without_auth_returns_404(client):
+def test_overview_without_auth_returns_404(client, monkeypatch):
     """未认证请求应返回 404（隐藏管理面板存在性）。"""
+    monkeypatch.setenv("DEV_MODE", "false")
     resp = client.get("/admin/api/overview")
     assert resp.status_code == 404
 
 
-def test_table_list_without_auth_returns_404(client):
+def test_table_list_without_auth_returns_404(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
     resp = client.get("/admin/api/users")
     assert resp.status_code == 404
 
 
-def test_table_update_without_auth_returns_404(client):
+def test_table_update_without_auth_returns_404(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
     resp = client.put("/admin/api/base_love_type/1", json={"type_name": "x"})
     assert resp.status_code == 404
 
