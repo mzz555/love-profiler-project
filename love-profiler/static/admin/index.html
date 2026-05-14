@@ -17,24 +17,23 @@
   --bg:#0f1117;--card:#161b27;--border:#1e2535;--text:#e2e8f0;
   --muted:#64748b;--accent:#3b82f6;--green:#4ade80;--red:#f87171;
   --teal:#4FAFAF;--sidebar:220px;
-  --hover:#161b27;--row-edit:rgba(59,130,246,.06);--row-stripe:#0e1520;
-  --topbar-h1:#f1f5f9;--input-bg:#161b27;--code-bg:#0a0d14;--code-text:#a5f3fc;
-  --section-h1:#f1f5f9;--badge-pending-bg:#1e293b;--badge-pending-color:#94a3b8;
+  --hover:#1c2330;--row-edit:rgba(59,130,246,.06);--row-stripe:#0e1520;
+  --heading:#f1f5f9;--input-bg:#161b27;--code-bg:#0a0d14;--code-text:#a5f3fc;
+  --badge-pending-bg:#1e293b;--badge-pending-color:#94a3b8;
 }
 :root[data-theme="light"]{
   --bg:#F5F0EB;--card:#FFFFFF;--border:#E0DAD3;--text:#2A2A3A;
   --muted:#8A857F;--accent:#4FAFAF;--green:#15803D;--red:#DC2626;
-  --teal:#4FAFAF;
-  --hover:#F0EBE5;--row-edit:rgba(79,175,175,.08);--row-stripe:#F0EBE5;
-  --topbar-h1:#1C1C2E;--input-bg:#FFFFFF;--code-bg:#F8F5F1;--code-text:#1C1C2E;
-  --section-h1:#1C1C2E;--badge-pending-bg:#E8E4DF;--badge-pending-color:#6A6A7A;
+  --hover:#F0EBE5;--row-edit:rgba(79,175,175,.08);--row-stripe:#EDE7E0;
+  --heading:#1C1C2E;--input-bg:#FFFFFF;--code-bg:#F8F5F1;--code-text:#1C1C2E;
+  --badge-pending-bg:#E8E4DF;--badge-pending-color:#6A6A7A;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
      background:var(--bg);color:var(--text);font-size:14px;
      display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .topbar{height:48px;border-bottom:1px solid var(--border);
         display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
-.topbar h1{font-size:15px;font-weight:600;color:var(--topbar-h1)}
+.topbar h1{font-size:15px;font-weight:600;color:var(--heading)}
 .topbar .sub{color:var(--muted);font-size:12px}
 .topbar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .btn{background:#1e40af;color:#fff;border:none;padding:5px 12px;
@@ -64,7 +63,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
            border-radius:10px;padding:16px}
 .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;
             letter-spacing:.05em;margin-bottom:6px}
-.stat-val{font-size:26px;font-weight:700;color:var(--section-h1)}
+.stat-val{font-size:26px;font-weight:700;color:var(--heading)}
 .stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
 .stat-val.green{color:var(--green)}.stat-val.red{color:var(--red)}
 .stat-val.teal{color:var(--teal)}
@@ -74,7 +73,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .seg-complete{background:#4ade80}.seg-analyzed{background:#3b82f6}
 .seg-pending{background:#94a3b8}.seg-generating{background:#fbbf24}
 .seg-paid{background:#4ade80}.seg-failed{background:#f87171}
-.section-title{font-size:16px;font-weight:600;color:var(--section-h1);margin-bottom:16px}
+.section-title{font-size:16px;font-weight:600;color:var(--heading);margin-bottom:16px}
 .tbl-toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
 .search-input{background:var(--input-bg);border:1px solid var(--border);color:var(--text);
               padding:6px 12px;border-radius:6px;font-size:13px;outline:none;flex:1;
@@ -168,7 +167,7 @@ pre.json{background:var(--code-bg);border:1px solid var(--border);border-radius:
 
 <div class="topbar">
   <div>
-    <span style="font-size:15px;font-weight:600;color:#f1f5f9">Love Profiler 管理后台</span>
+    <span style="font-size:15px;font-weight:600;color:var(--heading)">Love Profiler 管理后台</span>
     <span class="sub" style="margin-left:10px">内部工具</span>
   </div>
   <div class="topbar-right">
@@ -265,6 +264,11 @@ function refreshCurrent() {
 
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+// JS 字符串字面量转义：用于嵌入 onclick="fn('${jsesc(x)}')" 这种场景，
+// 防止 x 含单引号或反斜杠时断掉 JS。
+function jsesc(s) {
+  return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 }
 function fmtNum(n) {
   if (n == null) return '—';
@@ -518,7 +522,7 @@ async function loadTable(table, page, limit, q) {
       <input class="search-input" id="searchQ" placeholder="搜索…"
              value="${esc(q)}" onkeydown="if(event.key==='Enter')doSearch()">
       <button class="btn btn-sm" onclick="doSearch()">搜索</button>
-      <select class="select-sm" onchange="loadTable('${table}',1,this.value,'${esc(q)}')">
+      <select class="select-sm" onchange="loadTable('${table}',1,this.value,'${jsesc(q)}')">
         ${[20,50,100,200].map(n=>`<option value="${n}"${n==limit?' selected':''}>${n}条/页</option>`).join('')}
       </select>
       ${hasEdit ? '<span style="font-size:11px;color:var(--muted);margin-left:auto">✏️ 点击行末尾编辑</span>' : ''}
@@ -530,9 +534,9 @@ async function loadTable(table, page, limit, q) {
       </table>
     </div>
     <div class="pagination">
-      <button onclick="loadTable('${table}',${page-1},${limit},'${esc(q)}')" ${page<=1?'disabled':''}>← 上一页</button>
+      <button onclick="loadTable('${table}',${page-1},${limit},'${jsesc(q)}')" ${page<=1?'disabled':''}>← 上一页</button>
       <span class="pg-info">第 ${page} / ${Math.ceil(data.total/limit)||1} 页</span>
-      <button onclick="loadTable('${table}',${page+1},${limit},'${esc(q)}')"
+      <button onclick="loadTable('${table}',${page+1},${limit},'${jsesc(q)}')"
         ${page >= Math.ceil(data.total/limit) ? 'disabled':''}>下一页 →</button>
     </div>`);
 }

@@ -12,6 +12,7 @@ Access: requires DEV_MODE=true OR ADMIN_TOKEN env var.
 
 import json
 import os
+import re
 from collections import deque
 from datetime import datetime, timezone
 
@@ -20,9 +21,18 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import case, desc, func, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import defer
 
 from app.database import get_db
 from app.models.ai_call_log import AiCallLog
+
+
+_SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _utc_today_start() -> datetime:
+    """返回 UTC 今天 00:00:00。"""
+    return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -129,6 +139,26 @@ TABLE_CONFIG: dict[str, dict] = {
     },
 }
 
+
+def _validate_config() -> None:
+    """启动时校验 TABLE_CONFIG 的所有表名/列名仅含安全字符——_query_table 等用 f-string
+    拼标识符进 SQL，靠这个不变量挡 SQL 注入。任何不安全标识符直接进程崩溃。"""
+    for table, cfg in TABLE_CONFIG.items():
+        if not _SAFE_IDENT.match(table):
+            raise RuntimeError(f"TABLE_CONFIG 表名不安全: {table!r}")
+        idents = [cfg["pk"]] + list(cfg.get("search_cols", [])) \
+                 + list(cfg.get("editable_fields", [])) \
+                 + list(cfg.get("list_cols", []))
+        if cfg.get("created_at_col"):
+            idents.append(cfg["created_at_col"])
+        for ident in idents:
+            if not _SAFE_IDENT.match(ident):
+                raise RuntimeError(f"TABLE_CONFIG[{table!r}] 列名不安全: {ident!r}")
+
+
+_validate_config()
+
+
 # ---------------------------------------------------------------------------
 # Generic helpers
 # ---------------------------------------------------------------------------
@@ -153,6 +183,10 @@ def _query_table(
             params[f"q_{i}"] = f"%{q}%"
     where_clause = ("WHERE " + " OR ".join(where_parts)) if where_parts else ""
 
+    # 仅 SELECT list_cols 中的列，避免拉取大 JSON 字段（diagnosis_json 等）再截断
+    list_cols = config.get("list_cols")
+    select_clause = ", ".join(f'"{c}"' for c in list_cols) if list_cols else "*"
+
     try:
         total = db.execute(
             text(f'SELECT COUNT(*) FROM "{table_name}" {where_clause}'), params
@@ -160,7 +194,7 @@ def _query_table(
         params["limit"] = limit
         params["offset"] = offset
         rows_raw = db.execute(
-            text(f'SELECT * FROM "{table_name}" {where_clause} '
+            text(f'SELECT {select_clause} FROM "{table_name}" {where_clause} '
                  f'ORDER BY "{pk}" DESC LIMIT :limit OFFSET :offset'),
             params,
         ).fetchall()
@@ -168,15 +202,7 @@ def _query_table(
         return {"total": 0, "page": page, "limit": limit, "rows": [],
                 "error": "table_not_available"}
 
-    truncate_cols = set(config.get("truncate_cols", []))
-    rows = []
-    for row in rows_raw:
-        d = dict(row._mapping)
-        for col in truncate_cols:
-            if col in d and isinstance(d[col], str) and len(d[col]) > 100:
-                d[col] = d[col][:100] + "…"
-        rows.append(d)
-
+    rows = [dict(row._mapping) for row in rows_raw]
     return {"total": total, "page": page, "limit": limit, "rows": rows}
 
 
@@ -217,12 +243,13 @@ def _update_row(
         raise HTTPException(status_code=400,
                             detail=f"不可编辑的字段: {', '.join(sorted(invalid))}")
 
-    # assessments.status 只允许 generating → analyzed
-    if table_name == "assessments" and "status" in update_data:
+    pk = config["pk"]
+    is_status_reset = table_name == "assessments" and "status" in update_data
+
+    if is_status_reset:
         if update_data["status"] != "analyzed":
             raise HTTPException(status_code=422,
                                 detail="status 只允许重置为 analyzed")
-        pk = config["pk"]
         try:
             current = db.execute(
                 text(f'SELECT status FROM "{table_name}" WHERE "{pk}" = :pk_val'),
@@ -238,14 +265,11 @@ def _update_row(
                 detail=f"当前 status={current.status}，只有 generating 状态可以重置",
             )
 
-    pk = config["pk"]
     set_clause = ", ".join([f'"{k}" = :{k}' for k in update_data.keys()])
     params = {**update_data, "_pk_val": record_id}
 
-    # assessments 状态重置加 WHERE status='generating' 防并发竞争
-    where_extra = ""
-    if table_name == "assessments" and "status" in update_data:
-        where_extra = ' AND "status" = \'generating\''
+    # 状态重置时 WHERE 加 status='generating'，防并发竞争
+    where_extra = ' AND "status" = \'generating\'' if is_status_reset else ""
 
     try:
         result = db.execute(
@@ -257,7 +281,7 @@ def _update_row(
         raise HTTPException(status_code=503, detail="数据库表不可用") from exc
 
     if result.rowcount == 0:
-        if table_name == "assessments" and "status" in update_data:
+        if is_status_reset:
             raise HTTPException(status_code=422,
                                 detail="记录不存在或状态已变更，无法重置")
         raise HTTPException(status_code=404, detail="记录不存在")
@@ -297,8 +321,7 @@ async def admin_overview(
     _: None = Depends(require_admin),
 ) -> dict:
     """各业务表统计数据 + 最近 5 条 assessments。"""
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = _utc_today_start()
     result: dict = {"tables": {}, "recent_assessments": []}
 
     for table in ("users", "assessments", "orders", "ai_call_logs"):
@@ -316,25 +339,15 @@ async def admin_overview(
         except (OperationalError, ProgrammingError):
             result["tables"][table] = {"total": 0, "today": 0}
 
-    # assessments 状态分布
-    try:
-        rows = db.execute(
-            text("SELECT status, COUNT(*) AS cnt FROM assessments GROUP BY status")
-        ).fetchall()
-        result["tables"]["assessments"]["by_status"] = {r.status: r.cnt for r in rows}
-    except (OperationalError, ProgrammingError):
-        pass
+    for status_table in ("assessments", "orders"):
+        try:
+            rows = db.execute(
+                text(f"SELECT status, COUNT(*) AS cnt FROM {status_table} GROUP BY status")
+            ).fetchall()
+            result["tables"][status_table]["by_status"] = {r.status: r.cnt for r in rows}
+        except (OperationalError, ProgrammingError):
+            pass
 
-    # orders 状态分布
-    try:
-        rows = db.execute(
-            text("SELECT status, COUNT(*) AS cnt FROM orders GROUP BY status")
-        ).fetchall()
-        result["tables"]["orders"]["by_status"] = {r.status: r.cnt for r in rows}
-    except (OperationalError, ProgrammingError):
-        pass
-
-    # 最近 5 条 assessments
     try:
         rows = db.execute(
             text("SELECT id, session_id, personality_type, status, created_at "
@@ -440,8 +453,7 @@ async def logs_api(
     db: Session = Depends(get_db),
     _: None = Depends(require_admin),
 ):
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = _utc_today_start()
 
     # Aggregate in SQL — earlier code loaded every row of today_rows just to len/sum/avg.
     stats_row = db.query(
@@ -455,7 +467,11 @@ async def logs_api(
     avg_dur            = float(stats_row[2] or 0)
     total_tokens_today = stats_row[3] or 0
 
-    q = db.query(AiCallLog)
+    # 列表视图不需要大字段，用 defer 跳过避免每页拉几 MB JSON
+    q = db.query(AiCallLog).options(
+        defer(AiCallLog.messages_json),
+        defer(AiCallLog.response_preview),
+    )
     if agent:
         q = q.filter(AiCallLog.agent == agent)
     if status:
