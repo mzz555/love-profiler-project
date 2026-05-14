@@ -23,6 +23,9 @@ class Assessment(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     mode: Mapped[str] = mapped_column(String(16), nullable=False, default="chat")
     dimension_scores: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answers_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diagnosis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    report_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

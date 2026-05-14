@@ -5,10 +5,18 @@ Tests for payment endpoints: /pay/create_order, /pay/callback, /pay/query.
 import json
 import respx
 import httpx
+import pytest
 
 from app.models.assessment import Assessment
 from app.models.order import Order
 from app.models.user import User
+
+
+@pytest.fixture(autouse=True)
+def _clear_pay_token(monkeypatch):
+    """app.main load_dotenv 会把 .env 里的 DOUYIN_PAY_TOKEN 注入 os.environ；
+    测试不带签名头，需要清空 token 让 /pay/callback 走"无签名校验"分支。"""
+    monkeypatch.delenv("DOUYIN_PAY_TOKEN", raising=False)
 
 
 def _make_user_and_token(db_session, openid="o_pay_test"):

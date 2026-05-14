@@ -1,7 +1,7 @@
 """
 Result API — trigger Agent B to generate the personality report.
-POST /result  { session_id: str }
-           →  { status: "generating"|"complete", personality_type, report_text, report_json }
+POST /result         { session_id }  →  polling flow (background task)
+POST /result/stream  { session_id }  →  SSE streaming flow
 
 Status flow: pending → analyzed (Agent A) → generating (Agent B launched) → complete (Agent B done)
 Repeated calls when complete return cached result immediately.
@@ -11,10 +11,10 @@ While generating, returns {status:"generating"} so the frontend can poll.
 import asyncio
 import json
 import logging
-import os
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -23,11 +23,17 @@ from app.database import SessionLocal, get_db
 from app.limiter import limiter
 from app.middleware.auth import get_current_user_id
 from app.models.assessment import Assessment
-from app.models.order import Order
+from app.services import agent_b_runner
+from app.services.access_control import is_unlocked
 from app.services.llm_client import LLMError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/result", tags=["result"])
+
+# SSE replay tuning — chunk-level instead of char-level so a 2000-char report
+# isn't gated by 2000 × sleep(20ms) = 40s of synthetic latency.
+_SSE_CHUNK = 32
+_SSE_DELAY = 0.01
 
 
 class ResultRequest(BaseModel):
@@ -39,40 +45,7 @@ class ResultResponse(BaseModel):
     personality_type: str = ""
     report_text: str = ""
     report_json: dict = {}
-
-
-async def _run_agent_b_background(assessment_id: int, session_id: str, diagnosis: dict) -> None:
-    """Run Agent B and persist the report; resets status to 'analyzed' on failure so the next poll retries."""
-    t0 = time.monotonic()
-    db = SessionLocal()
-    try:
-        report = await agent_b_run(diagnosis, session_id=session_id)
-        personality_type = (diagnosis.get("personality_typing", {}) or {}).get("type_code", "")
-        report_text = report.get("report_text", "")
-
-        assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
-        if assessment and assessment.status == "generating":
-            assessment.report_json = json.dumps(report, ensure_ascii=False)
-            assessment.personality_type = personality_type
-            assessment.report_text = report_text
-            assessment.status = "complete"
-            db.commit()
-        logger.info(
-            "[result/bg] 完成 assessment_id=%s type=%s %.0fms",
-            assessment_id, personality_type, (time.monotonic() - t0) * 1000,
-        )
-    except (AgentBError, LLMError) as exc:
-        logger.error(
-            "[result/bg] agent_b 失败 assessment_id=%s %.0fms: %s",
-            assessment_id, (time.monotonic() - t0) * 1000, exc,
-        )
-        # Reset so the next frontend poll triggers a fresh attempt
-        assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
-        if assessment and assessment.status == "generating":
-            assessment.status = "analyzed"
-            db.commit()
-    finally:
-        db.close()
+    sections: dict = {}
 
 
 @router.post("", response_model=ResultResponse)
@@ -112,42 +85,30 @@ async def get_result(
             detail="Quiz not yet submitted",
         )
 
-    # Payment wall: skip in DEV_MODE, require paid order in production
-    if os.environ.get("DEV_MODE", "").lower() != "true":
-        paid_order = (
-            db.query(Order)
-            .filter(
-                Order.assessment_id == assessment.id,
-                Order.user_id == user_id,
-                Order.status == "paid",
-            )
-            .first()
+    if not is_unlocked(db, assessment.id, user_id):
+        logger.warning("[result] user_id=%s 未解锁", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="报告未解锁，请付费或观看广告后获取。",
         )
-        if paid_order is None:
-            logger.warning("[result] user_id=%s 未解锁", user_id)
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail="报告未解锁，请付费或观看广告后获取。",
-            )
 
-    # Return cached report if already complete
     if assessment.status == "complete" and assessment.report_json:
         logger.info(
             "[result] 命中缓存 type=%s total=%.0fms",
             assessment.personality_type, (time.monotonic() - t0) * 1000,
         )
+        rj = json.loads(assessment.report_json)
         return ResultResponse(
             status="complete",
             personality_type=assessment.personality_type or "",
             report_text=assessment.report_text or "",
-            report_json=json.loads(assessment.report_json),
+            report_json=rj,
+            sections=rj,
         )
 
-    # Agent B already running in background — client should poll
     if assessment.status == "generating":
         return ResultResponse(status="generating")
 
-    # Launch Agent B as a background task (analyzed → generating)
     if not assessment.diagnosis_json:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -158,8 +119,110 @@ async def get_result(
     assessment.status = "generating"
     db.commit()
     logger.info("[result] 启动 agent_b 后台任务 assessment_id=%s", assessment.id)
-    asyncio.create_task(
-        _run_agent_b_background(assessment.id, body.session_id, diagnosis)
-    )
+    agent_b_runner.schedule(assessment.id, body.session_id, diagnosis, log_prefix="result/bg")
 
     return ResultResponse(status="generating")
+
+
+# ── SSE streaming endpoint ────────────────────────────────────────────────────
+
+@router.post("/stream")
+@limiter.limit("10/minute")
+async def stream_result(
+    request: Request,
+    body: ResultRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """SSE endpoint — runs Agent B then streams report_text character by character.
+
+    Protocol (server → client):
+      data: {"type": "chunk", "text": "X"}\\n\\n
+      data: {"type": "done",  "personality_type": "MA-CL-MH"}\\n\\n
+      data: {"type": "error", "message": "..."}\\n\\n
+
+    Coexists with the polling endpoint; neither replaces the other.
+    """
+    t0 = time.monotonic()
+    logger.info("[result/stream] 开始 user_id=%s session=%s", user_id, body.session_id[:8])
+
+    assessment = (
+        db.query(Assessment)
+        .filter(
+            Assessment.session_id == body.session_id,
+            Assessment.user_id == user_id,
+        )
+        .first()
+    )
+
+    if assessment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found")
+
+    if assessment.status == "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quiz not yet submitted")
+
+    if not is_unlocked(db, assessment.id, user_id):
+        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="报告未解锁")
+
+    # Snapshot all DB data before leaving the request-scoped session
+    assessment_id = assessment.id
+    session_id_str = body.session_id
+
+    if assessment.status == "complete" and assessment.report_text:
+        _report_text_ready: str | None = assessment.report_text
+        _personality_type_ready: str = assessment.personality_type or ""
+        _diagnosis_data: dict | None = None
+    elif assessment.diagnosis_json:
+        _report_text_ready = None
+        _personality_type_ready = ""
+        _diagnosis_data = json.loads(assessment.diagnosis_json)
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Diagnosis not available")
+
+    logger.info(
+        "[result/stream] 准备 %.0fms need_llm=%s",
+        (time.monotonic() - t0) * 1000, _report_text_ready is None,
+    )
+
+    async def _generate():
+        if _report_text_ready is not None:
+            text = _report_text_ready
+            ptype = _personality_type_ready
+        else:
+            try:
+                text = await agent_b_run(_diagnosis_data, session_id=session_id_str)
+            except (AgentBError, LLMError) as exc:
+                logger.error("[result/stream] agent_b 失败: %s", exc)
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Agent B failed'}, ensure_ascii=False)}\n\n"
+                return
+
+            ptype = _diagnosis_data.get("type_code", "")
+
+            _db = SessionLocal()
+            try:
+                rec = _db.query(Assessment).filter(Assessment.id == assessment_id).first()
+                if rec and rec.status != "complete":
+                    rec.report_json = json.dumps({"raw_llm_output": text}, ensure_ascii=False)
+                    rec.personality_type = ptype
+                    rec.report_text = text
+                    rec.status = "complete"
+                    _db.commit()
+                    logger.info("[result/stream] 写库完成 type=%s chars=%d", ptype, len(text))
+            except Exception as exc:
+                logger.warning("[result/stream] 写库失败: %s", exc)
+            finally:
+                _db.close()
+
+        for i in range(0, len(text), _SSE_CHUNK):
+            piece = text[i:i + _SSE_CHUNK]
+            yield f"data: {json.dumps({'type': 'chunk', 'text': piece}, ensure_ascii=False)}\n\n"
+            await asyncio.sleep(_SSE_DELAY)
+
+        yield f"data: {json.dumps({'type': 'done', 'personality_type': ptype}, ensure_ascii=False)}\n\n"
+        logger.info("[result/stream] 完成 type=%s chars=%d", ptype, len(text))
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

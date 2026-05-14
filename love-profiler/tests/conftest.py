@@ -17,10 +17,21 @@ os.environ.setdefault("DOUYIN_APP_ID", "test-appid")
 os.environ.setdefault("DOUYIN_APP_SECRET", "test-secret")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-32-chars-long!!!")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("SUPABASE_URL", "http://127.0.0.1:54321")
+os.environ.setdefault("SUPABASE_KEY", "test-anon-key")
 
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.middleware.auth import create_access_token  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_supabase_caches():
+    """Drop the in-process question cache between tests so per-test mocks take effect."""
+    from app.services import supabase_client
+    supabase_client.clear_questions_cache()
+    yield
+    supabase_client.clear_questions_cache()
 
 
 @pytest.fixture(scope="function")

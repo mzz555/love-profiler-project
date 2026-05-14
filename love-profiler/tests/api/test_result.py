@@ -60,7 +60,17 @@ MOCK_DIAGNOSIS = {
 }
 
 MOCK_REPORT = {
-    "report_text": "你是一个安全型依恋风格的人，在感情中表现出稳定的信任感。",
+    "type_name": "稳重的航标",
+    "portrait": "你的稳不需要被看见。危机出现时，你已经在想怎么解决了。",
+    "dimensions": {
+        "D1": {"title": "依恋", "text": ""},
+        "D2": {"title": "边界", "text": ""},
+        "D3": {"title": "冲突", "text": ""},
+        "D4": {"title": "爱的语言", "text": "你对爱的需要，前两位是被具体看见和专注陪伴。"},
+        "D5": {"title": "表达风格", "text": "你的表达不会让人困惑，也没有特别暴露。"},
+    },
+    "insights": [],
+    "closing": "明天起，试着在一件小事上直接说出你的感受。",
 }
 
 
@@ -91,7 +101,8 @@ def _make_analyzed_assessment(db_session, user_id: int, session_id: str = "sess-
 
 def _make_complete_assessment(db_session, user_id: int, session_id: str = "sess-complete") -> Assessment:
     """Pre-built complete assessment for testing the cache path."""
-    report_json = json.dumps({"report_text": MOCK_REPORT["report_text"]})
+    report_text = MOCK_REPORT["portrait"] + "\n\n" + MOCK_REPORT["closing"]
+    report_json = json.dumps(MOCK_REPORT)
     a = Assessment(
         user_id=user_id,
         session_id=session_id,
@@ -100,7 +111,7 @@ def _make_complete_assessment(db_session, user_id: int, session_id: str = "sess-
         status="complete",
         diagnosis_json=json.dumps(MOCK_DIAGNOSIS),
         personality_type="S-CL-H",
-        report_text=MOCK_REPORT["report_text"],
+        report_text=report_text,
         report_json=report_json,
     )
     db_session.add(a)
@@ -171,7 +182,7 @@ def test_result_returns_generating_when_already_generating(client, db_session):
 
 
 def test_result_returns_complete_from_cache(client, db_session):
-    """When status='complete', return full cached report without calling LLM."""
+    """When status='complete', return full cached report with sections field."""
     user, headers = _make_user_and_token(db_session, "o_result_cached")
     assessment = _make_complete_assessment(db_session, user.id, "sess-cached")
 
@@ -181,8 +192,10 @@ def test_result_returns_complete_from_cache(client, db_session):
     data = response.json()
     assert data["status"] == "complete"
     assert data["personality_type"] == "S-CL-H"
-    assert data["report_text"] == MOCK_REPORT["report_text"]
-    assert "report_json" in data
+    assert "sections" in data
+    assert data["sections"]["portrait"] == MOCK_REPORT["portrait"]
+    assert "dimensions" in data["sections"]
+    assert data["sections"]["dimensions"]["D4"]["text"] != ""
 
 
 def test_result_cached_report_does_not_call_llm(client, db_session):
