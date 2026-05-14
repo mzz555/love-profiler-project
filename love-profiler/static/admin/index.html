@@ -381,6 +381,79 @@ async function loadOverview() {
     </div>`);
 }
 
+// 表名中文映射
+const TABLE_NAMES = {
+  users:               '用户',
+  assessments:         '测评记录',
+  orders:              '订单',
+  ai_call_logs:        'AI 调用日志',
+  base_love_type:      '人格类型',
+  highlights:          '深度洞察',
+  base_dimension_meta: '维度元信息',
+  base_segment_decode: '段落解码',
+  base_D4_type:        '爱的语言',
+  base_D5_quadrant:    '表达象限',
+  questions:           '题库',
+};
+
+// 字段中文映射（按表分组，最后合并）
+const FIELD_NAMES = {
+  // 通用
+  id: 'ID', user_id: '用户 ID', created_at: '创建时间', ts: '时间', version: '版本',
+
+  // users
+  openid: '抖音 OpenID',
+
+  // assessments
+  session_id: '会话 ID', signals: '答题信号', personality_type: '人格类型代码',
+  report_text: '完整报告', summary: '报告摘要', status: '状态', mode: '测评模式',
+  dimension_scores: '维度得分', answers_json: '答案数据', diagnosis_json: '诊断数据',
+  report_json: '报告数据',
+
+  // orders
+  assessment_id: '测评 ID', out_trade_no: '商户订单号', amount: '金额（分）',
+
+  // ai_call_logs
+  agent: '智能体', model: '模型', temperature: '温度', retry_index: '重试序号',
+  error_message: '错误信息', http_status_code: 'HTTP 状态', system_prompt_len: 'Prompt 字符数',
+  messages_json: '请求消息', response_preview: '响应内容', response_len: '响应字符数',
+  duration_ms: '耗时(ms)', prompt_tokens: '输入 Tokens', completion_tokens: '输出 Tokens',
+  total_tokens: '总 Tokens',
+
+  // base_love_type
+  type_code: '类型代码', type_name: '人格类型名称', tagline: '副标题', img_path: '形象图路径',
+
+  // highlights
+  code: '编码', layer: '层级', involved_dims: '涉及维度', severity: '严重度',
+  is_positive: '正向标志', name_cn: '中文名称', trigger_condition: '触发条件',
+  interp_path: '解读路径', report_seed: '写作种子', sort_order: '排序',
+
+  // base_dimension_meta
+  description: '描述', score_model: '评分模型', radar_label: '雷达图标签',
+
+  // base_segment_decode
+  dimension: '维度', label_cn: '中文标签', score_range: '分数区间', is_healthy: '健康端',
+
+  // base_D4_type
+  love_languages_code: '爱语代码', love_languages_name: '爱语名称',
+  love_languages_detail: '爱语详解',
+
+  // base_D5_quadrant
+  quadrant: '象限', style_name: '风格名称', guide: '解读指南',
+
+  // questions
+  question_id: '题目 ID', signal_code: '信号代码', signal_name: '信号名称',
+  question_type: '题型', stem: '题干',
+  option_a: '选项 A', option_b: '选项 B', option_c: '选项 C',
+  option_d: '选项 D', option_e: '选项 E',
+  score_a: 'A 计分', score_b: 'B 计分', score_c: 'C 计分',
+  score_d: 'D 计分', score_e: 'E 计分',
+  notes: '备注',
+};
+
+function tableLabel(t) { return TABLE_NAMES[t] || t; }
+function fieldLabel(f) { return FIELD_NAMES[f] || f; }
+
 const COL_CONFIG = {
   users:               ['id','openid','created_at'],
   assessments:         ['id','user_id','session_id','personality_type','status','mode','created_at'],
@@ -422,7 +495,7 @@ async function loadTable(table, page, limit, q) {
   const data = await apiFetch(`/admin/api/${table}?${params}`);
   if (!data) return;
   if (data.error === 'table_not_available') {
-    setMain(`<div class="section-title">${table}</div>
+    setMain(`<div class="section-title">${tableLabel(table)}</div>
              <div class="empty">此表在当前数据库不可用（可能需要 PostgreSQL 连接）</div>`);
     return;
   }
@@ -430,13 +503,13 @@ async function loadTable(table, page, limit, q) {
   const editable = EDITABLE[table] || [];
   const pk = getPk(table);
   const hasEdit = editable.length > 0;
-  const theadCols = cols.map(c => `<th>${c}</th>`).join('');
+  const theadCols = cols.map(c => `<th>${fieldLabel(c)}</th>`).join('');
   const tbodyRows = data.rows.length === 0
     ? `<tr><td colspan="${cols.length + (hasEdit?1:0)}" class="empty">暂无数据</td></tr>`
     : data.rows.map(row => renderRow(row, cols, editable, pk, table)).join('');
 
   setMain(`
-    <div class="section-title">${table}
+    <div class="section-title">${tableLabel(table)}
       <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:8px">
         共 ${fmtNum(data.total)} 条
       </span>
@@ -562,7 +635,7 @@ async function resetAssessmentStatus(pkVal, btn) {
 
 async function openDetail(table, pkVal) {
   if (_editingRow) return;
-  document.getElementById('dpTitle').textContent = `${table} · ${pkVal}`;
+  document.getElementById('dpTitle').textContent = `${tableLabel(table)} · ${pkVal}`;
   document.getElementById('dpBody').innerHTML = '<div class="empty"><span class="spinner"></span>加载中…</div>';
   document.getElementById('detailOverlay').classList.add('open');
   const data = await apiFetch(`/admin/api/${table}/${pkVal}`);
@@ -580,14 +653,14 @@ async function openDetail(table, pkVal) {
       try { content = JSON.stringify(JSON.parse(v), null, 2); }
       catch { content = String(v ?? ''); }
       bigKvs += `<details style="margin-bottom:8px">
-        <summary>${esc(k)} (${String(v??'').length} 字符)</summary>
+        <summary>${esc(fieldLabel(k))} (${String(v??'').length} 字符)</summary>
         <pre class="json">${esc(content)}</pre>
       </details>`;
     } else {
       const disp = typeof v === 'boolean' ? boolHtml(v)
                  : ['status','severity'].includes(k) ? badgeHtml(v)
                  : `<span class="v">${esc(String(v??'—'))}</span>`;
-      basicKvs += `<span class="k">${esc(k)}</span>${disp}`;
+      basicKvs += `<span class="k">${esc(fieldLabel(k))}</span>${disp}`;
     }
   }
 
