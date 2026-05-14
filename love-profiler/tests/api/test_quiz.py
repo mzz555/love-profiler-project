@@ -59,6 +59,11 @@ def test_quiz_submit_runs_agent_a(client, auth_headers, db_session):
     ]
     mock_d5_guide = {"quadrant": "高直接×高分享", "style_name": "直爽热情型",
                      "description": "s1>3 且 s2>3", "guide": "写作方向"}
+    mock_segment_decode = [
+        {"dimension": "D1", "code": "S",  "label_cn": "安全型依恋",   "is_healthy": True},
+        {"dimension": "D2", "code": "CL", "label_cn": "清晰边界",     "is_healthy": True},
+        {"dimension": "D3", "code": "H",  "label_cn": "健康冲突模式", "is_healthy": True},
+    ]
     # all-positive 答案下 agent_a 可能输出 add-g-stable / add-g-pa-aware 等高光；
     # 用 side_effect 按入参 codes 动态生成行，避免漏覆盖任意 code 导致 502。
     def fake_highlights_by_codes(codes):
@@ -71,6 +76,7 @@ def test_quiz_submit_runs_agent_a(client, auth_headers, db_session):
          patch("app.services.supabase_client._fetch_love_type_sync", return_value=mock_love_type), \
          patch("app.services.supabase_client._fetch_d4_details_sync", return_value=mock_d4_details), \
          patch("app.services.supabase_client._fetch_d5_guide_sync", return_value=mock_d5_guide), \
+         patch("app.services.supabase_client._fetch_segment_decode_sync", return_value=mock_segment_decode), \
          patch("app.services.supabase_client._fetch_highlights_by_codes_sync", side_effect=fake_highlights_by_codes):
         resp = client.post(
             "/quiz/submit",
