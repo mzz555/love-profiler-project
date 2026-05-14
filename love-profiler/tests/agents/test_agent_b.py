@@ -145,6 +145,48 @@ def test_build_user_message_empty_highlights_marks_skip():
     assert "highlights 为空" in msg
 
 
+# ── run_stream（异步流式） ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_run_stream_yields_chunks_then_final_dict():
+    """run_stream 应实时 yield 文本片段，最后 yield 一次 {report_text: 全文}。"""
+    from unittest.mock import patch
+    from app.agents.agent_b import run_stream
+
+    pieces = ["稳重的", "航标 ", "这是 ", "Agent B"]
+
+    async def fake_stream(**kwargs):
+        for p in pieces:
+            yield p
+
+    with patch("app.agents.agent_b.stream_chat_completion", new=fake_stream):
+        out = []
+        async for item in run_stream(DIAGNOSIS, session_id="abcdefgh"):
+            out.append(item)
+
+    # 前 N 个应是 str 片段（原样保留），最后一个是 dict
+    assert [x for x in out[:-1]] == pieces
+    final = out[-1]
+    assert isinstance(final, dict)
+    assert final["report_text"] == "".join(pieces)
+
+
+@pytest.mark.asyncio
+async def test_run_stream_raises_on_empty_response():
+    """流式 LLM 全程返回空白（仅空格/换行）应抛 AgentBError，不发 final dict。"""
+    from unittest.mock import patch
+    from app.agents.agent_b import run_stream
+
+    async def fake_empty(**kwargs):
+        for _ in range(3):
+            yield "   "  # 全空白
+
+    with patch("app.agents.agent_b.stream_chat_completion", new=fake_empty):
+        with pytest.raises(AgentBError):
+            async for _ in run_stream(DIAGNOSIS):
+                pass
+
+
 def test_build_user_message_highlights_render_seed_and_path():
     diag = {**DIAGNOSIS, "highlights": [
         {
