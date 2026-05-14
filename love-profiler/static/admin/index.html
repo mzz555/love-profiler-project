@@ -1,5 +1,617 @@
 <!DOCTYPE html>
 <html lang="zh">
-<head><meta charset="UTF-8"><title>管理后台</title></head>
-<body><p>占位，Task 4 将替换为完整实现。</p></body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Love Profiler · 管理后台</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#161b27;--border:#1e2535;--text:#e2e8f0;
+  --muted:#64748b;--accent:#3b82f6;--green:#4ade80;--red:#f87171;
+  --teal:#4FAFAF;--sidebar:220px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+     background:var(--bg);color:var(--text);font-size:14px;
+     display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{height:48px;border-bottom:1px solid var(--border);
+        display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.topbar h1{font-size:15px;font-weight:600;color:#f1f5f9}
+.topbar .sub{color:var(--muted);font-size:12px}
+.topbar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{background:#1e40af;color:#fff;border:none;padding:5px 12px;
+     border-radius:6px;cursor:pointer;font-size:12px;text-decoration:none}
+.btn:hover{background:#1d4ed8}
+.btn-sm{padding:3px 10px;font-size:11px}
+.layout{display:flex;flex:1;overflow:hidden}
+.sidebar{width:var(--sidebar);border-right:1px solid var(--border);
+         overflow-y:auto;flex-shrink:0;padding:8px 0}
+.nav-group-label{font-size:10px;color:var(--muted);text-transform:uppercase;
+                 letter-spacing:.06em;padding:12px 16px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 16px;
+          cursor:pointer;color:#94a3b8;font-size:13px;border-left:3px solid transparent;
+          transition:background .1s,color .1s}
+.nav-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
+.nav-item.active{background:rgba(59,130,246,.10);color:#93c5fd;
+                 border-left-color:var(--accent)}
+.nav-item .icon{font-size:14px;width:20px;text-align:center}
+.nav-divider{height:1px;background:var(--border);margin:6px 8px}
+.main{flex:1;overflow-y:auto;padding:24px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--border);
+           border-radius:10px;padding:16px}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;
+            letter-spacing:.05em;margin-bottom:6px}
+.stat-val{font-size:26px;font-weight:700;color:#f1f5f9}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.stat-val.green{color:var(--green)}.stat-val.red{color:var(--red)}
+.stat-val.teal{color:var(--teal)}
+.status-bar{height:6px;background:var(--border);border-radius:3px;margin-top:8px;
+            overflow:hidden;display:flex;gap:1px}
+.status-seg{height:100%;border-radius:2px;transition:width .3s}
+.seg-complete{background:#4ade80}.seg-analyzed{background:#3b82f6}
+.seg-pending{background:#94a3b8}.seg-generating{background:#fbbf24}
+.seg-paid{background:#4ade80}.seg-failed{background:#f87171}
+.section-title{font-size:16px;font-weight:600;color:#f1f5f9;margin-bottom:16px}
+.tbl-toolbar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+.search-input{background:var(--card);border:1px solid var(--border);color:var(--text);
+              padding:6px 12px;border-radius:6px;font-size:13px;outline:none;flex:1;
+              max-width:300px}
+.search-input:focus{border-color:var(--accent)}
+.select-sm{background:var(--card);border:1px solid var(--border);color:var(--text);
+           padding:5px 8px;border-radius:6px;font-size:12px;outline:none}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead tr{border-bottom:1px solid var(--border)}
+th{text-align:left;padding:8px 10px;color:var(--muted);font-weight:500;
+   font-size:11px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid #0e1520;vertical-align:middle;
+   max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:#161b27}
+tr.editing td{background:rgba(59,130,246,.06)}
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600}
+.badge-success,.badge-complete,.badge-paid,.badge-analyzed{background:#14532d;color:#4ade80}
+.badge-error,.badge-failed{background:#450a0a;color:#f87171}
+.badge-pending{background:#1e293b;color:#94a3b8}
+.badge-generating{background:#422006;color:#fb923c}
+.badge-high{background:#450a0a;color:#fca5a5}
+.badge-moderate{background:#422006;color:#fdba74}
+.badge-info{background:#0c2340;color:#7dd3fc}
+.mono{font-family:"SF Mono","Fira Code",monospace;font-size:11px}
+.dim{color:var(--muted)}
+.bool-true{color:var(--green)}.bool-false{color:var(--red)}
+.edit-input{background:#1e293b;border:1px solid var(--accent);color:var(--text);
+            padding:3px 7px;border-radius:4px;font-size:13px;width:100%;outline:none}
+.edit-textarea{background:#1e293b;border:1px solid var(--accent);color:var(--text);
+               padding:4px 7px;border-radius:4px;font-size:12px;width:100%;
+               min-height:60px;resize:vertical;outline:none}
+.row-actions{display:flex;gap:6px;white-space:nowrap}
+.btn-edit{background:#1e3a5f;color:#93c5fd;border:1px solid #1e40af;
+          padding:2px 9px;border-radius:4px;cursor:pointer;font-size:11px}
+.btn-edit:hover{background:#1e40af}
+.btn-save{background:#14532d;color:#4ade80;border:1px solid #166534;
+          padding:2px 9px;border-radius:4px;cursor:pointer;font-size:11px}
+.btn-save:hover{background:#166534}
+.btn-cancel{background:#1e293b;color:#94a3b8;border:1px solid #334155;
+            padding:2px 9px;border-radius:4px;cursor:pointer;font-size:11px}
+.btn-cancel:hover{background:#334155}
+.pagination{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:12px}
+.pagination button{background:var(--card);border:1px solid var(--border);
+                   color:var(--text);padding:4px 12px;border-radius:5px;
+                   cursor:pointer;font-size:12px}
+.pagination button:hover:not(:disabled){background:#1e293b}
+.pagination button:disabled{opacity:.4;cursor:default}
+.pg-info{color:var(--muted)}
+.detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;
+                display:none;align-items:flex-start;justify-content:flex-end}
+.detail-overlay.open{display:flex}
+.detail-panel{width:480px;max-width:95vw;height:100vh;background:var(--card);
+              border-left:1px solid var(--border);overflow-y:auto;
+              display:flex;flex-direction:column}
+.dp-hdr{padding:16px 20px;border-bottom:1px solid var(--border);
+        display:flex;align-items:center;gap:10px;flex-shrink:0}
+.dp-hdr h3{font-size:15px;font-weight:600;flex:1}
+.dp-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
+.dp-body{padding:20px;flex:1}
+.dp-section{background:#0f1117;border:1px solid var(--border);
+            border-radius:8px;padding:14px;margin-bottom:14px}
+.dp-section h4{font-size:10px;color:var(--muted);text-transform:uppercase;
+               letter-spacing:.05em;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:4px 8px;font-size:12px}
+.kv .k{color:var(--muted)}.kv .v{color:var(--text);word-break:break-all}
+details summary{cursor:pointer;color:var(--accent);font-size:12px;margin-bottom:6px}
+pre.json{background:#0a0d14;border:1px solid var(--border);border-radius:6px;
+         padding:10px;font-size:11px;font-family:"SF Mono","Fira Code",monospace;
+         overflow-x:auto;white-space:pre-wrap;word-break:break-all;
+         max-height:320px;overflow-y:auto;color:#a5f3fc;margin-top:6px}
+.toast{position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;
+       font-size:13px;color:#fff;z-index:200;opacity:0;transition:opacity .2s;
+       pointer-events:none}
+.toast.show{opacity:1}
+.toast.ok{background:#166534}.toast.err{background:#7f1d1d}
+.btn-reset{background:#422006;color:#fb923c;border:1px solid #78350f;
+           padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;margin-top:12px}
+.btn-reset:hover{background:#78350f}
+.empty{text-align:center;padding:40px;color:#475569;font-size:13px}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);
+         border-top-color:var(--accent);border-radius:50%;
+         animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.flash-green{animation:flashG .6s ease}
+@keyframes flashG{0%,100%{background:transparent}50%{background:rgba(74,222,128,.15)}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <span style="font-size:15px;font-weight:600;color:#f1f5f9">Love Profiler 管理后台</span>
+    <span class="sub" style="margin-left:10px">内部工具</span>
+  </div>
+  <div class="topbar-right">
+    <a href="/admin/logs" target="_blank" class="btn btn-sm">AI 监控 ↗</a>
+    <button class="btn btn-sm" onclick="refreshCurrent()">刷新</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="nav-item active" data-view="overview" onclick="navigate('overview',this)">
+      <span class="icon">📊</span>概览
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-group-label">业务数据</div>
+    <div class="nav-item" data-view="users" onclick="navigate('users',this)">
+      <span class="icon">👤</span>用户
+    </div>
+    <div class="nav-item" data-view="assessments" onclick="navigate('assessments',this)">
+      <span class="icon">📋</span>测评记录
+    </div>
+    <div class="nav-item" data-view="orders" onclick="navigate('orders',this)">
+      <span class="icon">💳</span>订单
+    </div>
+    <div class="nav-item" data-view="ai_call_logs" onclick="navigate('ai_call_logs',this)">
+      <span class="icon">🤖</span>AI 调用日志
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-group-label">静态配置（可编辑）</div>
+    <div class="nav-item" data-view="base_love_type" onclick="navigate('base_love_type',this)">
+      <span class="icon">🎭</span>人格类型
+    </div>
+    <div class="nav-item" data-view="highlights" onclick="navigate('highlights',this)">
+      <span class="icon">💡</span>深度洞察
+    </div>
+    <div class="nav-item" data-view="base_dimension_meta" onclick="navigate('base_dimension_meta',this)">
+      <span class="icon">📐</span>维度元信息
+    </div>
+    <div class="nav-item" data-view="base_segment_decode" onclick="navigate('base_segment_decode',this)">
+      <span class="icon">🔑</span>段落解码
+    </div>
+    <div class="nav-item" data-view="base_D4_type" onclick="navigate('base_D4_type',this)">
+      <span class="icon">❤️</span>爱的语言
+    </div>
+    <div class="nav-item" data-view="base_D5_quadrant" onclick="navigate('base_D5_quadrant',this)">
+      <span class="icon">🌐</span>表达象限
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-group-label">参考数据（只读）</div>
+    <div class="nav-item" data-view="questions" onclick="navigate('questions',this)">
+      <span class="icon">📝</span>题库
+    </div>
+  </div>
+
+  <div class="main" id="main">
+    <div class="empty"><span class="spinner"></span>加载中…</div>
+  </div>
+</div>
+
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
+  <div class="detail-panel" onclick="event.stopPropagation()">
+    <div class="dp-hdr">
+      <h3 id="dpTitle">记录详情</h3>
+      <button class="dp-close" onclick="closeDetail()">×</button>
+    </div>
+    <div class="dp-body" id="dpBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let _curView = 'overview';
+let _curPage = 1;
+let _curLimit = 50;
+let _curQ = '';
+let _editingRow = null;
+
+function navigate(view, el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  _curView = view;
+  _curPage = 1;
+  _curQ = '';
+  if (view === 'overview') loadOverview();
+  else loadTable(view, 1, _curLimit, '');
+}
+
+function refreshCurrent() {
+  if (_curView === 'overview') loadOverview();
+  else loadTable(_curView, _curPage, _curLimit, _curQ);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtNum(n) {
+  if (n == null) return '—';
+  if (n >= 10000) return (n/1000).toFixed(1)+'k';
+  return Number(n).toLocaleString();
+}
+function fmtDate(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function badgeHtml(val) {
+  if (val == null) return '<span class="dim">—</span>';
+  const cls = String(val).toLowerCase().replace(/[^a-z]/g,'');
+  return `<span class="badge badge-${cls}">${esc(val)}</span>`;
+}
+function boolHtml(val) {
+  if (val == null) return '<span class="dim">—</span>';
+  return val ? '<span class="bool-true">✓</span>' : '<span class="bool-false">✗</span>';
+}
+function cellHtml(val) {
+  if (val == null) return '<span class="dim">—</span>';
+  if (typeof val === 'boolean') return boolHtml(val);
+  const s = String(val);
+  if (['success','error','pending','paid','failed','complete','analyzed','generating',
+       'high','moderate','info'].includes(s.toLowerCase())) return badgeHtml(s);
+  return esc(s);
+}
+function showToast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (ok ? 'ok' : 'err');
+  setTimeout(() => t.className = 'toast', 2500);
+}
+function setMain(html) {
+  document.getElementById('main').innerHTML = html;
+}
+
+async function loadOverview() {
+  setMain('<div class="empty"><span class="spinner"></span>加载中…</div>');
+  const data = await apiFetch('/admin/api/overview');
+  if (!data) return;
+  const t = data.tables;
+  const aStats = t.assessments || {};
+  const oStats = t.orders || {};
+  const totalA = aStats.total || 0;
+  const byA = aStats.by_status || {};
+  const completeA = byA.complete || 0;
+  const analyzedA = byA.analyzed || 0;
+  const pendingA  = byA.pending  || 0;
+  const genA      = byA.generating || 0;
+  const totalO = oStats.total || 0;
+  const byO = oStats.by_status || {};
+  const paidO   = byO.paid    || 0;
+  const failedO = byO.failed  || 0;
+  const pendO   = byO.pending || 0;
+
+  const barA = totalA > 0 ? `
+    <div class="status-bar">
+      <div class="status-seg seg-complete" style="width:${completeA/totalA*100}%"></div>
+      <div class="status-seg seg-analyzed" style="width:${analyzedA/totalA*100}%"></div>
+      <div class="status-seg seg-pending"  style="width:${pendingA/totalA*100}%"></div>
+      <div class="status-seg seg-generating" style="width:${genA/totalA*100}%"></div>
+    </div>` : '';
+  const barO = totalO > 0 ? `
+    <div class="status-bar">
+      <div class="status-seg seg-paid"   style="width:${paidO/totalO*100}%"></div>
+      <div class="status-seg seg-failed" style="width:${failedO/totalO*100}%"></div>
+      <div class="status-seg seg-pending" style="width:${pendO/totalO*100}%"></div>
+    </div>` : '';
+
+  const recentRows = (data.recent_assessments || []).map(a => `
+    <tr>
+      <td class="mono dim">#${a.id}</td>
+      <td class="mono dim">${esc((a.session_id||'').slice(0,8))}</td>
+      <td>${esc(a.personality_type||'—')}</td>
+      <td>${badgeHtml(a.status)}</td>
+      <td class="dim">${fmtDate(a.created_at)}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty">暂无数据</td></tr>';
+
+  setMain(`
+    <div class="section-title">概览</div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">用户总数</div>
+        <div class="stat-val teal">${fmtNum((t.users||{}).total)}</div>
+        <div class="stat-sub">今日 +${(t.users||{}).today || 0}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">测评记录</div>
+        <div class="stat-val">${fmtNum(totalA)}</div>
+        <div class="stat-sub">今日 +${aStats.today || 0}</div>
+        ${barA}
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">订单</div>
+        <div class="stat-val">${fmtNum(totalO)}</div>
+        <div class="stat-sub">已付款 ${fmtNum(paidO)}</div>
+        ${barO}
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">AI 调用（今日）</div>
+        <div class="stat-val">${fmtNum((t.ai_call_logs||{}).today)}</div>
+        <div class="stat-sub">总计 ${fmtNum((t.ai_call_logs||{}).total)}</div>
+      </div>
+    </div>
+    <div class="section-title">最近 5 条测评</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Session</th><th>类型</th><th>状态</th><th>时间</th></tr></thead>
+        <tbody>${recentRows}</tbody>
+      </table>
+    </div>`);
+}
+
+const COL_CONFIG = {
+  users:               ['id','openid','created_at'],
+  assessments:         ['id','user_id','session_id','personality_type','status','mode','created_at'],
+  orders:              ['id','user_id','assessment_id','out_trade_no','amount','status','created_at'],
+  ai_call_logs:        ['id','ts','agent','session_id','model','status','duration_ms','total_tokens','retry_index'],
+  base_love_type:      ['id','type_code','type_name','tagline'],
+  highlights:          ['code','layer','involved_dims','severity','is_positive','name_cn','sort_order'],
+  base_dimension_meta: ['code','name_cn','description','score_model','radar_label','sort_order'],
+  base_segment_decode: ['id','dimension','code','label_cn','score_range','is_healthy'],
+  base_D4_type:        ['id','love_languages_code','love_languages_name'],
+  base_D5_quadrant:    ['quadrant','style_name','sort_order'],
+  questions:           ['question_id','dimension','signal_code','signal_name','question_type','sort_order'],
+};
+
+const EDITABLE = {
+  assessments:         ['status'],
+  base_love_type:      ['type_name','tagline'],
+  highlights:          ['name_cn','severity','is_positive'],
+  base_dimension_meta: ['name_cn','description','radar_label'],
+  base_segment_decode: ['label_cn','description','score_range'],
+  base_D4_type:        ['love_languages_name','love_languages_detail'],
+  base_D5_quadrant:    ['style_name','description','guide'],
+};
+
+const TEXTAREA_FIELDS = ['tagline','description','guide','interp_path','report_seed',
+                         'trigger_condition','love_languages_detail','radar_label'];
+
+function getPk(table) {
+  const pks = { highlights:'code', base_dimension_meta:'code',
+                base_D5_quadrant:'quadrant', questions:'question_id' };
+  return pks[table] || 'id';
+}
+
+async function loadTable(table, page, limit, q) {
+  _curView = table; _curPage = page; _curLimit = limit; _curQ = q;
+  setMain(`<div class="empty"><span class="spinner"></span>加载中…</div>`);
+  const params = new URLSearchParams({ page, limit });
+  if (q) params.set('q', q);
+  const data = await apiFetch(`/admin/api/${table}?${params}`);
+  if (!data) return;
+  if (data.error === 'table_not_available') {
+    setMain(`<div class="section-title">${table}</div>
+             <div class="empty">此表在当前数据库不可用（可能需要 PostgreSQL 连接）</div>`);
+    return;
+  }
+  const cols = COL_CONFIG[table] || Object.keys(data.rows[0] || {}).slice(0,8);
+  const editable = EDITABLE[table] || [];
+  const pk = getPk(table);
+  const hasEdit = editable.length > 0;
+  const theadCols = cols.map(c => `<th>${c}</th>`).join('');
+  const tbodyRows = data.rows.length === 0
+    ? `<tr><td colspan="${cols.length + (hasEdit?1:0)}" class="empty">暂无数据</td></tr>`
+    : data.rows.map(row => renderRow(row, cols, editable, pk, table)).join('');
+
+  setMain(`
+    <div class="section-title">${table}
+      <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:8px">
+        共 ${fmtNum(data.total)} 条
+      </span>
+    </div>
+    <div class="tbl-toolbar">
+      <input class="search-input" id="searchQ" placeholder="搜索…"
+             value="${esc(q)}" onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="btn btn-sm" onclick="doSearch()">搜索</button>
+      <select class="select-sm" onchange="loadTable('${table}',1,this.value,'${esc(q)}')">
+        ${[20,50,100,200].map(n=>`<option value="${n}"${n==limit?' selected':''}>${n}条/页</option>`).join('')}
+      </select>
+      ${hasEdit ? '<span style="font-size:11px;color:var(--muted);margin-left:auto">✏️ 点击行末尾编辑</span>' : ''}
+    </div>
+    <div class="tbl-wrap">
+      <table id="dataTable">
+        <thead><tr>${theadCols}${hasEdit?'<th>操作</th>':''}</tr></thead>
+        <tbody id="tbody">${tbodyRows}</tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button onclick="loadTable('${table}',${page-1},${limit},'${esc(q)}')" ${page<=1?'disabled':''}>← 上一页</button>
+      <span class="pg-info">第 ${page} / ${Math.ceil(data.total/limit)||1} 页</span>
+      <button onclick="loadTable('${table}',${page+1},${limit},'${esc(q)}')"
+        ${page >= Math.ceil(data.total/limit) ? 'disabled':''}>下一页 →</button>
+    </div>`);
+}
+
+function renderRow(row, cols, editable, pk, table) {
+  const pkVal = row[pk];
+  const cells = cols.map(col => {
+    const v = row[col];
+    if (col === 'created_at' || col === 'ts') return `<td>${fmtDate(v)}</td>`;
+    return `<td title="${esc(String(v??''))}">${cellHtml(v)}</td>`;
+  }).join('');
+  const editBtn = editable.length > 0
+    ? `<td><div class="row-actions">
+         <button class="btn-edit" onclick="event.stopPropagation();startEdit(this,'${table}','${pkVal}')">✏️ 编辑</button>
+       </div></td>`
+    : '';
+  return `<tr class="clickable" data-pk="${pkVal}" onclick="openDetail('${table}','${pkVal}')">
+    ${cells}${editBtn}
+  </tr>`;
+}
+
+function doSearch() {
+  const q = document.getElementById('searchQ')?.value || '';
+  loadTable(_curView, 1, _curLimit, q);
+}
+
+async function startEdit(btn, table, pkVal) {
+  const row = btn.closest('tr');
+  _editingRow = row;
+  row.classList.add('editing');
+  const record = await apiFetch(`/admin/api/${table}/${pkVal}`);
+  if (!record) return;
+  const editable = EDITABLE[table] || [];
+  const cols = COL_CONFIG[table] || [];
+  let i = 0;
+  for (const td of row.querySelectorAll('td:not(:last-child)')) {
+    const col = cols[i++];
+    if (!col) continue;
+    if (editable.includes(col)) {
+      const v = record[col] ?? '';
+      const isLong = TEXTAREA_FIELDS.includes(col);
+      if (typeof v === 'boolean') {
+        td.innerHTML = `<select class="edit-input" data-field="${col}">
+          <option value="true"${v?' selected':''}>true</option>
+          <option value="false"${!v?' selected':''}>false</option>
+        </select>`;
+      } else if (isLong) {
+        td.innerHTML = `<textarea class="edit-textarea" data-field="${col}">${esc(v)}</textarea>`;
+      } else {
+        td.innerHTML = `<input class="edit-input" data-field="${col}" value="${esc(v)}">`;
+      }
+    }
+  }
+  const actionTd = row.querySelector('td:last-child');
+  if (actionTd) {
+    actionTd.innerHTML = `<div class="row-actions">
+      <button class="btn-save" onclick="saveEdit(this,'${table}','${pkVal}')">保存</button>
+      <button class="btn-cancel" onclick="cancelEditByBtn(this,'${table}','${pkVal}')">取消</button>
+    </div>`;
+  }
+}
+
+async function saveEdit(btn, table, pkVal) {
+  const row = btn.closest('tr');
+  const inputs = row.querySelectorAll('[data-field]');
+  const body = {};
+  inputs.forEach(inp => {
+    const f = inp.dataset.field;
+    let v = inp.value;
+    if (inp.tagName === 'SELECT' && (v === 'true' || v === 'false')) {
+      v = v === 'true';
+    }
+    body[f] = v;
+  });
+  const result = await apiFetch(`/admin/api/${table}/${pkVal}`, 'PUT', body);
+  if (!result) return;
+  row.classList.remove('editing');
+  _editingRow = null;
+  showToast('保存成功');
+  row.classList.add('flash-green');
+  setTimeout(() => row.classList.remove('flash-green'), 700);
+  setTimeout(() => loadTable(table, _curPage, _curLimit, _curQ), 500);
+}
+
+function cancelEditByBtn(btn, table, pkVal) {
+  _editingRow = null;
+  loadTable(table, _curPage, _curLimit, _curQ);
+}
+
+async function resetAssessmentStatus(pkVal, btn) {
+  if (!confirm(`确认将 assessment #${pkVal} 的状态从 generating 重置为 analyzed？`)) return;
+  btn.disabled = true;
+  const result = await apiFetch(`/admin/api/assessments/${pkVal}`, 'PUT', { status: 'analyzed' });
+  if (result?.ok) {
+    showToast('重置成功');
+    loadTable('assessments', _curPage, _curLimit, _curQ);
+    closeDetail();
+  }
+}
+
+async function openDetail(table, pkVal) {
+  if (_editingRow) return;
+  document.getElementById('dpTitle').textContent = `${table} · ${pkVal}`;
+  document.getElementById('dpBody').innerHTML = '<div class="empty"><span class="spinner"></span>加载中…</div>';
+  document.getElementById('detailOverlay').classList.add('open');
+  const data = await apiFetch(`/admin/api/${table}/${pkVal}`);
+  if (!data) return;
+
+  const BIG_FIELDS = ['diagnosis_json','report_text','answers_json','report_json',
+                      'dimension_scores','summary','signals','messages_json',
+                      'response_preview','trigger_condition','interp_path',
+                      'report_seed','guide','description'];
+
+  let basicKvs = '', bigKvs = '';
+  for (const [k, v] of Object.entries(data)) {
+    if (BIG_FIELDS.includes(k)) {
+      let content;
+      try { content = JSON.stringify(JSON.parse(v), null, 2); }
+      catch { content = String(v ?? ''); }
+      bigKvs += `<details style="margin-bottom:8px">
+        <summary>${esc(k)} (${String(v??'').length} 字符)</summary>
+        <pre class="json">${esc(content)}</pre>
+      </details>`;
+    } else {
+      const disp = typeof v === 'boolean' ? boolHtml(v)
+                 : ['status','severity'].includes(k) ? badgeHtml(v)
+                 : `<span class="v">${esc(String(v??'—'))}</span>`;
+      basicKvs += `<span class="k">${esc(k)}</span>${disp}`;
+    }
+  }
+
+  const resetBtn = table === 'assessments' && data.status === 'generating'
+    ? `<button class="btn-reset" onclick="resetAssessmentStatus('${pkVal}',this)">
+         ⚠️ 重置 generating → analyzed
+       </button>` : '';
+
+  document.getElementById('dpBody').innerHTML = `
+    <div class="dp-section">
+      <h4>基本字段</h4>
+      <div class="kv">${basicKvs}</div>
+      ${resetBtn}
+    </div>
+    ${bigKvs ? `<div class="dp-section"><h4>大字段（展开查看）</h4>${bigKvs}</div>` : ''}`;
+}
+
+function closeDetail(e) {
+  if (!e || e.target === document.getElementById('detailOverlay')) {
+    document.getElementById('detailOverlay').classList.remove('open');
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+async function apiFetch(url, method='GET', body=null) {
+  const token = new URLSearchParams(location.search).get('token') || '';
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json',
+               ...(token ? { 'X-Admin-Token': token } : {}) },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      showToast(`错误 ${res.status}: ${err.detail || res.statusText}`, false);
+      return null;
+    }
+    return await res.json();
+  } catch (e) {
+    showToast(`网络错误: ${e.message}`, false);
+    return null;
+  }
+}
+
+loadOverview();
+</script>
+</body>
 </html>
