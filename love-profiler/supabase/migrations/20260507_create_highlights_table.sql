@@ -29,6 +29,11 @@ COMMENT ON COLUMN highlights.report_seed       IS 'Agent B 写作起点：报告
 COMMENT ON COLUMN highlights.sort_order        IS '排列顺序，与 Agent A 中 highlights 数组的追加顺序一致';
 COMMENT ON COLUMN highlights.version           IS '数据版本号，迭代时更新，当前为 V1';
 
+-- 后期手动添加的冗余 id 列（PK 实际为 code，此列不参与业务逻辑）：
+-- 补建 + COMMENT，幂等可重复执行
+ALTER TABLE highlights ADD COLUMN IF NOT EXISTS id INTEGER;
+COMMENT ON COLUMN highlights.id IS '【冗余列】后期手动添加的自增 ID，可空。主键实际为 code（语义主键），此列不参与业务逻辑，仅作管理后台展示兼容';
+
 -- ── 层级 1：维度内交叉验证（within-dimension）────────────────────────────────
 
 -- [1] add-cv1-behavior-gap · D1 · 认知行为分裂 · moderate

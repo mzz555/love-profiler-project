@@ -8,3 +8,4 @@ logs/
 htmlcov/
 scripts/*.txt
 .superpowers/
+supabase/.temp/
