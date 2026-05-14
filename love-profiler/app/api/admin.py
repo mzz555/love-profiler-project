@@ -675,7 +675,6 @@ pre.code{background:#0f1117;border:1px solid #1e2535;border-radius:6px;
       <option value="">全部</option>
       <option value="agent_a">agent_a</option>
       <option value="agent_b">agent_b</option>
-      <option value="agent1_chat">agent1_chat</option>
     </select>
     <label>状态</label>
     <select id="fs" onchange="loadCalls()">

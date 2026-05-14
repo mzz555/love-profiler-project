@@ -4,6 +4,7 @@ Run with: uvicorn app.main:app --reload
 """
 
 import logging
+import logging.handlers
 import os
 from contextlib import asynccontextmanager
 
@@ -18,15 +19,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# File handler: rotate at 10 MB, keep 5 backups
+_log_dir = "logs"
+os.makedirs(_log_dir, exist_ok=True)
+_file_handler = logging.handlers.RotatingFileHandler(
+    os.path.join(_log_dir, "app.log"),
+    maxBytes=10 * 1024 * 1024,
+    backupCount=5,
+    encoding="utf-8",
+)
+_file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+))
+logging.getLogger().addHandler(_file_handler)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import auth, chat, history, pay, quiz, result, start, unlock, ws_chat
+from app.api import admin, auth, history, pay, quiz, result, unlock, ws_result
 from app.database import create_tables
+from app.models import ai_call_log  # noqa: F401 — registers AiCallLog with Base
 from app.limiter import limiter
-from app.services.session_store import cleanup_expired_sessions
 
 
 @asynccontextmanager
@@ -34,8 +51,7 @@ async def lifespan(app: FastAPI):
     mode = "DEV" if os.environ.get("DEV_MODE", "").lower() == "true" else "PROD"
     logger.info("启动中 [%s mode] — 初始化数据库表...", mode)
     create_tables()
-    removed = cleanup_expired_sessions()
-    logger.info("数据库就绪，清理过期 session %d 个，服务启动完成", removed)
+    logger.info("数据库就绪，服务启动完成")
     yield
 
 
@@ -50,15 +66,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin.router)
 app.include_router(auth.router)
-app.include_router(start.router)
-app.include_router(chat.router)
 app.include_router(result.router)
 app.include_router(pay.router)
 app.include_router(unlock.router)
-app.include_router(ws_chat.router)
+app.include_router(ws_result.router)
 app.include_router(history.router)
 app.include_router(quiz.router)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if os.environ.get("DEV_MODE", "").lower() == "true":
     from app.api import dev_auth, dev_pay

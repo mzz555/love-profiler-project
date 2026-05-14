@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-抖音小程序全栈项目，用于 AI 恋爱人格测评（快速模式）。用户完成 30 道固定选择题（一答一问），Agent A 做结构化诊断，Agent B 生成人格报告，用户通过看激励视频广告解锁报告。
+抖音小程序全栈项目，用于 AI 恋爱人格测评。用户完成 30 道固定选择题，Agent A 做**纯 Python 确定性评分计算**输出结构化诊断，Agent B（LLM）基于诊断生成人格报告，用户通过看激励视频广告解锁报告。
 
 仓库包含两个子项目：
 - **后端**：`love-profiler/` — FastAPI + SQLAlchemy + 本地 Supabase CLI
@@ -31,7 +31,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 pytest
 
 # 运行单个测试文件
-pytest tests/api/test_chat.py -v
+pytest tests/api/test_quiz.py -v
 
 # 带覆盖率报告
 pytest --cov=app --cov-report=term-missing
@@ -45,13 +45,13 @@ pytest --cov=app --cov-report=term-missing
 
 ## 架构
 
-### 快速模式双 Agent 流程
+### 双 Agent 流程
 
 ```
 POST /quiz/start  →  从 Supabase 拉 30 道题，返回 session_id + questions
 前端本地逐题展示（一答一问，选项按钮，30 题选完）
 POST /quiz/submit →  answer_package_builder 组装答题包
-                      Agent A (LLM, temp=0.1) → 诊断包 JSON
+                      Agent A（纯 Python 确定性评分）→ 诊断包 JSON
                       写入 assessment: answers_json / diagnosis_json / status="analyzed"
 用户看广告 → POST /unlock/ad → 解锁
 POST /result      →  Agent B (LLM, temp=0.6) 读取 diagnosis_json → 报告 JSON
@@ -63,7 +63,7 @@ POST /result      →  Agent B (LLM, temp=0.6) 读取 diagnosis_json → 报告 
 
 | 文件 | 职责 |
 |------|------|
-| `app/agents/agent_a.py` | 接收答题包 → LLM 诊断 → 输出结构化诊断 JSON（含跨维度审查）|
+| `app/agents/agent_a.py` | 接收答题包 → 纯 Python 确定性评分（5 维度算分 + 16 类分型 + 跨维度审查），输出结构化诊断 JSON。**无 LLM 调用**。|
 | `app/agents/agent_b.py` | 接收诊断包 → LLM 写报告 → 输出报告 JSON（report_text + sections）|
 | `app/services/answer_package_builder.py` | 组装答题包：解析分值字符串、标记 D3-Q06 追逃亚型、注入题目元数据 |
 | `app/services/llm_client.py` | 豆包（字节跳动火山引擎）API 的异步封装，含计时和全链路日志 |
@@ -166,7 +166,7 @@ WebSocket 消息类型：`meta` / `section_start` / `section_chunk` / `section_e
 
 ### 限流
 
-`slowapi` 按 IP 限流：login 10次/分钟、start 5次/分钟、chat 30次/分钟、result 10次/分钟。
+`slowapi` 按 IP 限流：`/auth/login` 10/min、`/quiz/start` 5/min、`/quiz/submit` 5/min、`/result` 30/min、`/result/stream` 10/min、`/history` 20/min。
 
 ### Pytest Fixtures（`tests/conftest.py`）
 
