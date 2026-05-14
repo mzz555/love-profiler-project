@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import case, desc, func, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -164,7 +164,7 @@ def _query_table(
                  f'ORDER BY "{pk}" DESC LIMIT :limit OFFSET :offset'),
             params,
         ).fetchall()
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         return {"total": 0, "page": page, "limit": limit, "rows": [],
                 "error": "table_not_available"}
 
@@ -188,7 +188,7 @@ def _get_row(db: Session, table_name: str, config: dict, record_id: str) -> dict
             text(f'SELECT * FROM "{table_name}" WHERE "{pk}" = :pk_val'),
             {"pk_val": record_id},
         ).fetchone()
-    except OperationalError as exc:
+    except (OperationalError, ProgrammingError) as exc:
         raise HTTPException(status_code=503, detail="数据库表不可用") from exc
     if row is None:
         raise HTTPException(status_code=404, detail="记录不存在")
@@ -228,7 +228,7 @@ def _update_row(
                 text(f'SELECT status FROM "{table_name}" WHERE "{pk}" = :pk_val'),
                 {"pk_val": record_id},
             ).fetchone()
-        except OperationalError as exc:
+        except (OperationalError, ProgrammingError) as exc:
             raise HTTPException(status_code=503, detail="数据库表不可用") from exc
         if current is None:
             raise HTTPException(status_code=404, detail="记录不存在")
@@ -242,16 +242,24 @@ def _update_row(
     set_clause = ", ".join([f'"{k}" = :{k}' for k in update_data.keys()])
     params = {**update_data, "_pk_val": record_id}
 
+    # assessments 状态重置加 WHERE status='generating' 防并发竞争
+    where_extra = ""
+    if table_name == "assessments" and "status" in update_data:
+        where_extra = ' AND "status" = \'generating\''
+
     try:
         result = db.execute(
-            text(f'UPDATE "{table_name}" SET {set_clause} WHERE "{pk}" = :_pk_val'),
+            text(f'UPDATE "{table_name}" SET {set_clause} WHERE "{pk}" = :_pk_val{where_extra}'),
             params,
         )
         db.commit()
-    except OperationalError as exc:
+    except (OperationalError, ProgrammingError) as exc:
         raise HTTPException(status_code=503, detail="数据库表不可用") from exc
 
     if result.rowcount == 0:
+        if table_name == "assessments" and "status" in update_data:
+            raise HTTPException(status_code=422,
+                                detail="记录不存在或状态已变更，无法重置")
         raise HTTPException(status_code=404, detail="记录不存在")
 
     return {"ok": True, "updated": record_id}
@@ -305,7 +313,7 @@ async def admin_overview(
                     {"ts": today_start},
                 ).scalar() or 0
             result["tables"][table] = {"total": total, "today": today_count}
-        except OperationalError:
+        except (OperationalError, ProgrammingError):
             result["tables"][table] = {"total": 0, "today": 0}
 
     # assessments 状态分布
@@ -314,7 +322,7 @@ async def admin_overview(
             text("SELECT status, COUNT(*) AS cnt FROM assessments GROUP BY status")
         ).fetchall()
         result["tables"]["assessments"]["by_status"] = {r.status: r.cnt for r in rows}
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         pass
 
     # orders 状态分布
@@ -323,7 +331,7 @@ async def admin_overview(
             text("SELECT status, COUNT(*) AS cnt FROM orders GROUP BY status")
         ).fetchall()
         result["tables"]["orders"]["by_status"] = {r.status: r.cnt for r in rows}
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         pass
 
     # 最近 5 条 assessments
@@ -333,7 +341,7 @@ async def admin_overview(
                  "FROM assessments ORDER BY id DESC LIMIT 5")
         ).fetchall()
         result["recent_assessments"] = [dict(r._mapping) for r in rows]
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         pass
 
     return result
