@@ -250,6 +250,94 @@ async def test_run_stream_raises_on_empty_response():
                 pass
 
 
+# ── Phase C.1 · resumed_sections + append_resume_directive ─────────────────
+
+def test_append_resume_directive_no_op_when_resumed_empty():
+    from app.agents.agent_b import append_resume_directive
+    msg = "原始 user msg"
+    assert append_resume_directive(msg, None) == msg
+    assert append_resume_directive(msg, {}) == msg
+
+
+def test_append_resume_directive_lists_completed_and_next():
+    from app.agents.agent_b import append_resume_directive
+    msg = "原始 user msg"
+    out = append_resume_directive(msg, {
+        "Title": "《稳重的航标》",
+        "Opening": "你的稳不需要被看见。" * 5,
+    })
+    assert "接续生成" in out
+    assert "Title" in out
+    assert "Opening" in out
+    # Title 之后的下一个未完成段是 Attachment
+    assert "--Attachment--" in out
+
+
+def test_append_resume_directive_truncates_long_snippets():
+    from app.agents.agent_b import append_resume_directive
+    very_long = "x" * 1000
+    out = append_resume_directive("msg", {"Title": very_long})
+    # 摘要应有省略号，且不会把整段塞进去
+    assert "…" in out
+    assert out.count("x") < 200
+
+
+def test_append_resume_directive_all_done_returns_msg_unchanged():
+    """所有 9 个 sections 都在 resumed 里时不应再要求接续。"""
+    from app.agents.agent_b import SECTION_ORDER, append_resume_directive
+    resumed = {name: "已完成" for name in SECTION_ORDER}
+    msg = "原始"
+    assert append_resume_directive(msg, resumed) == msg
+
+
+def test_append_resume_directive_skips_gaps_and_picks_first_missing():
+    """resumed 中段不连续时，取第一个 SECTION_ORDER 缺的作为接续起点。"""
+    from app.agents.agent_b import append_resume_directive
+    out = append_resume_directive(
+        "msg",
+        {"Title": "T", "Opening": "O", "Conflict": "C"},  # 缺 Attachment / Boundary
+    )
+    assert "--Attachment--" in out
+
+
+@pytest.mark.asyncio
+async def test_run_stream_resumed_prepends_completed_sections_to_final_text():
+    """run_stream 在 resumed 模式下，最终 yield 的 report_text 应包含已完成段。"""
+    from unittest.mock import patch
+    from app.agents.agent_b import run_stream
+
+    # 所有段都给足字数以通过 quality gate（Attachment/Boundary/Conflict ≥100, Language/Style ≥80）
+    resumed = {
+        "Title":      "《稳重的航标》",
+        "Opening":    "你的稳不需要被看见，危机出现时你已经在想怎么解决。" + ("·" * 120),
+        "Attachment": "你能稳稳地在场，不需要时刻确认对方是否在身边。" + ("·" * 120),
+        "Boundary":   "你清楚自己的边界，也尊重对方，不会去越界。" + ("·" * 120),
+        "Conflict":   "面对摩擦你倾向于建设性表达，修复关系是你的本能。" + ("·" * 120),
+        "Language":   "你最被打动的是言语肯定与精心时刻，被夸奖会很安心。" + ("·" * 100),
+        "Style":      "你的表达平衡居中，不让对方读不懂，也不会读太透。" + ("·" * 100),
+    }
+    # LLM 只补 Highlight + Suggestion 两段（resumed 缺这两段；highlights=[] 故 Highlight 可省）
+    new_segment = "--Suggestion--\n明天起，试着在一件小事上直接说出你的感受。" + ("·" * 70)
+
+    async def fake_stream(**kwargs):
+        for c in (new_segment[:30], new_segment[30:]):
+            yield c
+
+    with patch("app.agents.agent_b.stream_chat_completion", new=fake_stream):
+        out = []
+        async for item in run_stream(DIAGNOSIS, resumed_sections=resumed):
+            out.append(item)
+
+    final = out[-1]
+    assert isinstance(final, dict)
+    text = final["report_text"]
+    # resumed 段在前
+    assert text.startswith("--Title--")
+    # 已完成段都出现
+    assert "Opening" in text
+    assert "Suggestion" in text
+
+
 def test_build_user_message_highlights_render_seed_and_path():
     diag = {**DIAGNOSIS, "highlights": [
         {

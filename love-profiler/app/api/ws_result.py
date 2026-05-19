@@ -129,17 +129,42 @@ _SEC_RE = re.compile(r'--([A-Za-z]+)--')
 
 
 class _SectionStreamer:
-    """Detects --Section-- markers in streaming text and sends typed WS messages."""
+    """Detects --Section-- markers in streaming text and sends typed WS messages.
 
-    def __init__(self, ws, send_fn):
+    Phase C.1：可选 ``on_section_complete`` 回调在每个 section_end 触发，
+    入参 (section_name, full_text)；ws_result 用它把段文本写入
+    assessments.partial_sections 实现断点续传。
+    """
+
+    def __init__(self, ws, send_fn, on_section_complete=None):
         self._ws = ws
         self._send = send_fn
         self._buf = ""
         self._cur = None
+        self._cur_text = ""  # 当前 section 累积文本，用于 on_section_complete
+        self._on_section_complete = on_section_complete
 
     async def feed(self, text: str) -> None:
         self._buf += text
         await self._process()
+
+    async def _emit_chunk(self, section: str, text: str) -> None:
+        await self._send(self._ws, {
+            "type": "section_chunk", "section": section, "text": text,
+        })
+        self._cur_text += text
+
+    async def _finish_current_section(self) -> None:
+        if not self._cur:
+            return
+        await self._send(self._ws, {"type": "section_end", "section": self._cur})
+        if self._on_section_complete is not None:
+            try:
+                await self._on_section_complete(self._cur, self._cur_text)
+            except Exception as exc:
+                logger.warning("[ws/result] on_section_complete 回调失败 section=%s: %s",
+                               self._cur, exc)
+        self._cur_text = ""
 
     async def _process(self) -> None:
         while True:
@@ -149,19 +174,14 @@ class _SectionStreamer:
                 if safe > 0 and self._cur:
                     chunk = self._buf[:safe]
                     if chunk:
-                        await self._send(self._ws, {
-                            "type": "section_chunk", "section": self._cur, "text": chunk,
-                        })
+                        await self._emit_chunk(self._cur, chunk)
                     self._buf = self._buf[safe:]
                 break
 
             pre = self._buf[:m.start()]
             if pre and self._cur:
-                await self._send(self._ws, {
-                    "type": "section_chunk", "section": self._cur, "text": pre,
-                })
-            if self._cur:
-                await self._send(self._ws, {"type": "section_end", "section": self._cur})
+                await self._emit_chunk(self._cur, pre)
+            await self._finish_current_section()
             self._cur = m.group(1)
             await self._send(self._ws, {"type": "section_start", "section": self._cur})
             self._buf = self._buf[m.end():]
@@ -169,10 +189,8 @@ class _SectionStreamer:
     async def done(self) -> None:
         remaining = self._buf.strip()
         if remaining and self._cur:
-            await self._send(self._ws, {
-                "type": "section_chunk", "section": self._cur, "text": remaining,
-            })
-            await self._send(self._ws, {"type": "section_end", "section": self._cur})
+            await self._emit_chunk(self._cur, remaining)
+        await self._finish_current_section()
         self._buf = ""
         self._cur = None
 
@@ -298,6 +316,26 @@ async def _stream_cached(websocket: WebSocket, assessment: Assessment) -> None:
     logger.info("[ws/result] 缓存流完成 type=%s chars=%d", ptype, len(text))
 
 
+def _resume_enabled() -> bool:
+    """Phase C.1 接续生成总开关；默认开。豆包效果不好时可设 false 临时回退。"""
+    import os
+    return os.environ.get("RESUME_ENABLED", "true").lower() != "false"
+
+
+def _load_partial_sections(rec: Assessment) -> dict[str, str]:
+    """从 assessments.partial_sections 反序列化已落库 section dict。"""
+    raw = rec.partial_sections
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            return {k: str(v) for k, v in data.items() if v}
+    except (TypeError, ValueError):
+        pass
+    return {}
+
+
 async def _stream_agent_b(
     websocket: WebSocket,
     db: Session,
@@ -308,6 +346,9 @@ async def _stream_agent_b(
     """Run Agent B with real LLM streaming, forward tokens, persist on completion."""
     diagnosis = json.loads(assessment.diagnosis_json)
     assessment_id = assessment.id
+
+    # Phase C.1：读已落库的 partial_sections（上次中断时残留）
+    resumed = _load_partial_sections(assessment) if _resume_enabled() else {}
 
     t0 = time.monotonic()
     t_first_token: float | None = None
@@ -337,14 +378,47 @@ async def _stream_agent_b(
         "dim_chart": _dim_chart(diagnosis),
         "highlights_meta": _highlights_meta(diagnosis),
         "segment_decode": _all_labels(diagnosis),
+        # 把已恢复的段告知前端（用于 UI 上"接续生成中"提示）
+        "resumed_sections": sorted(resumed.keys()) if resumed else [],
     })
+
+    # 把已完成 sections replay 给前端，保证 UI 完整
+    if resumed:
+        replay_streamer = _SectionStreamer(websocket, _send)
+        from app.agents.agent_b import SECTION_ORDER
+        replay_text = "".join(
+            f"--{name}--\n{resumed[name]}\n"
+            for name in SECTION_ORDER
+            if name in resumed
+        )
+        for i in range(0, len(replay_text), _REPLAY_CHUNK):
+            await replay_streamer.feed(replay_text[i:i + _REPLAY_CHUNK])
+        await replay_streamer.done()
+        logger.info("[ws/result] 已 replay %d 个 resumed sections: %s",
+                    len(resumed), sorted(resumed.keys()))
+
+    # 主流：on_section_complete 回调把每段写入 partial_sections，下次中断可续
+    partial_sections: dict[str, str] = dict(resumed)
+
+    async def _persist_section(name: str, text: str) -> None:
+        partial_sections[name] = text
+        rec_now = db.query(Assessment).filter(Assessment.id == assessment_id).first()
+        if rec_now is not None:
+            rec_now.partial_sections = json.dumps(partial_sections, ensure_ascii=False)
+            db.commit()
 
     full_text = ""
     final_report = None
 
-    streamer = _SectionStreamer(websocket, _send)
+    streamer = _SectionStreamer(websocket, _send, on_section_complete=_persist_section)
+    # 只在确实有 resumed 时才传 kwarg，保持对老 agent_b.run_stream 签名（含测试 mock）兼容
+    extra_kwargs = {"resumed_sections": resumed} if resumed else {}
     try:
-        async for item in agent_b_run_stream(diagnosis, session_id=session_id):
+        async for item in agent_b_run_stream(
+            diagnosis,
+            session_id=session_id,
+            **extra_kwargs,
+        ):
             if isinstance(item, str):
                 if t_first_token is None:
                     t_first_token = time.monotonic()
@@ -355,6 +429,7 @@ async def _stream_agent_b(
         await streamer.done()
     except (AgentBError, LLMError) as exc:
         logger.error("[ws/result] agent_b 流式失败 %.0fms: %s", (time.monotonic() - t0) * 1000, exc)
+        # 保留 partial_sections 供下次接续，仅状态回滚到 analyzed
         _release_claim(db, assessment_id)
         await _send(websocket, {"type": "error", "code": 502, "message": "报告生成失败，请重试"})
         return
@@ -376,6 +451,8 @@ async def _stream_agent_b(
         rec.status = "complete"
         rec.prompt_version = PROMPT_VERSION
         rec.report_version = REPORT_VERSION
+        # 完成后清空 partial_sections，避免占空间
+        rec.partial_sections = None
         db.commit()
 
     try:

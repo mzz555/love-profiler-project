@@ -28,6 +28,8 @@ class Assessment(Base):
     report_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_version: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    # JSON 字符串 {"Title": "...", "Opening": "..."}；Section 级断点续传缓存
+    partial_sections: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

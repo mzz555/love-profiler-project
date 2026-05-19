@@ -8,6 +8,9 @@ all static knowledge (type-name dict, D4 language definitions, D5
 quadrant guides) lives in DB tables and is injected per-request by
 the enrich step in /quiz/submit, so the model only sees the slice
 relevant to this user.
+
+Phase C.1：run_stream 支持 resumed_sections — 上次中断时已落库的 section 字典；
+非空时在 user message 末尾追加"接续生成"指令，要求 LLM 跳过已完成段。
 """
 
 import logging
@@ -121,8 +124,60 @@ def build_user_message(diagnosis: dict) -> str:
     return "\n".join(lines)
 
 
-async def run_stream(diagnosis: dict, session_id: str | None = None):
+# Section 名权威列表，与 docs/agent-b-system-prompt.md 输出格式段对齐。
+# 顺序也是 prompt 要求的输出顺序。
+SECTION_ORDER: tuple[str, ...] = (
+    "Title", "Opening",
+    "Attachment", "Boundary", "Conflict",
+    "Language", "Style",
+    "Highlight", "Suggestion",
+)
+
+
+def append_resume_directive(user_msg: str, resumed_sections: dict[str, str] | None) -> str:
+    """根据已完成 sections 字典，在 user_msg 后追加接续生成指令。
+
+    resumed_sections 为空或 None 时原样返回 user_msg。
+    """
+    if not resumed_sections:
+        return user_msg
+    # 按 SECTION_ORDER 找最后一个连续已完成的 section；下一段即接续起点
+    completed = [s for s in SECTION_ORDER if s in resumed_sections]
+    if not completed:
+        return user_msg
+    # 接续起点：第一个未完成的 section（如果都完成则不需要 resume）
+    not_completed = [s for s in SECTION_ORDER if s not in resumed_sections]
+    if not not_completed:
+        return user_msg
+    next_section = not_completed[0]
+
+    lines = [
+        user_msg.rstrip(),
+        "",
+        "# 接续生成（前面段落上次已成功生成，请跳过它们，不要重复）",
+    ]
+    for name in completed:
+        body = (resumed_sections[name] or "").strip()
+        snippet = body[:160] + ("…" if len(body) > 160 else "")
+        lines.append(f"- {name}：{snippet}")
+    lines.extend([
+        "",
+        f"现在请**从 --{next_section}-- 开始**输出，沿用上方风格和已有段落的衔接。"
+        f"不要重新输出已生成段的内容。",
+    ])
+    return "\n".join(lines)
+
+
+async def run_stream(
+    diagnosis: dict,
+    session_id: str | None = None,
+    resumed_sections: dict[str, str] | None = None,
+):
     """Stream Agent B: yields text chunks in real time, then a final dict.
+
+    Args:
+        resumed_sections: 上次已完成的 section 字典 {name: body}；非空时
+                          在 user message 末尾加接续生成指令，LLM 仅输出剩余段。
 
     Yields:
         str  — text chunk (forwarded in real time from the LLM)
@@ -132,8 +187,13 @@ async def run_stream(diagnosis: dict, session_id: str | None = None):
         AgentBError: if response is empty.
         LLMError:    if the API call fails.
     """
-    user_msg = build_user_message(diagnosis)
+    user_msg = append_resume_directive(build_user_message(diagnosis), resumed_sections)
     sid_short = (session_id or "")[:8]
+    if resumed_sections:
+        logger.info(
+            "[agent_b/in] session=%s resume from skipping %d sections: %s",
+            sid_short, len(resumed_sections), sorted(resumed_sections.keys()),
+        )
     logger.info("[agent_b/in] session=%s user_msg=\n%s", sid_short, user_msg)
     all_text = ""
     usage_sink: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
@@ -150,8 +210,20 @@ async def run_stream(diagnosis: dict, session_id: str | None = None):
     if not all_text.strip():
         raise AgentBError("run_stream: empty response")
 
+    # Resume 模式：把已落库 section + LLM 新输出拼回完整 report，
+    # 让 quality gate 仍能校验整体合规，写库也写完整版本。
+    if resumed_sections:
+        prefix_parts = [
+            f"--{name}--\n{(resumed_sections[name] or '').strip()}\n"
+            for name in SECTION_ORDER
+            if name in resumed_sections
+        ]
+        combined_text = "".join(prefix_parts) + all_text
+    else:
+        combined_text = all_text
+
     try:
-        warnings = check_report(all_text, diagnosis)
+        warnings = check_report(combined_text, diagnosis)
     except QualityGateError as exc:
         logger.error("[agent_b/quality] hard fail session=%s: %s", sid_short, exc)
         raise AgentBError(f"quality_gate_failed: {exc}") from exc
@@ -159,13 +231,14 @@ async def run_stream(diagnosis: dict, session_id: str | None = None):
         logger.warning("[agent_b/quality] soft warning session=%s: %s", sid_short, w)
 
     logger.info(
-        "[agent_b/out] session=%s chars=%d warnings=%d tokens=%d+%d report_text=\n%s",
-        sid_short, len(all_text), len(warnings),
+        "[agent_b/out] session=%s chars=%d warnings=%d tokens=%d+%d resume=%d report_text=\n%s",
+        sid_short, len(combined_text), len(warnings),
         usage_sink["prompt_tokens"], usage_sink["completion_tokens"],
-        all_text,
+        len(resumed_sections or {}),
+        combined_text,
     )
     yield {
-        "report_text": all_text,
+        "report_text": combined_text,
         "quality_warnings": [str(w) for w in warnings],
         "prompt_tokens": usage_sink["prompt_tokens"],
         "completion_tokens": usage_sink["completion_tokens"],

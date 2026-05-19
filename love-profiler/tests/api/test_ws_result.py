@@ -521,3 +521,177 @@ def test_ws_analyzed_agent_b_failure_releases_claim(client, db_session, user_id)
     db_session.expire_all()
     saved = db_session.query(Assessment).filter_by(id=a.id).first()
     assert saved.status == "analyzed"
+
+
+# ── Phase C.1 · Section 级断点续传 ────────────────────────────────
+
+def test_ws_failure_preserves_partial_sections_for_resume(client, db_session, user_id):
+    """Agent B 写到 Opening 段抛错 → partial_sections 应保留 Title。"""
+    from app.agents.agent_b import AgentBError
+    from app.models.assessment import Assessment
+
+    a = _make_assessment(db_session, user_id, status="analyzed")
+    _make_paid_order(db_session, user_id, a.id)
+
+    async def fake_run_stream(diagnosis, session_id=None):
+        # 完成 Title 段后崩；section_end 触发持久化
+        yield "--Title--《稳》"
+        yield "--Opening--"  # 进入 Opening，触发 Title 的 section_end
+        raise AgentBError("crash mid-stream")
+
+    token = _auth_token(user_id)
+    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+        with client.websocket_connect(f"/ws/result?token={token}") as ws:
+            ws.send_text(json.dumps({"session_id": "ws-test-session"}))
+            while True:
+                data = json.loads(ws.receive_text())
+                if data["type"] in ("error", "done"):
+                    break
+
+    db_session.expire_all()
+    saved = db_session.query(Assessment).filter_by(id=a.id).first()
+    assert saved.status == "analyzed"
+    assert saved.partial_sections, "partial_sections 应保留供下次接续"
+    partial = json.loads(saved.partial_sections)
+    assert "Title" in partial
+    assert "《稳》" in partial["Title"]
+
+
+def test_ws_success_clears_partial_sections(client, db_session, user_id):
+    """报告成功完成后，partial_sections 应清空。"""
+    from app.models.assessment import Assessment
+
+    a = _make_assessment(
+        db_session, user_id, status="analyzed",
+        diagnosis={
+            "type_code": "S-CL-H", "type_name": "稳",
+            "type_tagline": "", "dimensions": {}, "highlights": [],
+        },
+    )
+    # 预置一份残留 partial（模拟上次中断遗留）
+    a.partial_sections = json.dumps({"Title": "残留"})
+    db_session.commit()
+    _make_paid_order(db_session, user_id, a.id)
+
+    async def fake_run_stream(diagnosis, **kwargs):
+        # 假装 LLM 写完了完整报告
+        for piece in ("--Title--", "《稳》", "--Opening--", "开篇"):
+            yield piece
+        yield {
+            "report_text": "--Title--《稳》--Opening--开篇",
+            "quality_warnings": [],
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+        }
+
+    token = _auth_token(user_id)
+    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+        with client.websocket_connect(f"/ws/result?token={token}") as ws:
+            ws.send_text(json.dumps({"session_id": "ws-test-session"}))
+            while True:
+                data = json.loads(ws.receive_text())
+                if data["type"] == "done":
+                    break
+
+    db_session.expire_all()
+    saved = db_session.query(Assessment).filter_by(id=a.id).first()
+    assert saved.status == "complete"
+    assert saved.partial_sections in (None, "", "{}"), "完成后应清空 partial_sections"
+
+
+def test_ws_reconnect_replays_and_resumes(client, db_session, user_id):
+    """重连：partial_sections 非空 → 给前端 replay 已完成段 + run_stream 收到 resumed_sections。"""
+    from app.models.assessment import Assessment
+
+    a = _make_assessment(
+        db_session, user_id, status="analyzed",
+        diagnosis={
+            "type_code": "S-CL-H", "type_name": "稳",
+            "type_tagline": "", "dimensions": {}, "highlights": [],
+        },
+    )
+    # 模拟上次中断遗留：完成 Title + Opening
+    a.partial_sections = json.dumps({
+        "Title":   "《稳重的航标》",
+        "Opening": "你的稳不需要被看见，遇事先解决再处理情绪。",
+    })
+    db_session.commit()
+    _make_paid_order(db_session, user_id, a.id)
+
+    captured = {}
+
+    async def fake_run_stream(diagnosis, session_id=None, resumed_sections=None):
+        captured["resumed_sections"] = resumed_sections
+        for piece in ("--Attachment--", "稳稳在场"):
+            yield piece
+        yield {
+            "report_text": "--Title--《稳重的航标》--Opening--…--Attachment--稳稳在场",
+            "quality_warnings": [],
+            "prompt_tokens": 200,
+            "completion_tokens": 30,
+        }
+
+    token = _auth_token(user_id)
+    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+        with client.websocket_connect(f"/ws/result?token={token}") as ws:
+            ws.send_text(json.dumps({"session_id": "ws-test-session"}))
+            msgs = []
+            while True:
+                data = json.loads(ws.receive_text())
+                msgs.append(data)
+                if data["type"] == "done":
+                    break
+
+    # meta 消息应带 resumed_sections
+    meta = next(m for m in msgs if m["type"] == "meta")
+    assert sorted(meta.get("resumed_sections", [])) == ["Opening", "Title"]
+
+    # run_stream 必须收到 resumed_sections
+    assert captured["resumed_sections"] is not None
+    assert "Title" in captured["resumed_sections"]
+    assert "Opening" in captured["resumed_sections"]
+
+    # 前端应先看到 Title/Opening 的 replay（在 LLM 新输出前）
+    section_starts = [m for m in msgs if m["type"] == "section_start"]
+    section_names = [m["section"] for m in section_starts]
+    assert section_names.index("Title") < section_names.index("Attachment")
+
+
+def test_ws_resume_disabled_by_env(client, db_session, user_id, monkeypatch):
+    """RESUME_ENABLED=false 时即便有 partial_sections 也不接续，行为退回到全量重写。"""
+    monkeypatch.setenv("RESUME_ENABLED", "false")
+
+    a = _make_assessment(
+        db_session, user_id, status="analyzed",
+        diagnosis={
+            "type_code": "S-CL-H", "type_name": "稳",
+            "type_tagline": "", "dimensions": {}, "highlights": [],
+        },
+    )
+    a.partial_sections = json.dumps({"Title": "上次残留"})
+    db_session.commit()
+    _make_paid_order(db_session, user_id, a.id)
+
+    captured = {}
+
+    async def fake_run_stream(diagnosis, **kwargs):
+        captured["resumed_sections"] = kwargs.get("resumed_sections")
+        for piece in ("--Title--", "全量"):
+            yield piece
+        yield {
+            "report_text": "--Title--全量",
+            "quality_warnings": [],
+            "prompt_tokens": 50,
+            "completion_tokens": 20,
+        }
+
+    token = _auth_token(user_id)
+    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+        with client.websocket_connect(f"/ws/result?token={token}") as ws:
+            ws.send_text(json.dumps({"session_id": "ws-test-session"}))
+            while True:
+                data = json.loads(ws.receive_text())
+                if data["type"] == "done":
+                    break
+
+    assert captured["resumed_sections"] is None, "禁用接续后不应传 resumed_sections"
