@@ -2,6 +2,11 @@
 LLM client — async wrapper around the Doubao (豆包) chat completion API.
 Every call (success or error) is logged to the ai_call_logs table and,
 optionally, to a JSONL file when AI_LOG_PATH is set.
+
+Phase B.2: chat_completion 内置 transient-only 重试：
+- 可重试：HTTP 5xx、连接错误、读超时、响应 schema 异常
+- 不可重试：HTTP 4xx（auth / quota / bad request）
+- 指数退避 base=0.5s, attempts<=2 → 最坏 3 次调用
 """
 
 import asyncio
@@ -23,12 +28,27 @@ _background_log_tasks: set[asyncio.Task] = set()
 DOUBAO_API_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 _TIMEOUT_SECONDS = 120
 
+# Retry tuning — keep conservative; outer agent_b quality-gate retry can compound.
+_MAX_TRANSIENT_RETRIES = 2          # 总尝试次数 = 1 + _MAX_TRANSIENT_RETRIES = 3
+_RETRY_BASE_DELAY_SECONDS = 0.5     # 退避基数：0.5s → 1s → 2s（最后一次不再 sleep）
+
 _client = httpx.AsyncClient(timeout=_TIMEOUT_SECONDS)
 _logger = logging.getLogger(__name__)
+
+# 重试退避用的 sleep 函数；测试时可 monkeypatch 这一引用以避免真正等待。
+_sleep = asyncio.sleep
 
 
 class LLMError(Exception):
     """Raised when the LLM API call fails for any reason."""
+
+
+class TransientLLMError(LLMError):
+    """Subclass for retryable failures (HTTP 5xx, network errors, malformed JSON).
+
+    凡是抛 TransientLLMError 的位置都默认是"重试可能成功"的语义；4xx 类故障应抛
+    基类 LLMError，不进入重试循环。
+    """
 
 
 def _write_db_log(
@@ -87,34 +107,21 @@ def _write_db_log(
         db.close()
 
 
-async def chat_completion(
+async def _chat_completion_once(
+    *,
     system_prompt: str,
     messages: list[dict],
-    temperature: float = 0.7,
-    agent: str = "unknown",
-    session_id: str | None = None,
-    user_id: int | None = None,
-    retry_index: int = 0,
-    usage_sink: dict | None = None,
+    temperature: float,
+    agent: str,
+    session_id: str | None,
+    user_id: int | None,
+    retry_index: int,
+    usage_sink: dict | None,
 ) -> str:
-    """Send a chat completion request and return the assistant reply text.
+    """单次 chat completion 调用：负责发请求 + 解析 + 写日志。
 
-    Always writes one row to ai_call_logs (status=success or error).
-
-    Args:
-        system_prompt: Injected as the first system message.
-        messages: Conversation history (role/content dicts).
-        temperature: Sampling temperature.
-        agent: Logical agent name for log filtering.
-        session_id: Assessment session_id for log correlation.
-        user_id: User id for log correlation.
-        retry_index: Which retry attempt this is (0 = first try).
-
-    Returns:
-        The assistant's reply string.
-
-    Raises:
-        LLMError: On HTTP errors, network failures, or unexpected response shapes.
+    可重试错误（5xx / 网络 / 协议异常）抛 TransientLLMError；
+    不可重试错误（4xx）抛基类 LLMError。
     """
     api_key = os.environ["DOUBAO_API_KEY"]
     model = os.environ["DOUBAO_MODEL"]
@@ -147,17 +154,25 @@ async def chat_completion(
         except httpx.HTTPStatusError as exc:
             http_status_code = exc.response.status_code
             error_message = f"HTTP {http_status_code}: {exc.response.text[:200]}"
+            if 500 <= http_status_code < 600:
+                raise TransientLLMError(f"API error {http_status_code}") from exc
             raise LLMError(f"API error {http_status_code}") from exc
         except httpx.HTTPError as exc:
+            # ConnectError / ReadTimeout / NetworkError 等抖动类
             error_message = f"Network error: {exc}"
-            raise LLMError(error_message) from exc
+            raise TransientLLMError(error_message) from exc
 
-        data = response.json()
+        try:
+            data = response.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            error_message = f"Response not JSON: {response.text[:200]}"
+            raise TransientLLMError(error_message) from exc
+
         try:
             reply = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             error_message = f"Unexpected response shape: {response.text[:200]}"
-            raise LLMError(error_message) from exc
+            raise TransientLLMError(error_message) from exc
 
         usage = data.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
@@ -217,6 +232,68 @@ async def chat_completion(
                 _logger.warning("[llm] JSONL log write failed: %s", exc)
 
 
+def _backoff_seconds(attempt: int) -> float:
+    """attempt=0 → 0.5s, =1 → 1s, =2 → 2s"""
+    return _RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
+
+
+async def chat_completion(
+    system_prompt: str,
+    messages: list[dict],
+    temperature: float = 0.7,
+    agent: str = "unknown",
+    session_id: str | None = None,
+    user_id: int | None = None,
+    retry_index: int = 0,
+    usage_sink: dict | None = None,
+) -> str:
+    """Send a chat completion request with transient-error retry.
+
+    每次内部 transient retry 都会重新调用 _chat_completion_once，因此每次都会
+    在 ai_call_logs 写一行（retry_index = caller 传入值 + 本次内部 attempt）。
+
+    Args:
+        retry_index: 调用方意图的"外层 retry 计数"（来自 agent_b.run 的 quality-gate
+                     retry）；内部 transient 重试会在此基础上 +attempt 写入日志。
+
+    Raises:
+        LLMError: 4xx（永久失败）或 transient 错误重试到上限仍未恢复。
+    """
+    last_transient: TransientLLMError | None = None
+    for attempt in range(_MAX_TRANSIENT_RETRIES + 1):
+        effective_retry_index = retry_index + attempt
+        try:
+            return await _chat_completion_once(
+                system_prompt=system_prompt,
+                messages=messages,
+                temperature=temperature,
+                agent=agent,
+                session_id=session_id,
+                user_id=user_id,
+                retry_index=effective_retry_index,
+                usage_sink=usage_sink,
+            )
+        except TransientLLMError as exc:
+            last_transient = exc
+            if attempt >= _MAX_TRANSIENT_RETRIES:
+                _logger.error(
+                    "[llm/retry] agent=%s attempt=%d 已达上限，放弃：%s",
+                    agent, attempt, exc,
+                )
+                raise
+            sleep_s = _backoff_seconds(attempt)
+            _logger.warning(
+                "[llm/retry] agent=%s attempt=%d transient %s，%.2fs 后重试",
+                agent, attempt, exc, sleep_s,
+            )
+            await _sleep(sleep_s)
+        # LLMError 子类之外的异常照常向上抛（4xx → 直接出循环）
+
+    # 理论上不可达：上面要么 return 要么 raise
+    assert last_transient is not None
+    raise last_transient
+
+
 async def stream_chat_completion(
     system_prompt: str,
     messages: list[dict],
@@ -258,6 +335,9 @@ async def stream_chat_completion(
                 await response.aread()
                 body = response.text[:300]
                 _logger.error("[llm] stream %d body: %s", response.status_code, body)
+                # 与 chat_completion 错误分类一致：5xx 视为 transient，便于上层判别
+                if response.status_code >= 500:
+                    raise TransientLLMError(f"API error {response.status_code}: {body}")
                 raise LLMError(f"API error {response.status_code}: {body}")
             async for line in response.aiter_lines():
                 if not line.startswith("data: "):
@@ -284,4 +364,4 @@ async def stream_chat_completion(
                 if content:
                     yield content
     except httpx.HTTPError as exc:
-        raise LLMError(f"Network error: {exc}") from exc
+        raise TransientLLMError(f"Network error: {exc}") from exc

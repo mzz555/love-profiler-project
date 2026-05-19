@@ -3,6 +3,8 @@ Tests for llm_client — async wrapper around the Doubao (豆包) chat API.
 Uses respx to mock HTTP calls so no real API key is needed.
 """
 
+import asyncio
+
 import pytest
 import respx
 import httpx
@@ -10,8 +12,19 @@ import httpx
 from app.services.llm_client import (
     chat_completion,
     LLMError,
+    TransientLLMError,
     DOUBAO_API_URL,
 )
+
+
+@pytest.fixture(autouse=True)
+def _skip_real_sleep(monkeypatch):
+    """避免 Phase B.2 内部 transient retry 在测试里真睡几秒。"""
+
+    async def _noop(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.services.llm_client._sleep", _noop)
 
 
 FAKE_API_KEY = "test-api-key-12345"
@@ -395,6 +408,167 @@ async def test_stream_without_sink_ignores_usage(monkeypatch):
     ):
         out.append(piece)
     assert out == ["a"]
+
+
+# ---------------------------------------------------------------------------
+# Phase B.2 · transient 错误内部重试
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_chat_completion_retries_5xx_then_succeeds(monkeypatch):
+    """503 → 503 → 200 应最终返回 reply（默认最多 2 次 retry）。"""
+    monkeypatch.setenv("DOUBAO_API_KEY", FAKE_API_KEY)
+    monkeypatch.setenv("DOUBAO_MODEL", "doubao-pro-32k")
+
+    responses = [
+        httpx.Response(503, text="upstream busy"),
+        httpx.Response(503, text="upstream busy"),
+        httpx.Response(200, json=_mock_success_response()),
+    ]
+    call_count = {"n": 0}
+
+    def side_effect(request):
+        idx = min(call_count["n"], len(responses) - 1)
+        call_count["n"] += 1
+        return responses[idx]
+
+    respx.post(DOUBAO_API_URL).mock(side_effect=side_effect)
+    reply = await chat_completion(system_prompt=SYSTEM_PROMPT, messages=MESSAGES)
+    assert reply == MOCK_REPLY
+    assert call_count["n"] == 3
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_chat_completion_gives_up_after_three_transient_failures(monkeypatch):
+    """连续 3 次 5xx 应抛 LLMError（默认 1 + 2 retry = 3 次尝试）。"""
+    monkeypatch.setenv("DOUBAO_API_KEY", FAKE_API_KEY)
+    monkeypatch.setenv("DOUBAO_MODEL", "doubao-pro-32k")
+
+    call_count = {"n": 0}
+
+    def side_effect(request):
+        call_count["n"] += 1
+        return httpx.Response(502, text="bad gateway")
+
+    respx.post(DOUBAO_API_URL).mock(side_effect=side_effect)
+    with pytest.raises(LLMError):
+        await chat_completion(system_prompt=SYSTEM_PROMPT, messages=MESSAGES)
+    assert call_count["n"] == 3
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_chat_completion_does_not_retry_4xx(monkeypatch):
+    """401 应立即抛 LLMError，不进入重试。"""
+    monkeypatch.setenv("DOUBAO_API_KEY", FAKE_API_KEY)
+    monkeypatch.setenv("DOUBAO_MODEL", "doubao-pro-32k")
+
+    call_count = {"n": 0}
+
+    def side_effect(request):
+        call_count["n"] += 1
+        return httpx.Response(401, json={"error": "unauthorized"})
+
+    respx.post(DOUBAO_API_URL).mock(side_effect=side_effect)
+    with pytest.raises(LLMError):
+        await chat_completion(system_prompt=SYSTEM_PROMPT, messages=MESSAGES)
+    assert call_count["n"] == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_chat_completion_retries_network_error(monkeypatch):
+    """ConnectError → ConnectError → 200 应最终成功。"""
+    monkeypatch.setenv("DOUBAO_API_KEY", FAKE_API_KEY)
+    monkeypatch.setenv("DOUBAO_MODEL", "doubao-pro-32k")
+
+    call_count = {"n": 0}
+
+    def side_effect(request):
+        call_count["n"] += 1
+        if call_count["n"] < 3:
+            raise httpx.ConnectError("refused")
+        return httpx.Response(200, json=_mock_success_response())
+
+    respx.post(DOUBAO_API_URL).mock(side_effect=side_effect)
+    reply = await chat_completion(system_prompt=SYSTEM_PROMPT, messages=MESSAGES)
+    assert reply == MOCK_REPLY
+    assert call_count["n"] == 3
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_chat_completion_retries_malformed_response(monkeypatch):
+    """200 但 schema 异常视为 transient，重试一次。"""
+    monkeypatch.setenv("DOUBAO_API_KEY", FAKE_API_KEY)
+    monkeypatch.setenv("DOUBAO_MODEL", "doubao-pro-32k")
+
+    responses = [
+        httpx.Response(200, json={"unexpected": "shape"}),
+        httpx.Response(200, json=_mock_success_response()),
+    ]
+    call_count = {"n": 0}
+
+    def side_effect(request):
+        idx = min(call_count["n"], len(responses) - 1)
+        call_count["n"] += 1
+        return responses[idx]
+
+    respx.post(DOUBAO_API_URL).mock(side_effect=side_effect)
+    reply = await chat_completion(system_prompt=SYSTEM_PROMPT, messages=MESSAGES)
+    assert reply == MOCK_REPLY
+    assert call_count["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_chat_completion_passes_incremented_retry_index_to_each_attempt(monkeypatch):
+    """retry_index 应叠加在 caller 传入值上：第 1 次内部尝试用 caller_idx + attempt。
+
+    通过 patch _chat_completion_once 直接断言传入参数，避开 threadpool DB log 写入。
+    """
+    from app.services import llm_client as _llm
+
+    captured: list[int] = []
+
+    async def fake_once(*, retry_index, **kwargs):
+        captured.append(retry_index)
+        if retry_index == 5:
+            raise _llm.TransientLLMError("first attempt boom")
+        return MOCK_REPLY
+
+    monkeypatch.setattr(_llm, "_chat_completion_once", fake_once)
+    reply = await chat_completion(
+        system_prompt=SYSTEM_PROMPT, messages=MESSAGES, retry_index=5,
+    )
+    assert reply == MOCK_REPLY
+    assert captured == [5, 6]
+
+
+@pytest.mark.asyncio
+async def test_chat_completion_default_retry_index_starts_at_zero(monkeypatch):
+    """caller 不传 retry_index 时，内部 attempt 应从 0 开始递增。"""
+    from app.services import llm_client as _llm
+
+    captured: list[int] = []
+
+    async def fake_once(*, retry_index, **kwargs):
+        captured.append(retry_index)
+        if retry_index < 2:
+            raise _llm.TransientLLMError("transient")
+        return MOCK_REPLY
+
+    monkeypatch.setattr(_llm, "_chat_completion_once", fake_once)
+    await chat_completion(system_prompt=SYSTEM_PROMPT, messages=MESSAGES)
+    assert captured == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_transient_llm_error_is_llm_error_subclass():
+    """TransientLLMError 必须是 LLMError 子类，保证现有 catch LLMError 的代码无需改。"""
+    assert issubclass(TransientLLMError, LLMError)
 
 
 # ---------------------------------------------------------------------------
