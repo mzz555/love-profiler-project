@@ -14,6 +14,7 @@ from app.agents.agent_b import (
 from app.database import SessionLocal
 from app.models.assessment import Assessment
 from app.services.llm_client import LLMError
+from app.services.report_audit import schedule_audit
 from app.services.token_quota import add_usage as quota_add_usage
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,9 @@ async def run_and_persist(
                 )
             except Exception as exc:
                 logger.warning("[%s] quota_add_usage 失败 user_id=%s: %s", log_prefix, user_id, exc)
+        # D.2：异步触发审计（JUDGE_ENABLED=false 时是 no-op）
+        if updated > 0:
+            schedule_audit(assessment_id, session_id=session_id)
         logger.info(
             "[%s] 完成 assessment_id=%s type=%s chars=%d tokens=%d+%d updated=%d %.0fms",
             log_prefix, assessment_id, personality_type,

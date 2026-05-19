@@ -36,6 +36,7 @@ from app.middleware.auth import TOKEN_ALGORITHM, _jwt_secret
 from app.models.assessment import Assessment
 from app.services.access_control import is_unlocked
 from app.services.llm_client import LLMError
+from app.services.report_audit import schedule_audit
 from app.services.token_quota import (
     QuotaExceededError,
     add_usage as quota_add_usage,
@@ -385,6 +386,9 @@ async def _stream_agent_b(
         )
     except Exception as exc:  # 配额写失败不该阻塞已经成功的报告
         logger.warning("[ws/result] quota_add_usage 失败 user_id=%s: %s", user_id, exc)
+
+    # D.2：异步触发审计（JUDGE_ENABLED=false 时是 no-op）
+    schedule_audit(assessment_id, session_id=session_id)
 
     ttft_ms  = int((t_first_token - t0) * 1000) if t_first_token else -1
     total_ms = int((time.monotonic() - t0) * 1000)

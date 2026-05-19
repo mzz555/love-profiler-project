@@ -402,3 +402,80 @@ def test_metrics_llm_rejects_invalid_hours(client, monkeypatch):
     for bad in (0, -1, 999):
         resp = client.get(f"/admin/api/metrics/llm?hours={bad}")
         assert resp.status_code == 422
+
+
+# ── /admin/api/audits（Phase D.2） ────────────────────
+def test_audits_without_auth_returns_404(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
+    resp = client.get("/admin/api/audits")
+    assert resp.status_code == 404
+
+
+def test_audits_empty_returns_zero_stats(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.get("/admin/api/audits")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["stats"]["total"] == 0
+    assert data["stats"]["avg_overall"] is None
+    assert data["rows"] == []
+
+
+def test_audits_lists_rows_and_joins_personality_type(client, db_session, monkeypatch):
+    """正常路径：插一条 audit + 关联 assessment，应能 join 出 personality_type。"""
+    from datetime import datetime, timezone
+    from app.models.assessment import Assessment
+    from app.models.report_quality_audit import ReportQualityAudit
+    from app.models.user import User
+
+    monkeypatch.setenv("DEV_MODE", "true")
+
+    u = User(openid="o_audits_join")
+    db_session.add(u); db_session.commit(); db_session.refresh(u)
+    a = Assessment(
+        user_id=u.id, session_id="a-sess", status="complete",
+        personality_type="MS-CL-H",
+        diagnosis_json='{"type_code":"MS-CL-H"}', report_text="--Title--内容",
+    )
+    db_session.add(a); db_session.commit(); db_session.refresh(a)
+    db_session.add(ReportQualityAudit(
+        assessment_id=a.id, judge_model="doubao-test",
+        prompt_version="2.0", report_version=1,
+        coherence_score=8, readability_score=9, factual_score=7,
+        overall_score=8, summary="还行", duration_ms=1500,
+        prompt_tokens=1000, completion_tokens=50,
+        created_at=datetime.now(timezone.utc),
+    ))
+    db_session.commit()
+
+    resp = client.get("/admin/api/audits")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["stats"]["total"] == 1
+    assert data["stats"]["avg_overall"] == 8.0
+    assert len(data["rows"]) == 1
+    row = data["rows"][0]
+    assert row["assessment_id"] == a.id
+    assert row["personality_type"] == "MS-CL-H"
+    assert row["overall_score"] == 8
+    assert row["summary"] == "还行"
+
+
+def test_audits_respects_limit(client, db_session, monkeypatch):
+    from datetime import datetime, timezone
+    from app.models.report_quality_audit import ReportQualityAudit
+
+    monkeypatch.setenv("DEV_MODE", "true")
+    for i in range(5):
+        db_session.add(ReportQualityAudit(
+            assessment_id=i + 1, judge_model="m",
+            coherence_score=5, readability_score=5,
+            factual_score=5, overall_score=5,
+            summary=f"s{i}", duration_ms=100,
+            created_at=datetime.now(timezone.utc),
+        ))
+    db_session.commit()
+
+    resp = client.get("/admin/api/audits?limit=3")
+    assert resp.status_code == 200
+    assert len(resp.json()["rows"]) == 3

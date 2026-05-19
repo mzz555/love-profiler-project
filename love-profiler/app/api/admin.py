@@ -25,6 +25,8 @@ from sqlalchemy.orm import defer
 
 from app.database import get_db
 from app.models.ai_call_log import AiCallLog
+from app.models.assessment import Assessment
+from app.models.report_quality_audit import ReportQualityAudit
 from app.services.admin_metrics import compute_llm_metrics
 
 
@@ -77,6 +79,17 @@ TABLE_CONFIG: dict[str, dict] = {
         "created_at_col": "ts",
         "list_cols": ["id", "ts", "agent", "session_id", "model",
                       "status", "duration_ms", "total_tokens", "retry_index"],
+    },
+    "report_quality_audit": {
+        "pk": "id",
+        "search_cols": ["judge_model", "prompt_version"],
+        "editable_fields": [],
+        "truncate_cols": ["raw_output", "summary"],
+        "created_at_col": "created_at",
+        "list_cols": ["id", "created_at", "assessment_id", "judge_model",
+                      "prompt_version", "overall_score",
+                      "coherence_score", "readability_score", "factual_score",
+                      "duration_ms"],
     },
     "base_love_type": {
         "pk": "id",
@@ -359,6 +372,73 @@ async def admin_overview(
         pass
 
     return result
+
+
+@router.get("/api/audits", include_in_schema=False)
+async def list_audits(
+    limit:  int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """报告质量审计列表 + 概览统计（Phase D.2）。"""
+    overall_stats = db.query(
+        func.count(ReportQualityAudit.id),
+        func.avg(ReportQualityAudit.overall_score),
+        func.avg(ReportQualityAudit.coherence_score),
+        func.avg(ReportQualityAudit.readability_score),
+        func.avg(ReportQualityAudit.factual_score),
+    ).one()
+
+    rows = (
+        db.query(
+            ReportQualityAudit.id,
+            ReportQualityAudit.created_at,
+            ReportQualityAudit.assessment_id,
+            ReportQualityAudit.judge_model,
+            ReportQualityAudit.prompt_version,
+            ReportQualityAudit.coherence_score,
+            ReportQualityAudit.readability_score,
+            ReportQualityAudit.factual_score,
+            ReportQualityAudit.overall_score,
+            ReportQualityAudit.summary,
+            ReportQualityAudit.duration_ms,
+            Assessment.personality_type,
+        )
+        .outerjoin(Assessment, Assessment.id == ReportQualityAudit.assessment_id)
+        .order_by(desc(ReportQualityAudit.created_at))
+        .limit(limit)
+        .all()
+    )
+
+    def _avg(v):
+        return round(float(v), 2) if v is not None else None
+
+    return {
+        "stats": {
+            "total":             overall_stats[0] or 0,
+            "avg_overall":       _avg(overall_stats[1]),
+            "avg_coherence":     _avg(overall_stats[2]),
+            "avg_readability":   _avg(overall_stats[3]),
+            "avg_factual":       _avg(overall_stats[4]),
+        },
+        "rows": [
+            {
+                "id":                r.id,
+                "created_at":        r.created_at.isoformat() if r.created_at else None,
+                "assessment_id":     r.assessment_id,
+                "judge_model":       r.judge_model,
+                "prompt_version":    r.prompt_version,
+                "coherence_score":   r.coherence_score,
+                "readability_score": r.readability_score,
+                "factual_score":     r.factual_score,
+                "overall_score":     r.overall_score,
+                "summary":           r.summary,
+                "duration_ms":       r.duration_ms,
+                "personality_type":  r.personality_type,
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/api/metrics/llm", include_in_schema=False)
