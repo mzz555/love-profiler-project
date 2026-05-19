@@ -10,11 +10,12 @@ import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.agents.agent_a import AgentAError, run as agent_a_run
 from app.database import get_db
+from app.schemas.diagnosis import Diagnosis
 from app.services.llm_client import LLMError
 from app.limiter import limiter
 from app.middleware.auth import get_current_user_id
@@ -224,6 +225,18 @@ async def quiz_submit(
         "[agent_a/out] session=%s diagnosis=%s",
         sid_short, json.dumps(diagnosis, ensure_ascii=False),
     )
+
+    try:
+        Diagnosis.model_validate(diagnosis)
+    except ValidationError as exc:
+        logger.error(
+            "[quiz/submit] diagnosis schema 校验失败 session=%s errors=%s",
+            sid_short, exc.errors(),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="诊断数据不完整，请重试",
+        ) from exc
 
     t_db = time.monotonic()
     assessment.answers_json = answers_json_str

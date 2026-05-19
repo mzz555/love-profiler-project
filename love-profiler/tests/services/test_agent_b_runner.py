@@ -79,6 +79,10 @@ async def test_run_and_persist_success_updates_status_and_text(shared_session_lo
     # report_json 应该是 {"raw_llm_output": fake_text}
     rj = json.loads(saved.report_json)
     assert rj == {"raw_llm_output": fake_text}
+    # Phase A.3: 写库时落 prompt_version / report_version
+    from app.agents.agent_b import PROMPT_VERSION, REPORT_VERSION
+    assert saved.prompt_version == PROMPT_VERSION
+    assert saved.report_version == REPORT_VERSION
 
 
 @pytest.mark.asyncio

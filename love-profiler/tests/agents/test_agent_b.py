@@ -32,11 +32,25 @@ DIAGNOSIS = {
     "highlights": [],
 }
 
+def _compliant_section(name: str, body: str, min_len: int) -> str:
+    pad = max(0, min_len - len(body))
+    return f"--{name}--\n{body}{'·' * pad}\n"
+
+
+# 一份满足 report_quality_gate 硬约束的报告文本，供 mock LLM 输出复用。
 REPORT_TEXT = (
-    "**《稳重的航标》**\n\n"
-    "你的稳不需要被看见。危机出现时，你已经在想怎么解决了，情绪是后来才处理的事。\n\n"
-    "## 依恋\n你能稳稳地在场，不需要时刻确认对方在不在。\n\n"
-    "## 收尾建议\n明天起，试着在一件小事上直接说出你的感受。"
+    "--Title--\n《稳重的航标》\n"
+    + _compliant_section(
+        "Opening",
+        "你的稳不需要被看见。危机出现时，你已经在想怎么解决，情绪是后来才处理的事。",
+        80,
+    )
+    + _compliant_section("Attachment", "你能稳稳地在场，不需要时刻确认对方在不在身边。",     100)
+    + _compliant_section("Boundary",   "你清楚自己的边界，也尊重对方的，不会去越界。",       100)
+    + _compliant_section("Conflict",   "面对摩擦你倾向于建设性表达，修复关系是你的本能。",   100)
+    + _compliant_section("Language",   "你最被打动的是言语肯定与精心时刻，被夸奖会很安心。", 80)
+    + _compliant_section("Style",      "你的表达平衡居中，不让对方读不懂，也不会读太透。",   80)
+    + _compliant_section("Suggestion", "明天起，试着在一件小事上直接说出你的感受。",         60)
 )
 
 
@@ -149,11 +163,14 @@ def test_build_user_message_empty_highlights_marks_skip():
 
 @pytest.mark.asyncio
 async def test_run_stream_yields_chunks_then_final_dict():
-    """run_stream 应实时 yield 文本片段，最后 yield 一次 {report_text: 全文}。"""
+    """run_stream 应实时 yield 文本片段，最后 yield 一次 {report_text: 全文, quality_warnings: [...]}"""
     from unittest.mock import patch
     from app.agents.agent_b import run_stream
 
-    pieces = ["稳重的", "航标 ", "这是 ", "Agent B"]
+    # 把合规 REPORT_TEXT 切成 4 段，保留原序作为 chunk
+    n = len(REPORT_TEXT)
+    boundaries = [0, n // 4, n // 2, 3 * n // 4, n]
+    pieces = [REPORT_TEXT[boundaries[i]:boundaries[i + 1]] for i in range(4)]
 
     async def fake_stream(**kwargs):
         for p in pieces:
@@ -164,11 +181,57 @@ async def test_run_stream_yields_chunks_then_final_dict():
         async for item in run_stream(DIAGNOSIS, session_id="abcdefgh"):
             out.append(item)
 
-    # 前 N 个应是 str 片段（原样保留），最后一个是 dict
     assert [x for x in out[:-1]] == pieces
     final = out[-1]
     assert isinstance(final, dict)
-    assert final["report_text"] == "".join(pieces)
+    assert final["report_text"] == "".join(pieces) == REPORT_TEXT
+    assert "quality_warnings" in final
+
+
+@pytest.mark.asyncio
+async def test_run_stream_raises_on_quality_gate_failure():
+    """LLM 输出缺 --Attachment-- → AgentBError(quality_gate_failed)，不发 final dict。"""
+    from unittest.mock import patch
+    from app.agents.agent_b import run_stream
+
+    broken = REPORT_TEXT.replace("--Attachment--", "--ZZZSkip--")
+
+    async def fake_stream(**kwargs):
+        yield broken
+
+    with patch("app.agents.agent_b.stream_chat_completion", new=fake_stream):
+        with pytest.raises(AgentBError, match="quality_gate_failed"):
+            async for _ in run_stream(DIAGNOSIS):
+                pass
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_run_retries_on_quality_gate_failure_then_succeeds():
+    """run() 在质量门失败时应自动重试一次。"""
+    bad = REPORT_TEXT.replace("--Attachment--", "--ZZZSkip--")
+    responses = [_ok_response(bad), _ok_response(REPORT_TEXT)]
+    call_count = 0
+
+    def side_effect(request):
+        nonlocal call_count
+        resp = responses[min(call_count, len(responses) - 1)]
+        call_count += 1
+        return resp
+
+    respx.post(DOUBAO_URL).mock(side_effect=side_effect)
+    result = await run(DIAGNOSIS)
+    assert call_count == 2
+    assert "--Attachment--" in result
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_run_raises_when_all_quality_gate_failures():
+    bad = REPORT_TEXT.replace("--Attachment--", "--ZZZSkip--")
+    respx.post(DOUBAO_URL).mock(return_value=_ok_response(bad))
+    with pytest.raises(AgentBError, match="quality_gate_failed"):
+        await run(DIAGNOSIS)
 
 
 @pytest.mark.asyncio

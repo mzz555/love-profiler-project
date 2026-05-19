@@ -12,13 +12,30 @@ relevant to this user.
 
 import logging
 import pathlib
+import re
 
 from app.services.llm_client import chat_completion, stream_chat_completion
+from app.services.report_quality_gate import QualityGateError, check_report
 
 logger = logging.getLogger(__name__)
 
 _PROMPT_FILE = pathlib.Path(__file__).parents[2] / "docs" / "agent-b-system-prompt.md"
-AGENT_B_SYSTEM_PROMPT = _PROMPT_FILE.read_text(encoding="utf-8").split("\n## 版本记录")[0].rstrip()
+_PROMPT_RAW = _PROMPT_FILE.read_text(encoding="utf-8")
+AGENT_B_SYSTEM_PROMPT = _PROMPT_RAW.split("\n## 版本记录")[0].rstrip()
+
+
+def _parse_prompt_version(raw: str) -> str:
+    """从 prompt 文件头的 <!-- prompt-version: x.y --> 注解抽取版本号。
+
+    无注解时回退 "0"（保留 NULL 在 DB 那一层做，应用层永远是字符串）。
+    """
+    m = re.search(r"<!--\s*prompt-version:\s*([\w.\-]+)\s*-->", raw)
+    return m.group(1) if m else "0"
+
+
+PROMPT_VERSION: str = _parse_prompt_version(_PROMPT_RAW)
+# 报告 Section 结构版本号；与 prompt-version 解耦，仅在 Section 拆分/重命名时升级
+REPORT_VERSION: int = 1
 
 
 class AgentBError(Exception):
@@ -131,11 +148,22 @@ async def run_stream(diagnosis: dict, session_id: str | None = None):
     if not all_text.strip():
         raise AgentBError("run_stream: empty response")
 
+    try:
+        warnings = check_report(all_text, diagnosis)
+    except QualityGateError as exc:
+        logger.error("[agent_b/quality] hard fail session=%s: %s", sid_short, exc)
+        raise AgentBError(f"quality_gate_failed: {exc}") from exc
+    for w in warnings:
+        logger.warning("[agent_b/quality] soft warning session=%s: %s", sid_short, w)
+
     logger.info(
-        "[agent_b/out] session=%s chars=%d report_text=\n%s",
-        sid_short, len(all_text), all_text,
+        "[agent_b/out] session=%s chars=%d warnings=%d report_text=\n%s",
+        sid_short, len(all_text), len(warnings), all_text,
     )
-    yield {"report_text": all_text}
+    yield {
+        "report_text": all_text,
+        "quality_warnings": [str(w) for w in warnings],
+    }
 
 
 async def run(diagnosis: dict, session_id: str | None = None) -> str:
@@ -153,6 +181,7 @@ async def run(diagnosis: dict, session_id: str | None = None) -> str:
     logger.info("[agent_b/in] session=%s user_msg=\n%s", sid_short, base_msg)
     retry_suffix = "\n\n【重试要求】请直接输出报告纯文本，不要输出 JSON 或代码围栏。"
 
+    last_quality_error: QualityGateError | None = None
     for attempt in range(2):
         content = base_msg if attempt == 0 else base_msg + retry_suffix
         raw = await chat_completion(
@@ -163,11 +192,25 @@ async def run(diagnosis: dict, session_id: str | None = None) -> str:
             session_id=session_id,
             retry_index=attempt,
         )
-        if raw.strip():
-            logger.info(
-                "[agent_b/out] session=%s chars=%d report_text=\n%s",
-                sid_short, len(raw), raw,
+        if not raw.strip():
+            continue
+        try:
+            warnings = check_report(raw, diagnosis)
+        except QualityGateError as exc:
+            last_quality_error = exc
+            logger.warning(
+                "[agent_b/quality] attempt=%d session=%s 质量门未通过：%s",
+                attempt, sid_short, exc,
             )
-            return raw
+            continue
+        for w in warnings:
+            logger.warning("[agent_b/quality] soft warning session=%s: %s", sid_short, w)
+        logger.info(
+            "[agent_b/out] session=%s chars=%d warnings=%d report_text=\n%s",
+            sid_short, len(raw), len(warnings), raw,
+        )
+        return raw
 
+    if last_quality_error is not None:
+        raise AgentBError(f"quality_gate_failed: {last_quality_error}") from last_quality_error
     raise AgentBError("Agent B returned empty text after 2 attempts")

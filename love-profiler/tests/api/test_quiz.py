@@ -51,7 +51,9 @@ def test_quiz_submit_runs_agent_a(client, auth_headers, db_session):
     # 内存 SQLite 没这些表，所以为四个 fetch_* 函数提供测试 mock。
     mock_love_type = {
         "type_code": "S-CL-H", "type_name": "稳重的航标",
-        "img_path": "/img/scl-h.png", "detail": "锚定句", "tagline": "副标题",
+        "img_path": "/img/scl-h.png",
+        "detail": "你像一座稳重的航标，关系里给得出稳定。",  # ≥10 字符以满足 Diagnosis.type_anchor 校验
+        "tagline": "副标题",
     }
     mock_d4_details = [
         {"code": "T1", "name": "言语肯定", "detail": "夸奖、认可"},
@@ -111,3 +113,59 @@ def test_quiz_submit_wrong_session_returns_404(client, auth_headers):
             headers=auth_headers,
         )
     assert resp.status_code == 404
+
+
+def test_quiz_submit_schema_validation_fails_when_d5_guide_missing(
+    client, auth_headers, db_session
+):
+    """enrich 阶段查不到 D5_guide（fetch_d5_guide 返回 None）→ Diagnosis 校验拒绝写库。"""
+    with patch("app.services.supabase_client._fetch_questions_sync",
+               return_value=MOCK_QUESTIONS):
+        start = client.post("/quiz/start", headers=auth_headers)
+    session_id = start.json()["session_id"]
+    answers = [{"question_id": q["question_id"], "chosen_option": "a"} for q in MOCK_QUESTIONS]
+
+    mock_love_type = {
+        "type_code": "S-CL-H", "type_name": "稳重的航标",
+        "img_path": "/img/scl-h.png",
+        "detail": "你像一座稳重的航标，关系里给得出稳定。",
+        "tagline": "",
+    }
+    mock_d4_details = [
+        {"code": "T1", "name": "言语肯定", "detail": "夸奖、认可"},
+        {"code": "T2", "name": "精心时刻", "detail": "专注陪伴"},
+    ]
+    mock_segment_decode = [
+        {"dimension": "D1", "code": "S",  "label_cn": "安全型依恋",   "is_healthy": True},
+        {"dimension": "D2", "code": "CL", "label_cn": "清晰边界",     "is_healthy": True},
+        {"dimension": "D3", "code": "H",  "label_cn": "健康冲突模式", "is_healthy": True},
+    ]
+    def fake_highlights_by_codes(codes):
+        return [{
+            "code": c, "name_cn": f"mock-{c}", "severity": "info", "is_positive": False,
+            "report_seed": "种子", "interp_path": "路径", "trigger_condition": "条件",
+        } for c in codes]
+
+    with patch("app.services.supabase_client._fetch_questions_sync", return_value=MOCK_QUESTIONS), \
+         patch("app.services.supabase_client._fetch_love_type_sync", return_value=mock_love_type), \
+         patch("app.services.supabase_client._fetch_d4_details_sync", return_value=mock_d4_details), \
+         patch("app.services.supabase_client._fetch_d5_guide_sync", return_value=None), \
+         patch("app.services.supabase_client._fetch_segment_decode_sync", return_value=mock_segment_decode), \
+         patch("app.services.supabase_client._fetch_highlights_by_codes_sync", side_effect=fake_highlights_by_codes):
+        resp = client.post(
+            "/quiz/submit",
+            json={"session_id": session_id, "answers": answers},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 502
+    assert "诊断数据不完整" in resp.json()["detail"]
+
+    from app.models.assessment import Assessment
+    db_session.expire_all()
+    assessment = db_session.query(Assessment).filter(
+        Assessment.session_id == session_id
+    ).first()
+    assert assessment is not None
+    assert assessment.status == "pending"
+    assert assessment.diagnosis_json is None

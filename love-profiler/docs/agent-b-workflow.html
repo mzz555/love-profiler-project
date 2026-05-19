@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent B 报告生成工作流</title>
+<style>
+:root {
+  --bg: #0b0d12;
+  --bg-card: rgba(255,255,255,0.035);
+  --bg-card-hover: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.08);
+  --gold: #d4a857;
+  --gold-dim: #a07f3a;
+  --accent: #6fb1ff;
+  --green: #8be9a8;
+  --red: #ff7676;
+  --text: #e8eaf0;
+  --text-dim: #9aa0ad;
+  --text-faint: #6b7080;
+  --code-bg: rgba(255,255,255,0.04);
+  --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  background:
+    radial-gradient(ellipse at top, rgba(212,168,87,0.04), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(111,177,255,0.03), transparent 50%),
+    var(--bg);
+  min-height: 100vh;
+  padding: 48px 24px 96px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; }
+
+/* ── Hero ─────────────────────────────────────────── */
+.hero { text-align: center; padding: 24px 0 48px; }
+.hero .badge {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+  padding: 4px 14px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 100px;
+  margin-bottom: 18px;
+}
+.hero h1 {
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+  background: linear-gradient(135deg, #fff 30%, var(--gold) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero .sub {
+  color: var(--text-dim);
+  max-width: 680px;
+  margin: 0 auto;
+  font-size: 15px;
+}
+
+/* ── Section ────────────────────────────────────────── */
+section { margin-bottom: 56px; }
+h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 18px;
+  padding-left: 14px;
+  border-left: 3px solid var(--gold);
+  color: var(--text);
+}
+h2 .num {
+  color: var(--gold);
+  margin-right: 8px;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+/* ── Pipeline 卡片 ──────────────────────────────────── */
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.stage {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  position: relative;
+  transition: transform .2s, background .2s;
+}
+.stage:hover { background: var(--bg-card-hover); transform: translateY(-2px); }
+.stage::after {
+  content: '→';
+  position: absolute;
+  right: -16px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--gold-dim);
+  font-size: 16px;
+  z-index: 2;
+}
+.stage:last-child::after { display: none; }
+.stage .stage-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  margin-bottom: 8px;
+}
+.stage .stage-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.stage .stage-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.stage .stage-out {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+/* ── Table ──────────────────────────────────────────── */
+.table-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 6px;
+  overflow-x: auto;
+}
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th {
+  color: var(--text-faint);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+td .src {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(212,168,87,0.1);
+  color: var(--gold);
+}
+td .src.db { background: rgba(111,177,255,0.1); color: var(--accent); }
+td .src.calc { background: rgba(139,233,168,0.1); color: var(--green); }
+td .field {
+  font-family: var(--mono);
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* ── Split: 左右对照 ──────────────────────────────── */
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.col {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+}
+.col-label {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--text-faint);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.col-label .dot { width: 6px; height: 6px; border-radius: 50%; }
+.col-label .dot.in { background: var(--accent); }
+.col-label .dot.out { background: var(--gold); }
+
+pre, .code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+.code .k  { color: var(--gold); }
+.code .s  { color: var(--green); }
+.code .c  { color: var(--text-faint); font-style: italic; }
+.code .n  { color: var(--accent); }
+.code .h  { color: #ff9ec3; }
+
+/* ── WS 消息时序 ──────────────────────────────────── */
+.timeline {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+.msg {
+  display: grid;
+  grid-template-columns: 64px 130px 1fr;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  border-left: 3px solid transparent;
+}
+.msg:hover { background: rgba(255,255,255,0.025); }
+.msg .t  { color: var(--text-faint); font-size: 11px; }
+.msg .type {
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+  font-weight: 600;
+}
+.msg.meta { border-left-color: var(--accent); }
+.msg.meta .type { background: rgba(111,177,255,0.15); color: var(--accent); }
+.msg.start { border-left-color: var(--gold); }
+.msg.start .type { background: rgba(212,168,87,0.18); color: var(--gold); }
+.msg.chunk .type { background: rgba(255,255,255,0.06); color: var(--text-dim); }
+.msg.end { border-left-color: var(--gold-dim); }
+.msg.end .type { background: rgba(212,168,87,0.1); color: var(--gold-dim); }
+.msg.done { border-left-color: var(--green); }
+.msg.done .type { background: rgba(139,233,168,0.15); color: var(--green); }
+.msg.err { border-left-color: var(--red); }
+.msg.err .type { background: rgba(255,118,118,0.15); color: var(--red); }
+.msg .payload { color: var(--text-dim); }
+.msg .payload .v { color: var(--text); }
+
+/* ── DB 落库 ────────────────────────────────────────── */
+.persist-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.persist-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.persist-card h4 {
+  font-size: 13px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+.status-badge.s1 { background: rgba(154,160,173,0.15); color: var(--text-dim); }
+.status-badge.s2 { background: rgba(212,168,87,0.15); color: var(--gold); }
+.status-badge.s3 { background: rgba(111,177,255,0.15); color: var(--accent); }
+.status-badge.s4 { background: rgba(139,233,168,0.15); color: var(--green); }
+.persist-card .fields {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+.persist-card .fields .f { color: var(--text); }
+.persist-card .fields .v { color: var(--green); }
+.persist-card .fields .nil { color: var(--text-faint); font-style: italic; }
+
+/* ── Section 协议 ──────────────────────────────────── */
+.sec-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.sec-pill {
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 6px;
+}
+.sec-pill .marker {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  display: block;
+}
+.sec-pill .label {
+  font-size: 11px;
+  color: var(--text-dim);
+  display: block;
+  margin-top: 4px;
+}
+
+/* ── Footer ─────────────────────────────────────────── */
+.foot {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-family: var(--mono);
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Responsive ─────────────────────────────────────── */
+@media (max-width: 900px) {
+  .pipeline { grid-template-columns: 1fr; }
+  .stage::after { display: none; }
+  .split { grid-template-columns: 1fr; }
+  .persist-grid { grid-template-columns: 1fr; }
+  .sec-grid { grid-template-columns: repeat(4, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ════ Hero ════ -->
+  <header class="hero">
+    <div class="badge">LOVE PROFILER · INTERNAL DOC</div>
+    <h1>Agent B 报告生成工作流</h1>
+    <p class="sub">从用户提交 30 道题答案，到 LLM 流式输出人格报告，再到前端实时分段渲染——完整数据流向、字段来源、协议格式一图看懂。</p>
+  </header>
+
+  <!-- ════ Pipeline ════ -->
+  <section>
+    <h2><span class="num">01</span>五阶段总览</h2>
+    <div class="pipeline">
+      <div class="stage">
+        <div class="stage-num">STAGE 1</div>
+        <div class="stage-title">/quiz/submit</div>
+        <div class="stage-desc">Agent A 算分 + Enrich 阶段从 5 张字典表注入静态知识</div>
+        <div class="stage-out">→ diagnosis dict</div>
+      </div>
+      <div class="stage">
+        <div class="stage-num">STAGE 2</div>
+        <div class="stage-title">DB 落库</div>
+        <div class="stage-desc">assessment.diagnosis_json 持久化<br>status = analyzed</div>
+        <div class="stage-out">→ DB row</div>
+      </div>
+      <div class="stage">
+        <div class="stage-num">STAGE 3</div>
+        <div class="stage-title">/ws/result</div>
+        <div class="stage-desc">前端连 WS，后端取出 diagnosis_json 调度 Agent B</div>
+        <div class="stage-out">→ system + user msg</div>
+      </div>
+      <div class="stage">
+        <div class="stage-num">STAGE 4</div>
+        <div class="stage-title">豆包 LLM</div>
+        <div class="stage-desc">temperature=0.6 流式输出含 --Section-- 标记的纯文本</div>
+        <div class="stage-out">→ raw text chunks</div>
+      </div>
+      <div class="stage">
+        <div class="stage-num">STAGE 5</div>
+        <div class="stage-title">切片 & 落库</div>
+        <div class="stage-desc">_SectionStreamer 实时切片推 WS，写库 report_text</div>
+        <div class="stage-out">→ status = complete</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ Diagnosis 数据源 ════ -->
+  <section>
+    <h2><span class="num">02</span>diagnosis 字段来源（这是 Agent B 的真正输入）</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 220px;">字段</th>
+            <th style="width: 140px;">来源</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="field">type_code</span></td><td><span class="src calc">Agent A 计算</span></td><td>D1段-D2段-D3段拼接，如 MA-CL-H</td></tr>
+          <tr><td><span class="field">dimensions.D1 ~ D5</span></td><td><span class="src calc">Agent A 计算</span></td><td>raw / interp / top2 / quadrant / pursue_avoid 等</td></tr>
+          <tr><td><span class="field">highlights[].code</span></td><td><span class="src calc">Agent A 规则引擎</span></td><td>跨维度审查触发的高光 code 列表</td></tr>
+          <tr><td><span class="field">type_name</span></td><td><span class="src db">base_love_type</span></td><td>WHERE type_code = ? → 报告标题</td></tr>
+          <tr><td><span class="field">type_tagline</span></td><td><span class="src db">base_love_type</span></td><td>副标题</td></tr>
+          <tr><td><span class="field">type_anchor</span></td><td><span class="src db">base_love_type.detail</span></td><td><strong>开篇画像锚定句</strong>，prompt 强制要求从此句展开</td></tr>
+          <tr><td><span class="field">D4_details[]</span></td><td><span class="src db">base_D4_type</span></td><td>top2 各自的 name + 一段描述</td></tr>
+          <tr><td><span class="field">D5_guide</span></td><td><span class="src db">base_D5_quadrant</span></td><td>9 宫格象限对应的写作方向参考</td></tr>
+          <tr><td><span class="field">D5_style_name</span></td><td><span class="src db">base_D5_quadrant</span></td><td>风格名，前端人格卡标签</td></tr>
+          <tr><td><span class="field">segment_decode[]</span></td><td><span class="src db">base_segment_decode</span></td><td>D1/D2/D3 段落代码 → 中文标签</td></tr>
+          <tr><td><span class="field">highlights[].name_cn / severity<br>.is_positive / report_seed<br>.interp_path / trigger_condition</span></td><td><span class="src db">highlights</span></td><td>权威亮点信息 enrich，覆盖 Agent A 输出</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color: var(--text-dim); font-size: 12.5px; margin-top: 12px; padding-left: 4px;">
+      <span class="src calc" style="font-size: 11px;">绿</span> Agent A 纯 Python 算出　<span class="src db" style="font-size: 11px;">蓝</span> /quiz/submit Enrich 阶段从 DB 表查询注入　— 两类合并写入 <code style="font-family: var(--mono); color: var(--text);">assessment.diagnosis_json</code>
+    </p>
+  </section>
+
+  <!-- ════ User Message 拼装 ════ -->
+  <section>
+    <h2><span class="num">03</span>Agent B 输入：System Prompt + User Message</h2>
+    <div class="split">
+      <div class="col">
+        <div class="col-label"><span class="dot in"></span>SYSTEM PROMPT（静态文件）</div>
+        <pre class="code"><span class="c"># 来源</span>
+docs/agent-b-system-prompt.md
+
+<span class="c"># 加载方式（启动时一次）</span>
+<span class="k">AGENT_B_SYSTEM_PROMPT</span> =
+  _PROMPT_FILE.read_text()
+    .split(<span class="s">"\n## 版本记录"</span>)[<span class="n">0</span>]
+    .rstrip()
+
+<span class="c"># 内容性质</span>
+- 产品写的写作规则长文
+- 规定 --Section-- 标记协议
+- 段落字数 / 语气 / 句式风格
+- 追逃视角 / aligned=false 特殊处理</pre>
+      </div>
+      <div class="col">
+        <div class="col-label"><span class="dot in"></span>USER MESSAGE（每次请求动态拼装）</div>
+<pre class="code"><span class="h"># 用户类型</span>
+- 类型代码：MA-CL-H
+- 类型名（用作报告标题）：温柔的守望者
+- 副标题：你的稳定是底气，不是回避
+- 类型锚定句（开篇必须以此展开）：&lt;type_anchor&gt;
+
+<span class="h"># 五维度结果（D1-D5 全部展开）</span>
+- D1 依恋：interp = moderate_anxious
+- D2 边界：interp = clear
+- D3 冲突：interp = healthy，<span class="k">追逃角色 = pursue</span>
+- D4 爱的语言：top2 = ['T1', 'T2']
+    · T1 言语肯定：&lt;detail&gt;
+    · T2 精心时刻：&lt;detail&gt;
+  <span class="c">aligned=false：用户主动选 T3，必须追加盲区段</span>
+- D5 表达风格：直爽热情型（高直接×高分享）
+    · 该象限写作方向：&lt;D5_guide&gt;
+
+<span class="h"># 深层洞察素材（每条 150-250 字）</span>
+1. 标题：压力表达崩塌 | severity=moderate
+   写作种子：&lt;report_seed&gt;
+   解读路径：&lt;interp_path&gt;
+2. ...</pre>
+      </div>
+    </div>
+    <p style="color: var(--text-dim); font-size: 12.5px; margin-top: 12px; padding-left: 4px;">
+      由 <code style="font-family: var(--mono); color: var(--text);">app/agents/agent_b.py · build_user_message(diagnosis)</code> 拼装。把字典表静态知识切片注入 prompt——LLM 不需要扫全表。
+    </p>
+  </section>
+
+  <!-- ════ Section 协议 ════ -->
+  <section>
+    <h2><span class="num">04</span>LLM 输出格式：--Section-- 标记协议</h2>
+    <div class="sec-grid">
+      <div class="sec-pill"><span class="marker">--Title--</span><span class="label">类型标题</span></div>
+      <div class="sec-pill"><span class="marker">--Opening--</span><span class="label">开篇画像</span></div>
+      <div class="sec-pill"><span class="marker">--Attachment--</span><span class="label">依恋段(D1)</span></div>
+      <div class="sec-pill"><span class="marker">--Boundary--</span><span class="label">边界段(D2)</span></div>
+      <div class="sec-pill"><span class="marker">--Conflict--</span><span class="label">冲突段(D3)</span></div>
+      <div class="sec-pill"><span class="marker">--Language--</span><span class="label">爱语段(D4)</span></div>
+      <div class="sec-pill"><span class="marker">--Style--</span><span class="label">表达风格(D5)</span></div>
+      <div class="sec-pill"><span class="marker">--Highlight--</span><span class="label">深层洞察</span></div>
+      <div class="sec-pill"><span class="marker">--Suggestion--</span><span class="label">收尾建议</span></div>
+    </div>
+    <div class="col">
+      <div class="col-label"><span class="dot out"></span>豆包返回（流式 chunk 拼接后）</div>
+<pre class="code"><span class="k">--Title--</span>《温柔的守望者》
+
+<span class="k">--Opening--</span>你不是没有边界感的人，你只是把边界画得离自己更近...
+
+<span class="k">--Attachment--</span>当对方沉默或冷淡时，你的依恋系统会被激活...
+
+<span class="k">--Boundary--</span>...
+
+<span class="k">--Conflict--</span>在冲突中你倾向于扮演"追"的角色...
+
+<span class="k">--Language--</span>你最被打动的两种爱的语言是言语肯定和精心时刻...
+
+<span class="k">--Style--</span>你的表达风格属于直爽热情型...
+
+<span class="k">--Highlight--</span>
+<span class="n">High_1</span>: 压力表达崩塌——日常小事你说得清楚，但...
+<span class="n">High_2</span>: 追逃循环（追方）——他越冷你越靠近...
+
+<span class="k">--Suggestion--</span>明天起，试着把"先确认他是不是生气"
+换成"先确认我自己是不是太累了"...</pre>
+    </div>
+    <p style="color: var(--text-dim); font-size: 12.5px; margin-top: 12px; padding-left: 4px;">
+      由 system prompt 强制约束格式。后端 <code style="font-family: var(--mono); color: var(--text);">_SectionStreamer</code> 用正则 <code style="font-family: var(--mono); color: var(--gold);">/--([A-Za-z]+)--/</code> 实时识别标记，把 chunk 流切成 typed 消息推前端。
+    </p>
+  </section>
+
+  <!-- ════ WebSocket 时序 ════ -->
+  <section>
+    <h2><span class="num">05</span>WebSocket 消息时序（前端边收边渲染）</h2>
+    <div class="timeline">
+      <div class="msg meta"><span class="t">+0ms</span><span class="type">meta</span><span class="payload">type_code / type_name / dim_chart / highlights_meta / segment_decode <span class="c">(一次性下发，前端立即渲染人格卡)</span></span></div>
+      <div class="msg start"><span class="t">+180ms</span><span class="type">section_start</span><span class="payload">section: <span class="v">"Title"</span></span></div>
+      <div class="msg chunk"><span class="t">+220ms</span><span class="type">section_chunk</span><span class="payload">section: "Title", text: <span class="v">"《温柔的"</span></span></div>
+      <div class="msg chunk"><span class="t">+260ms</span><span class="type">section_chunk</span><span class="payload">section: "Title", text: <span class="v">"守望者》"</span></span></div>
+      <div class="msg end"><span class="t">+280ms</span><span class="type">section_end</span><span class="payload">section: "Title"</span></div>
+      <div class="msg start"><span class="t">+290ms</span><span class="type">section_start</span><span class="payload">section: <span class="v">"Opening"</span></span></div>
+      <div class="msg chunk"><span class="t">…</span><span class="type">section_chunk</span><span class="payload">section: "Opening", text: <span class="v">"你不是没有边界感..."</span></span></div>
+      <div class="msg end"><span class="t">…</span><span class="type">section_end</span><span class="payload">section: "Opening"</span></div>
+      <div class="msg start"><span class="t">…</span><span class="type">section_start</span><span class="payload">section: "D1" → "D2" → ... → "Highlight" → "Suggestion"</span></div>
+      <div class="msg done"><span class="t">+12s</span><span class="type">done</span><span class="payload">personality_type / report_json <span class="c">(报告生成完毕)</span></span></div>
+    </div>
+    <p style="color: var(--text-dim); font-size: 12.5px; margin-top: 12px; padding-left: 4px;">
+      前端 <code style="font-family: var(--mono); color: var(--text);">report.js</code> 按 <code style="font-family: var(--mono); color: var(--accent);">section</code> 字段路由到对应数据槽（<code style="font-family: var(--mono); color: var(--text);">sec.Title / sec.Opening / sec.D1 ...</code>）边收边渲染，不等全部到齐。
+    </p>
+  </section>
+
+  <!-- ════ Status / DB 落库 ════ -->
+  <section>
+    <h2><span class="num">06</span>Assessment 状态流转 & 落库字段</h2>
+    <div class="persist-grid">
+      <div class="persist-card">
+        <h4>① pending<span class="status-badge s1">INITIAL</span></h4>
+        <div class="fields">
+          <span class="f">user_id</span> · <span class="f">session_id</span><br>
+          <span class="f">answers_json</span>: <span class="nil">null</span><br>
+          <span class="f">diagnosis_json</span>: <span class="nil">null</span><br>
+          <span class="f">report_text</span>: <span class="nil">null</span>
+        </div>
+      </div>
+      <div class="persist-card">
+        <h4>② analyzed<span class="status-badge s2">AFTER AGENT A</span></h4>
+        <div class="fields">
+          <span class="f">answers_json</span>: <span class="v">[...30 题答案...]</span><br>
+          <span class="f">diagnosis_json</span>: <span class="v">{type_code, dims, highlights, ...}</span><br>
+          <span class="f">report_text</span>: <span class="nil">null</span>
+        </div>
+      </div>
+      <div class="persist-card">
+        <h4>③ generating<span class="status-badge s3">AGENT B RUNNING</span></h4>
+        <div class="fields">
+          <span class="f">status</span>: <span class="v">"generating"</span> <span class="c">(乐观锁防并发)</span><br>
+          <span class="c">条件 UPDATE：仅当 status=analyzed 才能切到 generating</span><br>
+          <span class="c">失败回滚：异常时 status 重置回 analyzed 允许重试</span>
+        </div>
+      </div>
+      <div class="persist-card">
+        <h4>④ complete<span class="status-badge s4">FINAL</span></h4>
+        <div class="fields">
+          <span class="f">report_text</span>: <span class="v">"--Title--...--Suggestion--..."</span><br>
+          <span class="f">report_json</span>: <span class="v">{"raw_llm_output": "..."}</span><br>
+          <span class="f">personality_type</span>: <span class="v">"MA-CL-H"</span><br>
+          <span class="c">后续请求直接命中缓存，不再调 LLM</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ 关键代码 ════ -->
+  <section>
+    <h2><span class="num">07</span>关键代码位置</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 280px;">模块</th>
+            <th>职责</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="field">app/api/quiz.py · quiz_submit</span></td><td>30 题接收 → Agent A → 5 张表 enrich → 写 diagnosis_json</td></tr>
+          <tr><td><span class="field">app/agents/agent_a.py</span></td><td>纯 Python 评分引擎（无 LLM），输出 type_code / dimensions / highlights</td></tr>
+          <tr><td><span class="field">app/services/supabase_client.py</span></td><td>5 个 _fetch_*_sync 函数：questions / love_type / d4 / d5 / segment_decode / highlights</td></tr>
+          <tr><td><span class="field">app/agents/agent_b.py · build_user_message</span></td><td>diagnosis dict → 自然语言 prompt 字符串</td></tr>
+          <tr><td><span class="field">app/agents/agent_b.py · run_stream</span></td><td>异步生成器，yield text chunks + 最终 dict</td></tr>
+          <tr><td><span class="field">app/services/llm_client.py · stream_chat_completion</span></td><td>豆包 SSE 流式底层调用，解析 data: [DONE]</td></tr>
+          <tr><td><span class="field">app/api/ws_result.py · _SectionStreamer</span></td><td>正则切 --Section--，发 typed WS 消息</td></tr>
+          <tr><td><span class="field">app/services/agent_b_runner.py · run_and_persist</span></td><td>/result 轮询路径的后台 Agent B 调度器，落库</td></tr>
+          <tr><td><span class="field">docs/agent-b-system-prompt.md</span></td><td>System Prompt 源文件，启动时一次性读入</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════ Footer ════ -->
+  <div class="foot">
+    love-profiler · agent_b workflow doc · 2026-05-14
+  </div>
+
+</div>
+</body>
+</html>

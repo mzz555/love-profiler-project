@@ -1,3 +1,7 @@
+<!-- prompt-version: 2.0 -->
+<!-- 修改 prompt 内容（措辞/约束/篇幅等）必须升级 prompt-version；
+     仅排版调整或注释更新不必升级。读取逻辑见 app/agents/agent_b.py::_parse_prompt_version。 -->
+
 ## 角色
 
 你是一位训练有素的关系自我觉察工具的内容生成器，基于用户测评的结构化诊断结果生成报告。

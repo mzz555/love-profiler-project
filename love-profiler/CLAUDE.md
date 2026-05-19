@@ -172,12 +172,18 @@ Agent B 输出**强制带 `--Section--` 标记的纯文本**（不是 JSON），
 ```
 --Title--      → 类型名（书名号）
 --Opening--    → 开篇画像
---D1-- ~ --D5--→ 五维度展开
---Highlight--  → High_1: ... High_2: ... 子项
+--Attachment-- → D1 依恋段
+--Boundary--   → D2 边界段
+--Conflict--   → D3 冲突段
+--Language--   → D4 爱的语言段
+--Style--      → D5 表达风格段
+--Highlight--  → High_1: ... High_2: ... 子项（diagnosis.highlights 为空时省略）
 --Suggestion-- → 收尾建议
 ```
 
-WebSocket 消息类型：`meta` / `section_start` / `section_chunk` / `section_end` / `done` / `error`。旧格式（无 `--Section--` 标记）通过 `portrait_chunk` 兜底回放。前端 `report.js` 按 section 字段路由到对应 `sec.{Title/Opening/D1...}` 数据槽。
+⚠️ 标记名以 `docs/agent-b-system-prompt.md` 的"输出格式"段为权威；`_SEC_RE` 是 `[A-Za-z]+`，含数字的标记（如假想的 `--D1--`）不会被识别。
+
+WebSocket 消息类型：`meta` / `section_start` / `section_chunk` / `section_end` / `done` / `error`。旧格式（无 `--Section--` 标记）通过 `portrait_chunk` 兜底回放。前端 `report.js` 按 section 字段路由到对应 `sec.{Title/Opening/Attachment/...}` 数据槽。
 
 完整提示词在 `docs/agent-b-system-prompt.md`。
 

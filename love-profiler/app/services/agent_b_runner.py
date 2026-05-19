@@ -5,7 +5,12 @@ import json
 import logging
 import time
 
-from app.agents.agent_b import AgentBError, run as agent_b_run
+from app.agents.agent_b import (
+    AgentBError,
+    PROMPT_VERSION,
+    REPORT_VERSION,
+    run as agent_b_run,
+)
 from app.database import SessionLocal
 from app.models.assessment import Assessment
 from app.services.llm_client import LLMError
@@ -40,6 +45,8 @@ async def run_and_persist(
                     "personality_type": personality_type,
                     "report_text": report_text,
                     "status": "complete",
+                    "prompt_version": PROMPT_VERSION,
+                    "report_version": REPORT_VERSION,
                 },
                 synchronize_session=False,
             )

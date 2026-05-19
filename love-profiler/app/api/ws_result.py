@@ -25,7 +25,12 @@ import jwt
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from app.agents.agent_b import AgentBError, run_stream as agent_b_run_stream
+from app.agents.agent_b import (
+    AgentBError,
+    PROMPT_VERSION,
+    REPORT_VERSION,
+    run_stream as agent_b_run_stream,
+)
 from app.database import get_db
 from app.middleware.auth import TOKEN_ALGORITHM, _jwt_secret
 from app.models.assessment import Assessment
@@ -350,6 +355,8 @@ async def _stream_agent_b(
         rec.personality_type = ptype
         rec.report_text = report_text
         rec.status = "complete"
+        rec.prompt_version = PROMPT_VERSION
+        rec.report_version = REPORT_VERSION
         db.commit()
 
     ttft_ms  = int((t_first_token - t0) * 1000) if t_first_token else -1
