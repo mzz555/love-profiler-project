@@ -280,6 +280,28 @@ def test_result_returns_402_when_not_unlocked(client, db_session, monkeypatch):
     assert response.status_code == 402
 
 
+def test_result_returns_429_when_quota_exceeded(client, db_session, monkeypatch):
+    """B.1：当日 token quota 用满 → 429。"""
+    from datetime import date
+    from app.models.user_token_quota import UserTokenQuota
+
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.setenv("USER_DAILY_TOKEN_QUOTA", "100")
+
+    user, headers = _make_user_and_token(db_session, "o_result_429")
+    a = _make_analyzed_assessment(db_session, user.id, "sess-429")
+    _make_paid_order(db_session, user.id, a.id)
+    db_session.add(UserTokenQuota(
+        user_id=user.id, usage_date=date.today(),
+        prompt_tokens=70, completion_tokens=50, total_tokens=120,
+    ))
+    db_session.commit()
+
+    response = client.post("/result", json={"session_id": a.session_id}, headers=headers)
+    assert response.status_code == 429
+    assert "今日测评次数已达上限" in response.json()["detail"]
+
+
 def test_result_returns_400_when_diagnosis_missing(client, db_session):
     """analyzed 状态但 diagnosis_json 为空 → 400（兜底分支，正常流程不应出现）。"""
     user, headers = _make_user_and_token(db_session, "o_result_no_diag")

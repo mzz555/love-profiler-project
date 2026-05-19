@@ -339,6 +339,64 @@ async def test_stream_skips_malformed_data_lines(monkeypatch):
     assert out == ["good"]
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_stream_writes_usage_to_sink_when_provided(monkeypatch):
+    """B.1：当传入 usage_sink，最后一个 usage event 应解析后写入 sink。"""
+    import json as _j
+    monkeypatch.setenv("DOUBAO_API_KEY", FAKE_API_KEY)
+    monkeypatch.setenv("DOUBAO_MODEL", "doubao-pro-32k")
+
+    body = (
+        'data: ' + _j.dumps({"choices": [{"delta": {"content": "你好"}}]}) + '\n\n'
+        'data: ' + _j.dumps({"choices": [{"delta": {"content": "世界"}}]}) + '\n\n'
+        'data: ' + _j.dumps({
+            "choices": [{"delta": {}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 123, "completion_tokens": 45, "total_tokens": 168},
+        }) + '\n\n'
+        'data: [DONE]\n\n'
+    )
+    respx.post(DOUBAO_API_URL).mock(
+        return_value=httpx.Response(200, text=body,
+                                    headers={"Content-Type": "text/event-stream"})
+    )
+
+    sink: dict = {}
+    out: list[str] = []
+    async for piece in stream_chat_completion(
+        system_prompt=SYSTEM_PROMPT, messages=MESSAGES, usage_sink=sink,
+    ):
+        out.append(piece)
+    assert out == ["你好", "世界"]
+    assert sink == {"prompt_tokens": 123, "completion_tokens": 45}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_stream_without_sink_ignores_usage(monkeypatch):
+    """没传 usage_sink 时不出错，正常返回所有 content chunk。"""
+    import json as _j
+    monkeypatch.setenv("DOUBAO_API_KEY", FAKE_API_KEY)
+    monkeypatch.setenv("DOUBAO_MODEL", "doubao-pro-32k")
+
+    body = (
+        'data: ' + _j.dumps({"choices": [{"delta": {"content": "a"}}]}) + '\n\n'
+        'data: ' + _j.dumps({"choices": [], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}) + '\n\n'
+        'data: [DONE]\n\n'
+    )
+    respx.post(DOUBAO_API_URL).mock(
+        return_value=httpx.Response(200, text=body,
+                                    headers={"Content-Type": "text/event-stream"})
+    )
+
+    out: list[str] = []
+    async for piece in stream_chat_completion(
+        system_prompt=SYSTEM_PROMPT, messages=MESSAGES,
+    ):
+        out.append(piece)
+    assert out == ["a"]
+
+
 # ---------------------------------------------------------------------------
 # _write_db_log 边界 + JSONL 写失败兜底
 # ---------------------------------------------------------------------------

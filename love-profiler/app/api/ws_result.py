@@ -36,6 +36,11 @@ from app.middleware.auth import TOKEN_ALGORITHM, _jwt_secret
 from app.models.assessment import Assessment
 from app.services.access_control import is_unlocked
 from app.services.llm_client import LLMError
+from app.services.token_quota import (
+    QuotaExceededError,
+    add_usage as quota_add_usage,
+    check_quota,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -87,7 +92,17 @@ async def ws_result(websocket: WebSocket, db: Session = Depends(get_db)) -> None
         if assessment.status == "complete" and assessment.report_text:
             await _stream_cached(websocket, assessment)
         elif assessment.status == "analyzed" and assessment.diagnosis_json:
-            await _stream_agent_b(websocket, db, assessment, session_id)
+            try:
+                check_quota(db, user_id=user_id)
+            except QuotaExceededError as exc:
+                logger.warning("[ws/result] user_id=%s 配额超限 used=%d limit=%d",
+                               user_id, exc.used, exc.limit)
+                await _send(websocket, {
+                    "type": "error", "code": 429,
+                    "message": "今日测评次数已达上限，请明天再来",
+                })
+                return
+            await _stream_agent_b(websocket, db, assessment, session_id, user_id=user_id)
         elif assessment.status == "generating":
             # Another connection (or the polling endpoint) is already running Agent B.
             # The frontend should reconnect once it sees a "complete" via /result.
@@ -287,6 +302,7 @@ async def _stream_agent_b(
     db: Session,
     assessment: Assessment,
     session_id: str,
+    user_id: int,
 ) -> None:
     """Run Agent B with real LLM streaming, forward tokens, persist on completion."""
     diagnosis = json.loads(assessment.diagnosis_json)
@@ -348,6 +364,8 @@ async def _stream_agent_b(
         return
 
     report_text = final_report.get("report_text", full_text.strip())
+    prompt_tokens = int(final_report.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(final_report.get("completion_tokens", 0) or 0)
 
     rec = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if rec:
@@ -359,11 +377,22 @@ async def _stream_agent_b(
         rec.report_version = REPORT_VERSION
         db.commit()
 
+    try:
+        quota_add_usage(
+            db, user_id=user_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+    except Exception as exc:  # 配额写失败不该阻塞已经成功的报告
+        logger.warning("[ws/result] quota_add_usage 失败 user_id=%s: %s", user_id, exc)
+
     ttft_ms  = int((t_first_token - t0) * 1000) if t_first_token else -1
     total_ms = int((time.monotonic() - t0) * 1000)
     logger.info(
-        "[ws/result] agent_b 完成 type=%s chars=%d TTFT=%dms total=%dms",
-        ptype, len(report_text), ttft_ms, total_ms,
+        "[ws/result] agent_b 完成 type=%s chars=%d tokens=%d+%d TTFT=%dms total=%dms",
+        ptype, len(report_text),
+        prompt_tokens, completion_tokens,
+        ttft_ms, total_ms,
     )
 
     await _send(websocket, {

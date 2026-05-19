@@ -26,6 +26,7 @@ from app.models.assessment import Assessment
 from app.services import agent_b_runner
 from app.services.access_control import is_unlocked
 from app.services.llm_client import LLMError
+from app.services.token_quota import QuotaExceededError, check_quota
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/result", tags=["result"])
@@ -115,11 +116,24 @@ async def get_result(
             detail="Diagnosis not available",
         )
 
+    try:
+        check_quota(db, user_id=user_id)
+    except QuotaExceededError as exc:
+        logger.warning("[result] user_id=%s 配额超限 used=%d limit=%d",
+                       user_id, exc.used, exc.limit)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="今日测评次数已达上限，请明天再来",
+        ) from exc
+
     diagnosis = json.loads(assessment.diagnosis_json)
     assessment.status = "generating"
     db.commit()
     logger.info("[result] 启动 agent_b 后台任务 assessment_id=%s", assessment.id)
-    agent_b_runner.schedule(assessment.id, body.session_id, diagnosis, log_prefix="result/bg")
+    agent_b_runner.schedule(
+        assessment.id, body.session_id, diagnosis,
+        log_prefix="result/bg", user_id=user_id,
+    )
 
     return ResultResponse(status="generating")
 
@@ -163,6 +177,18 @@ async def stream_result(
 
     if not is_unlocked(db, assessment.id, user_id):
         raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="报告未解锁")
+
+    # 缓存命中不计配额；只在需要现走 LLM 时预检
+    if assessment.status != "complete" or not assessment.report_text:
+        try:
+            check_quota(db, user_id=user_id)
+        except QuotaExceededError as exc:
+            logger.warning("[result/stream] user_id=%s 配额超限 used=%d limit=%d",
+                           user_id, exc.used, exc.limit)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="今日测评次数已达上限，请明天再来",
+            ) from exc
 
     # Snapshot all DB data before leaving the request-scoped session
     assessment_id = assessment.id

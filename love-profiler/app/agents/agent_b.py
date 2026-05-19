@@ -136,11 +136,13 @@ async def run_stream(diagnosis: dict, session_id: str | None = None):
     sid_short = (session_id or "")[:8]
     logger.info("[agent_b/in] session=%s user_msg=\n%s", sid_short, user_msg)
     all_text = ""
+    usage_sink: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
 
     async for chunk in stream_chat_completion(
         system_prompt=AGENT_B_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_msg}],
         temperature=0.6,
+        usage_sink=usage_sink,
     ):
         all_text += chunk
         yield chunk
@@ -157,17 +159,29 @@ async def run_stream(diagnosis: dict, session_id: str | None = None):
         logger.warning("[agent_b/quality] soft warning session=%s: %s", sid_short, w)
 
     logger.info(
-        "[agent_b/out] session=%s chars=%d warnings=%d report_text=\n%s",
-        sid_short, len(all_text), len(warnings), all_text,
+        "[agent_b/out] session=%s chars=%d warnings=%d tokens=%d+%d report_text=\n%s",
+        sid_short, len(all_text), len(warnings),
+        usage_sink["prompt_tokens"], usage_sink["completion_tokens"],
+        all_text,
     )
     yield {
         "report_text": all_text,
         "quality_warnings": [str(w) for w in warnings],
+        "prompt_tokens": usage_sink["prompt_tokens"],
+        "completion_tokens": usage_sink["completion_tokens"],
     }
 
 
-async def run(diagnosis: dict, session_id: str | None = None) -> str:
+async def run(
+    diagnosis: dict,
+    session_id: str | None = None,
+    usage_sink: dict | None = None,
+) -> str:
     """Run Agent B: diagnosis dict → plain text report.
+
+    Args:
+        usage_sink: 可选 dict — 若提供，会累加所有 attempt 的 token 用量到
+                    {"prompt_tokens": int, "completion_tokens": int}。
 
     Returns:
         Full report text string.
@@ -181,9 +195,14 @@ async def run(diagnosis: dict, session_id: str | None = None) -> str:
     logger.info("[agent_b/in] session=%s user_msg=\n%s", sid_short, base_msg)
     retry_suffix = "\n\n【重试要求】请直接输出报告纯文本，不要输出 JSON 或代码围栏。"
 
+    if usage_sink is not None:
+        usage_sink.setdefault("prompt_tokens", 0)
+        usage_sink.setdefault("completion_tokens", 0)
+
     last_quality_error: QualityGateError | None = None
     for attempt in range(2):
         content = base_msg if attempt == 0 else base_msg + retry_suffix
+        per_call: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
         raw = await chat_completion(
             system_prompt=AGENT_B_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}],
@@ -191,7 +210,11 @@ async def run(diagnosis: dict, session_id: str | None = None) -> str:
             agent="agent_b",
             session_id=session_id,
             retry_index=attempt,
+            usage_sink=per_call,
         )
+        if usage_sink is not None:
+            usage_sink["prompt_tokens"] += per_call["prompt_tokens"]
+            usage_sink["completion_tokens"] += per_call["completion_tokens"]
         if not raw.strip():
             continue
         try:

@@ -95,6 +95,7 @@ async def chat_completion(
     session_id: str | None = None,
     user_id: int | None = None,
     retry_index: int = 0,
+    usage_sink: dict | None = None,
 ) -> str:
     """Send a chat completion request and return the assistant reply text.
 
@@ -161,6 +162,9 @@ async def chat_completion(
         usage = data.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
+        if usage_sink is not None:
+            usage_sink["prompt_tokens"] = prompt_tokens
+            usage_sink["completion_tokens"] = completion_tokens
         status = "success"
         return reply
 
@@ -217,8 +221,14 @@ async def stream_chat_completion(
     system_prompt: str,
     messages: list[dict],
     temperature: float = 0.7,
+    usage_sink: dict | None = None,
 ) -> AsyncIterator[str]:
     """Stream chat completion, yielding text chunks as the LLM generates them.
+
+    Args:
+        usage_sink: 可选 dict — 若提供，最后一个 SSE event 解析出的 usage
+                    会写入 {"prompt_tokens": int, "completion_tokens": int}。
+                    豆包按 OpenAI 协议，需 stream_options.include_usage=true 才返回。
 
     Raises:
         LLMError: On HTTP errors or network failures.
@@ -229,6 +239,7 @@ async def stream_chat_completion(
     payload = {
         "model": model,
         "stream": True,
+        "stream_options": {"include_usage": True},
         "temperature": temperature,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -256,10 +267,21 @@ async def stream_chat_completion(
                     return
                 try:
                     chunk = json.loads(data)
-                    content = chunk["choices"][0]["delta"].get("content", "")
-                    if content:
-                        yield content
-                except (json.JSONDecodeError, KeyError, IndexError):
+                except json.JSONDecodeError:
                     continue
+                # usage 通常出现在最后一个 chunk 的顶层（OpenAI 协议 + include_usage）
+                if usage_sink is not None:
+                    usage = chunk.get("usage")
+                    if isinstance(usage, dict):
+                        if "prompt_tokens" in usage:
+                            usage_sink["prompt_tokens"] = int(usage["prompt_tokens"])
+                        if "completion_tokens" in usage:
+                            usage_sink["completion_tokens"] = int(usage["completion_tokens"])
+                try:
+                    content = chunk["choices"][0]["delta"].get("content", "")
+                except (KeyError, IndexError, TypeError):
+                    continue
+                if content:
+                    yield content
     except httpx.HTTPError as exc:
         raise LLMError(f"Network error: {exc}") from exc

@@ -43,6 +43,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api import admin, auth, history, pay, quiz, result, unlock, ws_result
 from app.database import create_tables
 from app.models import ai_call_log  # noqa: F401 — registers AiCallLog with Base
+from app.models import user_token_quota  # noqa: F401 — registers UserTokenQuota
 from app.limiter import limiter
 
 

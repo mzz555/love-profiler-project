@@ -86,6 +86,67 @@ async def test_run_and_persist_success_updates_status_and_text(shared_session_lo
 
 
 @pytest.mark.asyncio
+async def test_run_and_persist_accumulates_token_quota(shared_session_local, monkeypatch):
+    """B.1：传 user_id 后，成功路径应把 token 用量累加到 user_token_quota。"""
+    from app.models.user import User
+    from app.models.user_token_quota import UserTokenQuota
+    from datetime import date
+
+    monkeypatch.setenv("DEV_MODE", "false")
+
+    user = User(openid="o_quota_user")
+    shared_session_local.add(user)
+    shared_session_local.commit()
+    shared_session_local.refresh(user)
+
+    a = _make_generating_assessment(shared_session_local, user_id=user.id, session_id="with-quota")
+
+    async def fake_run(diagnosis, session_id=None, usage_sink=None):
+        if usage_sink is not None:
+            usage_sink["prompt_tokens"] = 800
+            usage_sink["completion_tokens"] = 500
+        return "稳重的航标——完整报告"
+
+    with patch("app.services.agent_b_runner.agent_b_run", new=fake_run):
+        await agent_b_runner.run_and_persist(
+            a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},
+            user_id=user.id,
+        )
+
+    shared_session_local.expire_all()
+    quota = (
+        shared_session_local.query(UserTokenQuota)
+        .filter_by(user_id=user.id, usage_date=date.today())
+        .one()
+    )
+    assert quota.prompt_tokens == 800
+    assert quota.completion_tokens == 500
+    assert quota.total_tokens == 1300
+
+
+@pytest.mark.asyncio
+async def test_run_and_persist_without_user_id_skips_quota(shared_session_local):
+    """user_id 缺省时不写 quota 表，保持向后兼容。"""
+    from app.models.user_token_quota import UserTokenQuota
+
+    a = _make_generating_assessment(shared_session_local, session_id="no-quota")
+
+    async def fake_run(diagnosis, session_id=None, usage_sink=None):
+        if usage_sink is not None:
+            usage_sink["prompt_tokens"] = 100
+            usage_sink["completion_tokens"] = 200
+        return "无用户 id 不写 quota"
+
+    with patch("app.services.agent_b_runner.agent_b_run", new=fake_run):
+        await agent_b_runner.run_and_persist(
+            a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},
+        )
+
+    shared_session_local.expire_all()
+    assert shared_session_local.query(UserTokenQuota).count() == 0
+
+
+@pytest.mark.asyncio
 async def test_run_and_persist_skips_update_when_status_not_generating(shared_session_local):
     """已经 complete 的 assessment 不应被 runner 覆盖（条件更新保护）。"""
     a = _make_generating_assessment(shared_session_local, session_id="already-complete")

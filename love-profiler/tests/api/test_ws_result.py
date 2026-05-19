@@ -375,6 +375,81 @@ def test_ws_cached_legacy_format_uses_portrait_chunk(client, db_session, user_id
     assert types[-1] == "done"
 
 
+def test_ws_returns_429_when_quota_exceeded(client, db_session, user_id, monkeypatch):
+    """B.1：当日 token quota 已用满 → 429 + 不进 Agent B 流。"""
+    from datetime import date
+    from app.models.user_token_quota import UserTokenQuota
+
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.setenv("USER_DAILY_TOKEN_QUOTA", "100")
+
+    a = _make_assessment(db_session, user_id, status="analyzed")
+    _make_paid_order(db_session, user_id, a.id)
+    db_session.add(UserTokenQuota(
+        user_id=user_id, usage_date=date.today(),
+        prompt_tokens=70, completion_tokens=50, total_tokens=120,
+    ))
+    db_session.commit()
+
+    token = _auth_token(user_id)
+    with patch("app.api.ws_result.agent_b_run_stream") as mock_stream:
+        with client.websocket_connect(f"/ws/result?token={token}") as ws:
+            ws.send_text(json.dumps({"session_id": "ws-test-session"}))
+            msg = json.loads(ws.receive_text())
+    assert msg["type"] == "error"
+    assert msg["code"] == 429
+    assert "今日测评次数已达上限" in msg["message"]
+    # 不应该启动 Agent B
+    mock_stream.assert_not_called()
+
+
+def test_ws_analyzed_writes_token_quota_after_success(client, db_session, user_id, monkeypatch):
+    """B.1：成功跑完 Agent B 后，token 用量应落到 user_token_quota。"""
+    from datetime import date
+    from app.models.user_token_quota import UserTokenQuota
+
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.setenv("USER_DAILY_TOKEN_QUOTA", "100000")
+
+    a = _make_assessment(
+        db_session, user_id, status="analyzed",
+        diagnosis={
+            "type_code": "S-CL-H", "type_name": "稳重的航标",
+            "type_tagline": "副", "dimensions": {}, "highlights": [],
+        },
+    )
+    _make_paid_order(db_session, user_id, a.id)
+
+    async def fake_run_stream(diagnosis, session_id=None):
+        for piece in ("--Title--", "稳重的航标"):
+            yield piece
+        yield {
+            "report_text": "--Title--稳重的航标",
+            "quality_warnings": [],
+            "prompt_tokens": 850,
+            "completion_tokens": 420,
+        }
+
+    token = _auth_token(user_id)
+    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+        with client.websocket_connect(f"/ws/result?token={token}") as ws:
+            ws.send_text(json.dumps({"session_id": "ws-test-session"}))
+            while True:
+                data = json.loads(ws.receive_text())
+                if data["type"] == "done":
+                    break
+
+    db_session.expire_all()
+    quota = (
+        db_session.query(UserTokenQuota)
+        .filter_by(user_id=user_id, usage_date=date.today())
+        .one()
+    )
+    assert quota.prompt_tokens == 850
+    assert quota.completion_tokens == 420
+    assert quota.total_tokens == 1270
+
+
 def test_ws_analyzed_runs_agent_b_and_writes_complete(client, db_session, user_id):
     """status=analyzed → 跑 Agent B 流式 → 写库 status=complete。"""
     a = _make_assessment(
