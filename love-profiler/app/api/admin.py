@@ -25,6 +25,7 @@ from sqlalchemy.orm import defer
 
 from app.database import get_db
 from app.models.ai_call_log import AiCallLog
+from app.services.admin_metrics import compute_llm_metrics
 
 
 _SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -360,6 +361,23 @@ async def admin_overview(
     return result
 
 
+@router.get("/api/metrics/llm", include_in_schema=False)
+async def metrics_llm(
+    hours:  int = Query(default=24, ge=1, le=168),  # 最多 1 周
+    top_n:  int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """LLM 调用监控指标（Phase D.1）。
+
+    返回结构：
+      window_hours, duration{p50,p95,p99,avg,max,count}, hourly_trend[],
+      top_users[{user_id, openid_masked, prompt/completion/total_tokens}],
+      by_agent[{agent, total, success, error, error_rate}]
+    """
+    return compute_llm_metrics(db, hours=hours, top_n=top_n)
+
+
 @router.get("/api/{table_name}", include_in_schema=False)
 async def admin_table_list(
     table_name: str = Path(...),
@@ -642,6 +660,18 @@ pre.code{background:#0f1117;border:1px solid #1e2535;border-radius:6px;
 .ll.debug{color:#475569}
 .ll.hi{background:#1e3a5f}
 .last-upd{color:#475569;font-size:12px;margin-left:auto}
+/* metrics tab — trend bar chart */
+.trend-box{background:#0a0d14;border:1px solid #1e2535;border-radius:8px;
+           padding:14px;display:flex;align-items:flex-end;gap:2px;
+           min-height:160px}
+.trend-col{flex:1;display:flex;flex-direction:column;align-items:center;
+           justify-content:flex-end;gap:2px;min-width:0;cursor:default}
+.trend-bar{width:100%;background:linear-gradient(180deg,#3b82f6,#1e40af);
+           border-radius:2px 2px 0 0;min-height:1px;transition:opacity .15s}
+.trend-bar.err{background:linear-gradient(180deg,#f87171,#7f1d1d)}
+.trend-col:hover .trend-bar{opacity:.7}
+.trend-col .lbl{color:#475569;font-size:9px;margin-top:4px;
+                white-space:nowrap;font-family:"SF Mono",monospace}
 </style>
 </head>
 <body>
@@ -657,6 +687,7 @@ pre.code{background:#0f1117;border:1px solid #1e2535;border-radius:6px;
 
 <div class="tabs">
   <button class="tab-btn active" onclick="switchTab('calls',this)">📊 AI 调用</button>
+  <button class="tab-btn" onclick="switchTab('metrics',this)">📈 指标</button>
   <button class="tab-btn" onclick="switchTab('console',this)">🖥 控制台日志</button>
 </div>
 
@@ -699,6 +730,70 @@ pre.code{background:#0f1117;border:1px solid #1e2535;border-radius:6px;
     </tr></thead>
     <tbody id="tbody"><tr><td colspan="11" class="empty">加载中…</td></tr></tbody>
   </table>
+  </div>
+</div>
+
+<!-- ── Tab: Metrics (Phase D.1) ──────────────────────── -->
+<div id="tab-metrics" class="tab-pane">
+  <div class="flt" style="padding-top:16px">
+    <label>窗口</label>
+    <select id="mw" onchange="loadMetrics()">
+      <option value="6">最近 6h</option>
+      <option value="24" selected>最近 24h</option>
+      <option value="72">最近 3 天</option>
+      <option value="168">最近 7 天</option>
+    </select>
+    <label>Top N 用户</label>
+    <select id="mtn" onchange="loadMetrics()">
+      <option value="5">5</option>
+      <option value="10" selected>10</option>
+      <option value="20">20</option>
+    </select>
+    <span id="lu3" class="last-upd"></span>
+  </div>
+
+  <!-- 延迟分位数卡片 -->
+  <div class="stats" style="grid-template-columns:repeat(6,1fr)">
+    <div class="sc"><div class="lbl">P50</div><div class="val" id="md-p50">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">P95</div><div class="val" id="md-p95">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">P99</div><div class="val" id="md-p99">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">Max</div><div class="val" id="md-max">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">Avg</div><div class="val" id="md-avg">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">成功样本</div><div class="val" id="md-cnt">—</div></div>
+  </div>
+
+  <!-- 调用趋势：bar chart -->
+  <div style="padding:0 24px 8px">
+    <h4 style="color:#64748b;font-size:11px;text-transform:uppercase;
+               letter-spacing:.05em;margin-bottom:8px">调用趋势</h4>
+    <div class="trend-box" id="trend"></div>
+  </div>
+
+  <!-- by_agent 表格 + top_users 表格 并排 -->
+  <div style="padding:0 24px 30px;display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px">
+    <div class="panel">
+      <h4>按 Agent 错误率</h4>
+      <table style="width:100%;font-size:12px;margin-top:6px">
+        <thead><tr>
+          <th>Agent</th><th>总数</th><th>成功</th><th>失败</th><th>错误率</th>
+        </tr></thead>
+        <tbody id="agent-tbody"><tr><td colspan="5" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h4>今日 Token 消耗 Top 用户</h4>
+      <table style="width:100%;font-size:12px;margin-top:6px">
+        <thead><tr>
+          <th>用户</th><th>Prompt</th><th>Comp</th><th>Total</th>
+        </tr></thead>
+        <tbody id="topu-tbody"><tr><td colspan="4" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -766,6 +861,7 @@ function switchTab(name, btn){
   document.getElementById('tab-'+name).classList.add('active');
   btn.classList.add('active');
   if(name==='console') loadConsole();
+  if(name==='metrics') loadMetrics();
 }
 
 // ── spinner ────────────────────────────────────────────
@@ -928,10 +1024,91 @@ async function loadConsole(){
   }finally{ endLoad(); }
 }
 
+// ── Metrics tab (Phase D.1) ────────────────────────────
+async function loadMetrics(){
+  const hours=document.getElementById('mw').value;
+  const topN=document.getElementById('mtn').value;
+  startLoad();
+  try{
+    const r=await fetch(`/admin/api/metrics/llm?hours=${hours}&top_n=${topN}`);
+    if(!r.ok){
+      document.getElementById('md-cnt').textContent='—';
+      return;
+    }
+    const d=await r.json();
+    renderMetricsDuration(d.duration);
+    renderTrend(d.hourly_trend);
+    renderAgentBreakdown(d.by_agent);
+    renderTopUsers(d.top_users);
+    document.getElementById('lu3').textContent='更新于 '+new Date().toLocaleTimeString();
+  }finally{ endLoad(); }
+}
+
+function renderMetricsDuration(d){
+  document.getElementById('md-p50').textContent=d.p50||'—';
+  document.getElementById('md-p95').textContent=d.p95||'—';
+  document.getElementById('md-p99').textContent=d.p99||'—';
+  document.getElementById('md-max').textContent=d.max||'—';
+  document.getElementById('md-avg').textContent=d.avg||'—';
+  document.getElementById('md-cnt').textContent=fmtNum(d.count||0);
+}
+
+function renderTrend(buckets){
+  const box=document.getElementById('trend');
+  if(!buckets||!buckets.length){ box.innerHTML='<div class="empty">无数据</div>'; return; }
+  const max=Math.max(...buckets.map(b=>b.total),1);
+  // 容器内总高度 = 140 px（min-height 160 - padding）；最高柱 = 100% 高度
+  box.innerHTML=buckets.map(b=>{
+    const h=Math.round(b.total/max*140);
+    const errH=b.total?Math.round((b.error/b.total)*h):0;
+    const successH=h-errH;
+    const hr=b.hour.slice(11,13);
+    const title=`${b.hour}\n总数 ${b.total} · 成功 ${b.success} · 失败 ${b.error} · ${fmtNum(b.total_tokens)} tokens`;
+    return `<div class="trend-col" title="${esc(title)}">
+      <div class="trend-bar err" style="height:${errH}px"></div>
+      <div class="trend-bar" style="height:${successH}px"></div>
+      <div class="lbl">${hr}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAgentBreakdown(rows){
+  const tb=document.getElementById('agent-tbody');
+  if(!rows||!rows.length){ tb.innerHTML='<tr><td colspan="5" class="empty">无数据</td></tr>'; return; }
+  tb.innerHTML=rows.map(r=>{
+    const rate=(r.error_rate*100).toFixed(1)+'%';
+    const cls=r.error_rate>=0.1?'err':(r.error_rate>0?'':'ok');
+    return `<tr>
+      <td><b>${esc(r.agent)}</b></td>
+      <td class="mono">${fmtNum(r.total)}</td>
+      <td class="mono" style="color:#4ade80">${fmtNum(r.success)}</td>
+      <td class="mono" style="color:#f87171">${fmtNum(r.error)}</td>
+      <td><span class="badge ${cls==='err'?'error':(cls==='ok'?'success':'')}">${rate}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderTopUsers(rows){
+  const tb=document.getElementById('topu-tbody');
+  if(!rows||!rows.length){ tb.innerHTML='<tr><td colspan="4" class="empty">今日尚无消耗</td></tr>'; return; }
+  tb.innerHTML=rows.map(r=>{
+    const label=r.openid_masked?`<span class="mono">${esc(r.openid_masked)}</span>`
+                              :`<span class="dim">#${r.user_id}</span>`;
+    return `<tr>
+      <td>${label}</td>
+      <td class="mono">${fmtNum(r.prompt_tokens)}</td>
+      <td class="mono">${fmtNum(r.completion_tokens)}</td>
+      <td class="mono"><b>${fmtNum(r.total_tokens)}</b></td>
+    </tr>`;
+  }).join('');
+}
+
 // ── auto refresh ───────────────────────────────────────
 function refreshAll(){
   const tab=document.querySelector('.tab-pane.active');
-  if(tab&&tab.id==='tab-calls') loadCalls();
+  if(!tab) return;
+  if(tab.id==='tab-calls') loadCalls();
+  else if(tab.id==='tab-metrics') loadMetrics();
   else loadConsole();
 }
 

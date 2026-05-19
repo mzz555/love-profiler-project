@@ -364,3 +364,41 @@ def test_logs_dashboard_renders_html(client, monkeypatch):
     assert "text/html" in resp.headers.get("content-type", "")
     # 简单 sanity 检查：HTML 不应为空
     assert len(resp.text) > 100
+
+
+# ── /admin/api/metrics/llm（Phase D.1） ───────────────
+def test_metrics_llm_without_auth_returns_404(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
+    resp = client.get("/admin/api/metrics/llm")
+    assert resp.status_code == 404
+
+
+def test_metrics_llm_returns_all_sections(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.get("/admin/api/metrics/llm")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["window_hours"] == 24
+    assert "duration" in data
+    assert "p95" in data["duration"]
+    assert isinstance(data["hourly_trend"], list)
+    assert len(data["hourly_trend"]) == 24
+    assert isinstance(data["top_users"], list)
+    assert isinstance(data["by_agent"], list)
+
+
+def test_metrics_llm_respects_hours_query(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.get("/admin/api/metrics/llm?hours=6&top_n=3")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["window_hours"] == 6
+    assert len(data["hourly_trend"]) == 6
+
+
+def test_metrics_llm_rejects_invalid_hours(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    # hours=0 / hours>168 / negative 都应该被 Query validator 拒绝
+    for bad in (0, -1, 999):
+        resp = client.get(f"/admin/api/metrics/llm?hours={bad}")
+        assert resp.status_code == 422
