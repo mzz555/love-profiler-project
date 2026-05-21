@@ -1,4 +1,4 @@
-"""Agent B 报告输出质量门（Phase A.2）。
+"""report writer 报告输出质量门（Phase A.2）。
 
 在 LLM 输出完毕后做一道硬校验：
 - 必备 Section 是否齐全（缺一即 fail）
@@ -97,7 +97,7 @@ def check_report(text: str, diagnosis: dict) -> list[QualityWarning]:
     """运行质量门校验。
 
     Args:
-        text: Agent B 输出的完整报告文本
+        text: report writer 输出的完整报告文本
         diagnosis: 富化后的 diagnosis 字典（用于关键词审计）
 
     Returns:

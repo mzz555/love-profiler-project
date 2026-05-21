@@ -1,6 +1,6 @@
 # 恋爱人格测评系统 — 操作手册
 
-抖音小程序全栈项目。用户完成 30 道固定选择题，Agent A 做**纯 Python 确定性评分**生成结构化诊断，Agent B（LLM）基于诊断生成恋爱人格报告，用户通过 ¥9.9 付费或激励视频广告解锁报告。
+抖音小程序全栈项目。用户完成 30 道固定选择题，**scoring engine（纯 Python 确定性评分）**生成结构化诊断，**report writer（LLM）**基于诊断生成恋爱人格报告，用户通过 ¥9.9 付费或激励视频广告解锁报告。
 
 **仓库包含两个独立子项目：**
 
@@ -45,24 +45,24 @@
 | 测试框架 | pytest + pytest-asyncio + respx |
 | 小程序前端 | 抖音小程序（TTML / TTSS / JS） |
 
-### 双 Agent 架构
+### 双引擎架构（scoring engine + report writer）
 
 ```
 30 道选择题 ─┐
-            ├─► Agent A（纯 Python 评分）─► 结构化诊断 JSON
-答题包构造 ─┘                              （type_code / 5 维度 / 跨维度审查 highlights）
+            ├─► scoring engine（纯 Python 评分）─► 结构化诊断 JSON
+答题包构造 ─┘                                    （type_code / 5 维度 / 跨维度审查 highlights）
                                                        │
                                                        ▼
-                                     Agent B（LLM, temp=0.6）─► 人格报告（流式）
+                                  report writer（LLM, temp=0.6）─► 人格报告（流式）
                                                        │
                                                        ▼
                               WebSocket --Section-- 分段下发，前端按 section 路由
 ```
 
-- **Agent A** 是纯 Python 确定性计算，**无 LLM 调用**——5 维度算分 + 16 类分型 + 三层跨维度审查
-- **Agent B** 接收 Agent A 的诊断 JSON，按系统提示词生成 8 段式报告（Title / Opening / D1–D5 / Highlight / Suggestion）
+- **scoring engine**（`app/agents/scoring_engine.py`，原 Agent A）是纯 Python 确定性计算，**无 LLM 调用**——5 维度算分 + 16 类分型 + 三层跨维度审查
+- **report writer**（`app/agents/report_writer.py`，原 Agent B）接收 scoring engine 的诊断 JSON，按系统提示词生成 8 段式报告（Title / Opening / D1–D5 / Highlight / Suggestion）
 
-完整评分规则见 `docs/superpowers/specs/2026-04-30-scoring-rules.md`；Agent B 提示词见 `docs/agent-b-system-prompt.md`；16 类人格速查见 `docs/love-types-reference.md`。
+完整评分规则见 `docs/superpowers/specs/2026-04-30-scoring-rules.md`；report writer 提示词见 `docs/agent-b-system-prompt.md`；16 类人格速查见 `docs/love-types-reference.md`。
 
 ---
 
@@ -78,7 +78,7 @@ love-profiler/
 │   │   ├── auth.py                  # POST /auth/login（抖音换 JWT）
 │   │   ├── quiz.py                  # POST /quiz/start, /quiz/submit
 │   │   ├── result.py                # POST /result, /result/stream
-│   │   ├── ws_result.py             # WebSocket /ws/result（Agent B 流式）
+│   │   ├── ws_result.py             # WebSocket /ws/result（report writer 流式）
 │   │   ├── unlock.py                # POST /unlock/ad
 │   │   ├── pay.py                   # POST /pay/*
 │   │   ├── history.py               # GET /history
@@ -86,14 +86,14 @@ love-profiler/
 │   │   ├── dev_auth.py              # POST /auth/dev-login（DEV_MODE）
 │   │   └── dev_pay.py               # POST /pay/dev-callback（DEV_MODE）
 │   ├── agents/
-│   │   ├── agent_a.py               # 纯 Python 评分引擎
-│   │   └── agent_b.py               # LLM 报告生成
+│   │   ├── scoring_engine.py        # 纯 Python 评分引擎（原 agent_a.py）
+│   │   └── report_writer.py         # LLM 报告生成（原 agent_b.py）
 │   ├── services/
 │   │   ├── llm_client.py            # 豆包 API 异步封装 + 计时日志
 │   │   ├── llm_logger.py            # AI 调用日志写入 logs/ai_calls.jsonl
 │   │   ├── supabase_client.py       # 从本地 Supabase REST 拉题目
 │   │   ├── answer_package_builder.py# 组装答题包
-│   │   ├── agent_b_runner.py        # Agent B 调用编排
+│   │   ├── report_writer_runner.py  # report writer 调用编排（原 agent_b_runner.py）
 │   │   └── access_control.py        # 付费/广告解锁守卫
 │   ├── models/
 │   │   ├── user.py                  # users 表
@@ -115,7 +115,7 @@ love-profiler/
 │   ├── personalities/               # 16 × 2 = 32 张人格头像
 │   └── addtional/                   # 附加人物图（注：拼写错误是历史遗留，请保持）
 ├── docs/
-│   ├── agent-b-system-prompt.md     # Agent B 系统提示词
+│   ├── agent-b-system-prompt.md     # report writer 系统提示词（文件名保留以兼容代码路径）
 │   ├── love-types-reference.md      # 16 类人格速查
 │   └── superpowers/{specs,plans}    # spec-driven 工作流文档
 ├── scripts/
@@ -124,7 +124,7 @@ love-profiler/
 ├── tests/
 │   ├── conftest.py                  # 共享 fixtures
 │   ├── api/                         # API 集成测试
-│   ├── agents/                      # Agent 单元测试
+│   ├── agents/                      # scoring engine 与 report writer 单元测试
 │   ├── services/                    # Service 单元测试
 │   └── models/                      # 模型测试
 ├── .env.example                     # 环境变量模板
@@ -245,10 +245,10 @@ Authorization: Bearer <token>
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/quiz/start` | 拉 30 道题 + 创建 assessment，返回 `session_id` / `assessment_id` / `questions[]` |
-| POST | `/quiz/submit` | 提交 30 题答案 → Agent A 评分 → 写入 `diagnosis_json`，状态 `pending → analyzed` |
+| POST | `/quiz/submit` | 提交 30 题答案 → scoring engine 评分 → 写入 `diagnosis_json`，状态 `pending → analyzed` |
 | POST | `/unlock/ad` | 看完激励视频后解锁 |
 | POST | `/result` | 拉取报告（已缓存则直接返回） |
-| WS | `/ws/result` | Agent B 流式生成报告，按 `--Section--` 分段下发 |
+| WS | `/ws/result` | report writer 流式生成报告，按 `--Section--` 分段下发 |
 | POST | `/result/stream` | HTTP 流式版本（备用） |
 | GET | `/history` | 当前用户历史报告列表 |
 
@@ -256,7 +256,7 @@ Authorization: Bearer <token>
 
 ```
 pending  →  analyzed  →  generating  →  complete
-        (Agent A)     (开始流式)    (Agent B 完成)
+   (scoring engine)  (开始流式)   (report writer 完成)
 ```
 
 ### 支付
@@ -280,7 +280,7 @@ tt.login() → code
 
   POST /quiz/start                    →  session_id + 30 道题
   本地逐题展示（5 球滑动选择，30 题）
-  POST /quiz/submit(answers)          →  Agent A 评分（纯 Python）
+  POST /quiz/submit(answers)          →  scoring engine 评分（纯 Python）
                                           status=analyzed
 
   ── 付费路径 ──
@@ -292,7 +292,7 @@ tt.login() → code
   tt.createRewardedVideoAd            →  看完广告
   POST /unlock/ad(ad_token)           →  unlocked=true
 
-  WebSocket /ws/result                →  Agent B 流式生成报告
+  WebSocket /ws/result                →  report writer 流式生成报告
                                          按 --Section-- 分段下发
                                          section_start / section_chunk / section_end / done
   POST /result（缓存命中直接返）     →  完整报告
@@ -318,7 +318,7 @@ pytest tests/api/test_quiz.py -v
 | 模块 | 测试文件 |
 |------|----------|
 | API 接口 | `tests/api/test_auth.py` `test_quiz.py` `test_result.py` `test_pay.py` `test_health.py` `test_history.py` `test_admin_api.py` |
-| Agent 逻辑 | `tests/agents/test_agent_a.py` `test_agent_b.py` |
+| 评分与报告引擎 | `tests/agents/test_scoring_engine.py` `test_report_writer.py` |
 | 服务层 | `tests/services/test_llm_client.py` `test_llm_logger.py` `test_answer_package_builder.py` |
 | 数据模型 | `tests/models/test_models.py` |
 
@@ -335,9 +335,9 @@ pytest tests/api/test_quiz.py -v
 | user_id | 关联用户 |
 | session_id | 测评会话 ID（quiz 模式下唯一） |
 | answers_json | 30 题原始答案 |
-| diagnosis_json | Agent A 输出的结构化诊断 |
-| report_json | Agent B 输出的结构化报告 |
-| report_text | Agent B 输出的原始流式文本（含 --Section-- 标记） |
+| diagnosis_json | scoring engine 输出的结构化诊断 |
+| report_json | report writer 输出的结构化报告 |
+| report_text | report writer 输出的原始流式文本（含 --Section-- 标记） |
 | personality_type | type_code（如 `MA-CL-MH`） |
 | status | pending / analyzed / generating / complete |
 

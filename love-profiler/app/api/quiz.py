@@ -105,7 +105,7 @@ async def quiz_submit(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> SubmitResponse:
-    """Submit quiz answers, run Agent A diagnosis, store results."""
+    """Submit quiz answers, run scoring engine diagnosis, store results."""
     t0 = time.monotonic()
     logger.info("[quiz/submit] 开始 session=%s answers=%d", body.session_id[:8], len(body.answers))
 
@@ -150,7 +150,7 @@ async def quiz_submit(
     # 从 base_love_type 表查权威 type_name
     type_code = diagnosis.get("type_code", "")
     if not type_code:
-        logger.error("[quiz/submit] Agent A 未返回 type_code")
+        logger.error("[quiz/submit] scoring engine 未返回 type_code")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="人格类型识别失败，请重试",
@@ -247,9 +247,9 @@ async def quiz_submit(
     db.commit()
     logger.info("[quiz/submit] db_write: %.0fms", (time.monotonic() - t_db) * 1000)
 
-    # Agent B is launched lazily by /ws/result (or /result polling), not here —
+    # report writer is launched lazily by /ws/result (or /result polling), not here —
     # avoids the double-run that happens when both quiz/submit and the WS endpoint
-    # would each kick off Agent B for the same assessment.
+    # would each kick off report writer for the same assessment.
     logger.info(
         "[quiz/submit] 完成 assessment_id=%s type_code=%s total=%.0fms",
         assessment.id, diagnosis.get("type_code", "?"), (time.monotonic() - t0) * 1000,

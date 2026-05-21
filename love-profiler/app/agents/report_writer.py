@@ -42,7 +42,7 @@ REPORT_VERSION: int = 1
 
 
 class ReportWriterError(Exception):
-    """Raised when Agent B fails to return meaningful text."""
+    """Raised when the report writer fails to return meaningful text."""
 
 
 def build_user_message(diagnosis: dict) -> str:
@@ -173,7 +173,7 @@ async def run_stream(
     session_id: str | None = None,
     resumed_sections: dict[str, str] | None = None,
 ):
-    """Stream Agent B: yields text chunks in real time, then a final dict.
+    """Stream the report writer: yields text chunks in real time, then a final dict.
 
     Args:
         resumed_sections: 上次已完成的 section 字典 {name: body}；非空时
@@ -191,10 +191,10 @@ async def run_stream(
     sid_short = (session_id or "")[:8]
     if resumed_sections:
         logger.info(
-            "[agent_b/in] session=%s resume from skipping %d sections: %s",
+            "[report_writer/in] session=%s resume from skipping %d sections: %s",
             sid_short, len(resumed_sections), sorted(resumed_sections.keys()),
         )
-    logger.info("[agent_b/in] session=%s user_msg=\n%s", sid_short, user_msg)
+    logger.info("[report_writer/in] session=%s user_msg=\n%s", sid_short, user_msg)
     all_text = ""
     usage_sink: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
 
@@ -225,13 +225,13 @@ async def run_stream(
     try:
         warnings = check_report(combined_text, diagnosis)
     except QualityGateError as exc:
-        logger.error("[agent_b/quality] hard fail session=%s: %s", sid_short, exc)
+        logger.error("[report_writer/quality] hard fail session=%s: %s", sid_short, exc)
         raise ReportWriterError(f"quality_gate_failed: {exc}") from exc
     for w in warnings:
-        logger.warning("[agent_b/quality] soft warning session=%s: %s", sid_short, w)
+        logger.warning("[report_writer/quality] soft warning session=%s: %s", sid_short, w)
 
     logger.info(
-        "[agent_b/out] session=%s chars=%d warnings=%d tokens=%d+%d resume=%d report_text=\n%s",
+        "[report_writer/out] session=%s chars=%d warnings=%d tokens=%d+%d resume=%d report_text=\n%s",
         sid_short, len(combined_text), len(warnings),
         usage_sink["prompt_tokens"], usage_sink["completion_tokens"],
         len(resumed_sections or {}),
@@ -250,7 +250,7 @@ async def run(
     session_id: str | None = None,
     usage_sink: dict | None = None,
 ) -> str:
-    """Run Agent B: diagnosis dict → plain text report.
+    """Run the report writer: diagnosis dict → plain text report.
 
     Args:
         usage_sink: 可选 dict — 若提供，会累加所有 attempt 的 token 用量到
@@ -265,7 +265,7 @@ async def run(
     """
     base_msg = build_user_message(diagnosis)
     sid_short = (session_id or "")[:8]
-    logger.info("[agent_b/in] session=%s user_msg=\n%s", sid_short, base_msg)
+    logger.info("[report_writer/in] session=%s user_msg=\n%s", sid_short, base_msg)
     retry_suffix = "\n\n【重试要求】请直接输出报告纯文本，不要输出 JSON 或代码围栏。"
 
     if usage_sink is not None:
@@ -295,18 +295,18 @@ async def run(
         except QualityGateError as exc:
             last_quality_error = exc
             logger.warning(
-                "[agent_b/quality] attempt=%d session=%s 质量门未通过：%s",
+                "[report_writer/quality] attempt=%d session=%s 质量门未通过：%s",
                 attempt, sid_short, exc,
             )
             continue
         for w in warnings:
-            logger.warning("[agent_b/quality] soft warning session=%s: %s", sid_short, w)
+            logger.warning("[report_writer/quality] soft warning session=%s: %s", sid_short, w)
         logger.info(
-            "[agent_b/out] session=%s chars=%d warnings=%d report_text=\n%s",
+            "[report_writer/out] session=%s chars=%d warnings=%d report_text=\n%s",
             sid_short, len(raw), len(warnings), raw,
         )
         return raw
 
     if last_quality_error is not None:
         raise ReportWriterError(f"quality_gate_failed: {last_quality_error}") from last_quality_error
-    raise ReportWriterError("Agent B returned empty text after 2 attempts")
+    raise ReportWriterError("report writer returned empty text after 2 attempts")

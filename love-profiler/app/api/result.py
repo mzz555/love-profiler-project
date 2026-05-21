@@ -1,9 +1,9 @@
 """
-Result API — trigger Agent B to generate the personality report.
+Result API — trigger the report writer to generate the personality report.
 POST /result         { session_id }  →  polling flow (background task)
 POST /result/stream  { session_id }  →  SSE streaming flow
 
-Status flow: pending → analyzed (Agent A) → generating (Agent B launched) → complete (Agent B done)
+Status flow: pending → analyzed (scoring engine) → generating (report writer launched) → complete (report writer done)
 Repeated calls when complete return cached result immediately.
 While generating, returns {status:"generating"} so the frontend can poll.
 """
@@ -57,11 +57,11 @@ async def get_result(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> ResultResponse:
-    """Trigger or poll Agent B report generation.
+    """Trigger or poll report writer report generation.
 
     - already complete  → 200 with full report (cached)
     - generating        → 200 {status:"generating"}  (frontend polls again)
-    - analyzed          → starts background Agent B, returns {status:"generating"}
+    - analyzed          → starts background report writer, returns {status:"generating"}
     """
     t0 = time.monotonic()
     logger.info("[result] 开始 user_id=%s session=%s", user_id, body.session_id[:8])
@@ -148,7 +148,7 @@ async def stream_result(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """SSE endpoint — runs Agent B then streams report_text character by character.
+    """SSE endpoint — runs report writer then streams report_text character by character.
 
     Protocol (server → client):
       data: {"type": "chunk", "text": "X"}\\n\\n
@@ -219,7 +219,7 @@ async def stream_result(
                 text = await write_report(_diagnosis_data, session_id=session_id_str)
             except (ReportWriterError, LLMError) as exc:
                 logger.error("[result/stream] agent_b 失败: %s", exc)
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Agent B failed'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'report writer failed'}, ensure_ascii=False)}\n\n"
                 return
 
             ptype = _diagnosis_data.get("type_code", "")

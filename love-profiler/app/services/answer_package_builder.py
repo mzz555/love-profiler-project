@@ -1,7 +1,7 @@
 """
 Answer package builder — assembles a structured answer package from raw quiz answers.
 
-Each item in the returned list contains everything Agent A needs to perform
+Each item in the returned list contains everything the scoring engine needs to perform
 dimension scoring without re-querying the questions table.
 """
 

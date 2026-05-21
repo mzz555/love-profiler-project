@@ -3,7 +3,7 @@
 主流程：
 1. 报告写库 status=complete 后由调用方触发 schedule_audit；
 2. 后台 task 读取 diagnosis_json + report_text，构造 user message；
-3. 调 chat_completion（judge_model 与 Agent B 同款豆包，可由 JUDGE_MODEL 覆盖）；
+3. 调 chat_completion（judge_model 与 the report writer 同款豆包，可由 JUDGE_MODEL 覆盖）；
 4. 解析 JSON 输出 → 写入 report_quality_audit 表；
 5. 任何环节失败仅记日志，不重试也不阻塞主流程。
 
@@ -52,7 +52,7 @@ def is_enabled() -> bool:
 
 
 def _judge_model() -> str:
-    """优先 JUDGE_MODEL；缺省回退到 Agent B 同模型，保证 prod 默认可用。"""
+    """优先 JUDGE_MODEL；缺省回退到 the report writer 同模型，保证 prod 默认可用。"""
     override = os.environ.get("JUDGE_MODEL", "").strip()
     return override or os.environ.get("DOUBAO_MODEL", "")
 

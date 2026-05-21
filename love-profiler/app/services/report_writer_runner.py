@@ -29,7 +29,7 @@ async def run_and_persist(
     log_prefix: str = "agent_b/bg",
     user_id: int | None = None,
 ) -> None:
-    """Run Agent B; persist on success, reset to 'analyzed' on failure for the next poll to retry.
+    """Run the report writer; persist on success, reset to 'analyzed' on failure for the next poll to retry.
 
     user_id 传入时，调用结束会把 token 用量累加到 user_token_quota（B.1）。
     """
@@ -41,7 +41,7 @@ async def run_and_persist(
         personality_type = diagnosis.get("type_code", "")
 
         # Conditional update — single statement avoids the read-then-write race when
-        # multiple endpoints could kick off Agent B for the same assessment.
+        # multiple endpoints could kick off the report writer for the same assessment.
         updated = (
             db.query(Assessment)
             .filter(Assessment.id == assessment_id, Assessment.status == "generating")

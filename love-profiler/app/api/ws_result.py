@@ -1,5 +1,5 @@
 """
-WebSocket result endpoint — streams Agent B report generation token by token.
+WebSocket result endpoint — streams report writer report generation token by token.
 GET /ws/result?token=<jwt>
 
 Protocol (server → client JSON messages):
@@ -55,7 +55,7 @@ _REPLAY_DELAY = 0.01
 
 @router.websocket("/ws/result")
 async def ws_result(websocket: WebSocket, db: Session = Depends(get_db)) -> None:
-    """Accept WebSocket, stream Agent B portrait text token by token, then send full report."""
+    """Accept WebSocket, stream report writer portrait text token by token, then send full report."""
     token = websocket.query_params.get("token", "")
     try:
         payload = jwt.decode(token, _jwt_secret(), algorithms=[TOKEN_ALGORITHM])
@@ -105,7 +105,7 @@ async def ws_result(websocket: WebSocket, db: Session = Depends(get_db)) -> None
                 return
             await _stream_agent_b(websocket, db, assessment, session_id, user_id=user_id)
         elif assessment.status == "generating":
-            # Another connection (or the polling endpoint) is already running Agent B.
+            # Another connection (or the polling endpoint) is already running report writer.
             # The frontend should reconnect once it sees a "complete" via /result.
             await _send(websocket, {"type": "error", "code": 409, "message": "报告正在生成中，请稍后重连"})
         else:
@@ -262,7 +262,7 @@ def _all_labels(diagnosis: dict) -> list:
 
 
 def _highlights_meta(diagnosis: dict) -> list:
-    """从诊断结果提取 highlights 标题/严重度，随 meta 消息下发，无需等 Agent B。"""
+    """从诊断结果提取 highlights 标题/严重度，随 meta 消息下发，无需等 report writer。"""
     return [
         {
             "idx":         i + 1,
@@ -344,7 +344,7 @@ async def _stream_agent_b(
     session_id: str,
     user_id: int,
 ) -> None:
-    """Run Agent B with real LLM streaming, forward tokens, persist on completion."""
+    """Run report writer with real LLM streaming, forward tokens, persist on completion."""
     diagnosis = json.loads(assessment.diagnosis_json)
     assessment_id = assessment.id
 
@@ -413,7 +413,7 @@ async def _stream_agent_b(
     final_report = None
 
     streamer = _SectionStreamer(websocket, _send, on_section_complete=_persist_section)
-    # 只在确实有 resumed 时才传 kwarg，保持对老 agent_b.run_stream 签名（含测试 mock）兼容
+    # 只在确实有 resumed 时才传 kwarg，保持对老 report_writer.run_stream 签名（含测试 mock）兼容
     extra_kwargs = {"resumed_sections": resumed} if resumed else {}
     try:
         async for item in report_stream(

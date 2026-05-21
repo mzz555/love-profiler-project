@@ -253,7 +253,7 @@ async def chat_completion(
     在 ai_call_logs 写一行（retry_index = caller 传入值 + 本次内部 attempt）。
 
     Args:
-        retry_index: 调用方意图的"外层 retry 计数"（来自 agent_b.run 的 quality-gate
+        retry_index: 调用方意图的"外层 retry 计数"（来自 report_writer.run 的 quality-gate
                      retry）；内部 transient 重试会在此基础上 +attempt 写入日志。
 
     Raises:

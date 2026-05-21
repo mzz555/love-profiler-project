@@ -153,7 +153,7 @@ def _compute_diagnosis(answers: list[dict], session_id: str | None = None) -> di
 
     # ── Personality Typing ────────────────────────────────────────────────────
     # type_name / type_tagline 由 /quiz/submit 的 enrich 阶段从 base_love_type 表注入；
-    # 这里仅给出非空兜底（轴名拼接），保证 agent_a 单独跑（如测试场景）也有可用值。
+    # 这里仅给出非空兜底（轴名拼接），保证 scoring_engine 单独跑（如测试场景）也有可用值。
     type_code    = f"{_D1_ABBR[d1_interp]}-{_D2_ABBR[d2_interp]}-{_D3_ABBR[d3_interp]}"
     type_axis    = f"{_D1_ZH[d1_interp]} / {_D2_ZH[d2_interp]} / {_D3_ZH[d3_interp]}"
     type_name    = type_axis

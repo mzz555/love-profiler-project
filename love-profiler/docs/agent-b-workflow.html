@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent B 报告生成工作流</title>
+<title>report writer 报告生成工作流</title>
 <style>
 :root {
   --bg: #0b0d12;
@@ -355,7 +355,7 @@ pre, .code {
   <!-- ════ Hero ════ -->
   <header class="hero">
     <div class="badge">LOVE PROFILER · INTERNAL DOC</div>
-    <h1>Agent B 报告生成工作流</h1>
+    <h1>report writer 报告生成工作流</h1>
     <p class="sub">从用户提交 30 道题答案，到 LLM 流式输出人格报告，再到前端实时分段渲染——完整数据流向、字段来源、协议格式一图看懂。</p>
   </header>
 
@@ -366,7 +366,7 @@ pre, .code {
       <div class="stage">
         <div class="stage-num">STAGE 1</div>
         <div class="stage-title">/quiz/submit</div>
-        <div class="stage-desc">Agent A 算分 + Enrich 阶段从 5 张字典表注入静态知识</div>
+        <div class="stage-desc">scoring engine 算分 + Enrich 阶段从 5 张字典表注入静态知识</div>
         <div class="stage-out">→ diagnosis dict</div>
       </div>
       <div class="stage">
@@ -378,7 +378,7 @@ pre, .code {
       <div class="stage">
         <div class="stage-num">STAGE 3</div>
         <div class="stage-title">/ws/result</div>
-        <div class="stage-desc">前端连 WS，后端取出 diagnosis_json 调度 Agent B</div>
+        <div class="stage-desc">前端连 WS，后端取出 diagnosis_json 调度 report writer</div>
         <div class="stage-out">→ system + user msg</div>
       </div>
       <div class="stage">
@@ -398,7 +398,7 @@ pre, .code {
 
   <!-- ════ Diagnosis 数据源 ════ -->
   <section>
-    <h2><span class="num">02</span>diagnosis 字段来源（这是 Agent B 的真正输入）</h2>
+    <h2><span class="num">02</span>diagnosis 字段来源（这是 report writer 的真正输入）</h2>
     <div class="table-wrap">
       <table>
         <thead>
@@ -409,9 +409,9 @@ pre, .code {
           </tr>
         </thead>
         <tbody>
-          <tr><td><span class="field">type_code</span></td><td><span class="src calc">Agent A 计算</span></td><td>D1段-D2段-D3段拼接，如 MA-CL-H</td></tr>
-          <tr><td><span class="field">dimensions.D1 ~ D5</span></td><td><span class="src calc">Agent A 计算</span></td><td>raw / interp / top2 / quadrant / pursue_avoid 等</td></tr>
-          <tr><td><span class="field">highlights[].code</span></td><td><span class="src calc">Agent A 规则引擎</span></td><td>跨维度审查触发的高光 code 列表</td></tr>
+          <tr><td><span class="field">type_code</span></td><td><span class="src calc">scoring engine 计算</span></td><td>D1段-D2段-D3段拼接，如 MA-CL-H</td></tr>
+          <tr><td><span class="field">dimensions.D1 ~ D5</span></td><td><span class="src calc">scoring engine 计算</span></td><td>raw / interp / top2 / quadrant / pursue_avoid 等</td></tr>
+          <tr><td><span class="field">highlights[].code</span></td><td><span class="src calc">scoring engine 规则引擎</span></td><td>跨维度审查触发的高光 code 列表</td></tr>
           <tr><td><span class="field">type_name</span></td><td><span class="src db">base_love_type</span></td><td>WHERE type_code = ? → 报告标题</td></tr>
           <tr><td><span class="field">type_tagline</span></td><td><span class="src db">base_love_type</span></td><td>副标题</td></tr>
           <tr><td><span class="field">type_anchor</span></td><td><span class="src db">base_love_type.detail</span></td><td><strong>开篇画像锚定句</strong>，prompt 强制要求从此句展开</td></tr>
@@ -419,18 +419,18 @@ pre, .code {
           <tr><td><span class="field">D5_guide</span></td><td><span class="src db">base_D5_quadrant</span></td><td>9 宫格象限对应的写作方向参考</td></tr>
           <tr><td><span class="field">D5_style_name</span></td><td><span class="src db">base_D5_quadrant</span></td><td>风格名，前端人格卡标签</td></tr>
           <tr><td><span class="field">segment_decode[]</span></td><td><span class="src db">base_segment_decode</span></td><td>D1/D2/D3 段落代码 → 中文标签</td></tr>
-          <tr><td><span class="field">highlights[].name_cn / severity<br>.is_positive / report_seed<br>.interp_path / trigger_condition</span></td><td><span class="src db">highlights</span></td><td>权威亮点信息 enrich，覆盖 Agent A 输出</td></tr>
+          <tr><td><span class="field">highlights[].name_cn / severity<br>.is_positive / report_seed<br>.interp_path / trigger_condition</span></td><td><span class="src db">highlights</span></td><td>权威亮点信息 enrich，覆盖 scoring engine 输出</td></tr>
         </tbody>
       </table>
     </div>
     <p style="color: var(--text-dim); font-size: 12.5px; margin-top: 12px; padding-left: 4px;">
-      <span class="src calc" style="font-size: 11px;">绿</span> Agent A 纯 Python 算出　<span class="src db" style="font-size: 11px;">蓝</span> /quiz/submit Enrich 阶段从 DB 表查询注入　— 两类合并写入 <code style="font-family: var(--mono); color: var(--text);">assessment.diagnosis_json</code>
+      <span class="src calc" style="font-size: 11px;">绿</span> scoring engine 纯 Python 算出　<span class="src db" style="font-size: 11px;">蓝</span> /quiz/submit Enrich 阶段从 DB 表查询注入　— 两类合并写入 <code style="font-family: var(--mono); color: var(--text);">assessment.diagnosis_json</code>
     </p>
   </section>
 
   <!-- ════ User Message 拼装 ════ -->
   <section>
-    <h2><span class="num">03</span>Agent B 输入：System Prompt + User Message</h2>
+    <h2><span class="num">03</span>report writer 输入：System Prompt + User Message</h2>
     <div class="split">
       <div class="col">
         <div class="col-label"><span class="dot in"></span>SYSTEM PROMPT（静态文件）</div>
@@ -476,7 +476,7 @@ docs/agent-b-system-prompt.md
       </div>
     </div>
     <p style="color: var(--text-dim); font-size: 12.5px; margin-top: 12px; padding-left: 4px;">
-      由 <code style="font-family: var(--mono); color: var(--text);">app/agents/agent_b.py · build_user_message(diagnosis)</code> 拼装。把字典表静态知识切片注入 prompt——LLM 不需要扫全表。
+      由 <code style="font-family: var(--mono); color: var(--text);">app/agents/report_writer.py · build_user_message(diagnosis)</code> 拼装。把字典表静态知识切片注入 prompt——LLM 不需要扫全表。
     </p>
   </section>
 
@@ -595,14 +595,14 @@ docs/agent-b-system-prompt.md
           </tr>
         </thead>
         <tbody>
-          <tr><td><span class="field">app/api/quiz.py · quiz_submit</span></td><td>30 题接收 → Agent A → 5 张表 enrich → 写 diagnosis_json</td></tr>
-          <tr><td><span class="field">app/agents/agent_a.py</span></td><td>纯 Python 评分引擎（无 LLM），输出 type_code / dimensions / highlights</td></tr>
+          <tr><td><span class="field">app/api/quiz.py · quiz_submit</span></td><td>30 题接收 → scoring engine → 5 张表 enrich → 写 diagnosis_json</td></tr>
+          <tr><td><span class="field">app/agents/scoring_engine.py</span></td><td>纯 Python 评分引擎（无 LLM），输出 type_code / dimensions / highlights</td></tr>
           <tr><td><span class="field">app/services/supabase_client.py</span></td><td>5 个 _fetch_*_sync 函数：questions / love_type / d4 / d5 / segment_decode / highlights</td></tr>
-          <tr><td><span class="field">app/agents/agent_b.py · build_user_message</span></td><td>diagnosis dict → 自然语言 prompt 字符串</td></tr>
-          <tr><td><span class="field">app/agents/agent_b.py · run_stream</span></td><td>异步生成器，yield text chunks + 最终 dict</td></tr>
+          <tr><td><span class="field">app/agents/report_writer.py · build_user_message</span></td><td>diagnosis dict → 自然语言 prompt 字符串</td></tr>
+          <tr><td><span class="field">app/agents/report_writer.py · run_stream</span></td><td>异步生成器，yield text chunks + 最终 dict</td></tr>
           <tr><td><span class="field">app/services/llm_client.py · stream_chat_completion</span></td><td>豆包 SSE 流式底层调用，解析 data: [DONE]</td></tr>
           <tr><td><span class="field">app/api/ws_result.py · _SectionStreamer</span></td><td>正则切 --Section--，发 typed WS 消息</td></tr>
-          <tr><td><span class="field">app/services/agent_b_runner.py · run_and_persist</span></td><td>/result 轮询路径的后台 Agent B 调度器，落库</td></tr>
+          <tr><td><span class="field">app/services/report_writer_runner.py · run_and_persist</span></td><td>/result 轮询路径的后台 report writer 调度器，落库</td></tr>
           <tr><td><span class="field">docs/agent-b-system-prompt.md</span></td><td>System Prompt 源文件，启动时一次性读入</td></tr>
         </tbody>
       </table>
@@ -611,7 +611,7 @@ docs/agent-b-system-prompt.md
 
   <!-- ════ Footer ════ -->
   <div class="foot">
-    love-profiler · agent_b workflow doc · 2026-05-14
+    love-profiler · report writer workflow doc · 2026-05-14
   </div>
 
 </div>
