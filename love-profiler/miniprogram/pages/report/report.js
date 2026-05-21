@@ -1029,28 +1029,20 @@ Page({
     ];
 
     // 雷达 5 维 + score 4 条
-    // 维度映射: 稳定性←D1依恋健康  责任感←D2边界清晰  沟通力←D5表达稳定  包容力←D3冲突韧性
+    // 直接用 health_radar 5 维（依恋安全 / 边界清晰 / 冲突健康 / 自我认知 / 表达成熟）
+    // 与报告页主雷达数据完全一致，避免海报与正文出现两套数字
     const _clamp = v => Math.max(0.05, Math.min(1, v));
     let radarVals = [0.85, 0.78, 0.72, 0.68, 0.80];
     let scorePcts = [90, 85, 80, 75];
-    if (dimChart && dimChart.d123 && dimChart.d4 && dimChart.d5) {
-      const d1n = ((dimChart.d123[0] && dimChart.d123[0].raw || 0) + 12) / 24;
-      const d2n = ((dimChart.d123[1] && dimChart.d123[1].raw || 0) + 12) / 24;
-      const d3n = ((dimChart.d123[2] && dimChart.d123[2].raw || 0) + 12) / 24;
-      const t4Max = Math.max(
-        parseFloat(dimChart.d4.T1 || 0), parseFloat(dimChart.d4.T2 || 0),
-        parseFloat(dimChart.d4.T3 || 0), parseFloat(dimChart.d4.T4 || 0),
-        parseFloat(dimChart.d4.T5 || 0),
-      );
-      const s1n = (parseFloat(dimChart.d5.s1_raw || 0) + 6) / 12;
-      const s2n = (parseFloat(dimChart.d5.s2_raw || 0) + 6) / 12;
-      const d5avg = (s1n + s2n) / 2;
-      radarVals = [d1n, d2n, d3n, t4Max, d5avg].map(_clamp);
+    if (dimChart && Array.isArray(dimChart.health_radar) && dimChart.health_radar.length === 5) {
+      const [d1v, d2v, d3v, aware, style] = dimChart.health_radar.map(x => parseFloat(x.value || 0));
+      radarVals = [d1v, d2v, d3v, aware, style].map(_clamp);
+      // 海报右侧 4 项相亲场景标签维持原映射：稳定性←D1、责任感←D2、沟通力←D5表达成熟、包容力←D3
       scorePcts = [
-        Math.round(_clamp(d1n)   * 100), // 稳定性 ← D1
-        Math.round(_clamp(d2n)   * 100), // 责任感 ← D2
-        Math.round(_clamp(d5avg) * 100), // 沟通力 ← D5
-        Math.round(_clamp(d3n)   * 100), // 包容力 ← D3
+        Math.round(_clamp(d1v)   * 100),
+        Math.round(_clamp(d2v)   * 100),
+        Math.round(_clamp(style) * 100),
+        Math.round(_clamp(d3v)   * 100),
       ];
     }
 
