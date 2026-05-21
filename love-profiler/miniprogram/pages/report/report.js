@@ -635,7 +635,7 @@ Page({
   },
 
   // ── 图表2：5 维健康度雷达（依恋/边界/冲突/自我认知/表达成熟）──────────
-  // 语义统一"高=好"，让用户一眼看懂自己哪里强、哪里弱
+  // 语义统一"高=好"；视觉与全维雷达同源（多色端点 + 各色轴线 + 各色标签）
   _drawCombinedRadar(healthRadar) {
     if (!Array.isArray(healthRadar) || healthRadar.length !== 5) {
       console.warn('[health-radar] expected 5 axes, got', healthRadar);
@@ -647,19 +647,16 @@ Page({
       const vals = healthRadar.map(r => Math.max(0, Math.min(1, parseFloat(r.value) || 0)));
       const labels = healthRadar.map(r => r.name || r.key);
 
-      const PRIMARY = '#4FAFAF';     // teal 主色
-      const PRIMARY_LIGHT = 'rgba(79,175,175,0.22)';
-      const PRIMARY_DARK  = '#3A8C8C';
-      const GRID = 'rgba(180,170,160,0.20)';
-      const GRID_OUTER = 'rgba(150,140,132,0.45)';
-      const LABEL = '#3A3A4A';
-      const VALUE = 'rgba(110,100,90,0.85)';
+      // 5 色端点：与全维雷达同源色系，每根轴一个语义色
+      // D1 依恋 / D2 边界 / D3 冲突 / AWARE 自我认知 / STYLE 表达成熟
+      const COLORS = ['#FF7B6E', '#4FC3F7', '#CE93D8', '#FFB74D', '#5FD0B5'];
+      const VALUE_GREY = 'rgba(130,120,112,0.85)';
 
       const angles = Array.from({length: N}, (_, i) => -Math.PI / 2 + i * 2 * Math.PI / N);
       const pt = (a, r) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
 
       // 背景柔光圆
-      ctx.setFillStyle('rgba(248,245,241,0.55)');
+      ctx.setFillStyle('rgba(248,245,241,0.6)');
       ctx.beginPath(); ctx.arc(cx, cy, maxR + 12, 0, Math.PI * 2); ctx.fill();
 
       // 网格五边形（25/50/75/100）
@@ -668,52 +665,52 @@ Page({
         ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < N; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.closePath();
-        ctx.setStrokeStyle(lvl === 1 ? GRID_OUTER : GRID);
+        ctx.setStrokeStyle(lvl === 1 ? 'rgba(150,140,132,0.50)' : 'rgba(200,190,182,0.25)');
         ctx.setLineWidth(lvl === 1 ? 2 : 1); ctx.stroke();
       });
 
-      // 轴线
-      angles.forEach((a) => {
+      // 轴线（每根用对应 COLORS 淡色）
+      angles.forEach((a, i) => {
         const {x, y} = pt(a, maxR);
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y);
-        ctx.setStrokeStyle(GRID); ctx.setLineWidth(1); ctx.stroke();
+        ctx.setStrokeStyle(_hexAlpha(COLORS[i], 0.33)); ctx.setLineWidth(1.5); ctx.stroke();
       });
 
-      // 数据多边形
+      // 数据多边形（teal 浅填 + teal 描边，与全维雷达一致）
       const dpts = vals.map((v, i) => pt(angles[i], maxR * v));
       ctx.beginPath(); ctx.moveTo(dpts[0].x, dpts[0].y);
       for (let i = 1; i < N; i++) ctx.lineTo(dpts[i].x, dpts[i].y);
       ctx.closePath();
-      ctx.setFillStyle(PRIMARY_LIGHT); ctx.fill();
-      ctx.setStrokeStyle(PRIMARY); ctx.setLineWidth(3); ctx.stroke();
+      ctx.setFillStyle('rgba(79,175,175,0.22)'); ctx.fill();
+      ctx.setStrokeStyle('#4FAFAF'); ctx.setLineWidth(3); ctx.stroke();
 
-      // 数据节点（深 teal 圆 + 白心）
-      dpts.forEach(({x, y}) => {
-        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2);
-        ctx.setFillStyle(PRIMARY_DARK); ctx.fill();
+      // 数据节点（5 色端点 + 白心，与全维雷达一致）
+      dpts.forEach(({x, y}, i) => {
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.setFillStyle(COLORS[i]); ctx.fill();
         ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2);
         ctx.setFillStyle('#FFFFFF'); ctx.fill();
       });
 
-      // 标签 + 百分比
+      // 标签 + 百分比（每个用对应 COLORS）
       labels.forEach((lbl, i) => {
         const a = angles[i], cosA = Math.cos(a), sinA = Math.sin(a);
-        const {x, y} = pt(a, maxR + 44);
+        const {x, y} = pt(a, maxR + 38);
         const align = cosA > 0.2 ? 'left' : cosA < -0.2 ? 'right' : 'center';
-        const dy = sinA < -0.4 ? -2 : sinA > 0.4 ? 14 : 6;
+        const dy = sinA < -0.4 ? -4 : sinA > 0.4 ? 12 : 6;
         ctx.setTextAlign(align);
-        ctx.setFontSize(24); ctx.setFillStyle(LABEL);
+        ctx.setFontSize(20); ctx.setFillStyle(COLORS[i]);
         ctx.fillText(lbl, x, y + dy);
-        ctx.setFontSize(18); ctx.setFillStyle(VALUE);
-        ctx.fillText(Math.round(vals[i] * 100) + '%', x, y + dy + 26);
+        ctx.setFontSize(16); ctx.setFillStyle(VALUE_GREY);
+        ctx.fillText(Math.round(vals[i] * 100) + '%', x, y + dy + 22);
       });
 
-      // 中心总分（5 维平均），辅助一眼读图
+      // 中心"综合得分"（健康度雷达专属特色）
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
       ctx.setTextAlign('center');
-      ctx.setFontSize(20); ctx.setFillStyle(VALUE);
-      ctx.fillText('综合', cx, cy - 12);
-      ctx.setFontSize(40); ctx.setFillStyle(PRIMARY_DARK);
+      ctx.setFontSize(18); ctx.setFillStyle(VALUE_GREY);
+      ctx.fillText('综合', cx, cy - 10);
+      ctx.setFontSize(36); ctx.setFillStyle('#3A8C8C');
       ctx.fillText(Math.round(avg * 100) + '%', cx, cy + 26);
 
       ctx.draw(false, () => {
