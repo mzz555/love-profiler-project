@@ -39,49 +39,49 @@
 /* ── 人格卡片（报告开头）───────────────────── */
 .str-hero-card {
   width: 100%; background: #FFFFFF;
-  border-radius: 28rpx; overflow: hidden;
+  border-radius: 32rpx; overflow: hidden;
   display: flex; align-items: flex-end;
-  margin-bottom: 20rpx; min-height: 280rpx;
-  box-shadow: 0 6rpx 32rpx rgba(0,0,0,0.08);
+  margin-bottom: 20rpx; min-height: 360rpx;
+  box-shadow: 0 8rpx 40rpx rgba(0,0,0,0.10);
   animation: slideUp 0.45s cubic-bezier(0.22,1,0.36,1) both;
 }
 .str-hero-left {
-  flex: 1; padding: 36rpx 0 36rpx 36rpx;
-  display: flex; flex-direction: column; gap: 14rpx;
+  flex: 1; padding: 32rpx 28rpx 32rpx 40rpx;
+  display: flex; flex-direction: column; gap: 18rpx;
 }
 .str-code-badge {
   align-self: flex-start;
   background: rgba(79,175,175,0.10);
   border: 1.5rpx solid rgba(79,175,175,0.28);
-  border-radius: 100rpx; padding: 6rpx 22rpx;
+  border-radius: 100rpx; padding: 8rpx 26rpx;
 }
 .str-code-text {
-  font-size: 20rpx; color: #4FAFAF;
+  font-size: 22rpx; color: #4FAFAF;
   font-weight: 700; letter-spacing: 3rpx;
 }
 .str-hero-name {
-  display: block; font-size: 50rpx; font-weight: 800;
-  color: #1C1C2E; letter-spacing: 1rpx; line-height: 1.25;
+  display: block; font-size: 52rpx; font-weight: 800;
+  color: #1C1C2E; letter-spacing: 1rpx; line-height: 1.22;
 }
 .str-tagline-badge {
   align-self: flex-start;
   background: linear-gradient(135deg, rgba(79,175,175,0.08), rgba(98,194,194,0.04));
   border: 1rpx solid rgba(79,175,175,0.18);
-  border-radius: 100rpx; padding: 8rpx 24rpx;
+  border-radius: 100rpx; padding: 10rpx 28rpx;
 }
 .str-tagline-text {
-  font-size: 22rpx; color: #5ABABA; letter-spacing: 1rpx;
+  font-size: 24rpx; color: #5ABABA; letter-spacing: 1rpx;
 }
 /* ── D1/D2/D3 段落解码标签 ──────────────────── */
 .str-segments {
-  display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx;
+  display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 10rpx;
 }
 .str-seg-pill {
-  padding: 6rpx 20rpx; border-radius: 100rpx;
+  padding: 8rpx 26rpx; border-radius: 100rpx;
   display: flex; align-items: center;
 }
 .str-seg-text {
-  font-size: 20rpx; font-weight: 600; letter-spacing: 0.5rpx;
+  font-size: 23rpx; font-weight: 600; letter-spacing: 0.5rpx;
 }
 /* 健康端：绿色调 */
 .seg-healthy {
@@ -109,16 +109,17 @@
   font-size: 22rpx; color: #AAAABB; letter-spacing: 1rpx;
 }
 .str-hero-right {
-  width: 220rpx; flex-shrink: 0;
+  width: 280rpx; flex-shrink: 0;
   display: flex; align-items: flex-end; justify-content: center;
 }
 .str-hero-char {
-  width: 210rpx; height: 260rpx;
+  width: 270rpx; height: 340rpx;
   opacity: 0;
+  filter: drop-shadow(0 6rpx 16rpx rgba(0,0,0,0.12));
   transition: opacity 0.7s ease-out 0.15s;
 }
 .str-hero-char.show { opacity: 1; }
-.str-hero-char-placeholder { width: 210rpx; height: 260rpx; }
+.str-hero-char-placeholder { width: 270rpx; height: 340rpx; }
 
 /* ── Loading State ─ Phase 3 清新玻璃化升级 ─────── */
 .loading-wrap {
