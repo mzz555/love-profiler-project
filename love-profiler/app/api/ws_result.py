@@ -195,11 +195,47 @@ class _SectionStreamer:
         self._cur = None
 
 
+def _aware_score(d4: dict) -> float:
+    """自我认知连续量：declared 在 normalized 中的得分 / 最高分。
+
+    - declared 是 top1 → 1.0
+    - declared 远低于 top1 → 趋近 0.0
+    - 缺数据（declared 空 或 normalized 全 0）→ 0.5 兜底
+    """
+    declared = d4.get("declared", "")
+    normalized = d4.get("normalized", {}) or {}
+    if not declared or not normalized:
+        return 0.5
+    max_val = max(normalized.values()) if normalized.values() else 0.0
+    if max_val <= 0:
+        return 0.5
+    return min(1.0, max(0.0, normalized.get(declared, 0.0) / max_val))
+
+
+def _style_clarity_score(d5: dict) -> float:
+    """表达成熟（风格明确度）：(|s1| + |s2|) / 12。
+
+    s1/s2 都接近 0 → 风格模糊 → 0；都接近 ±6 → 风格鲜明 → 1。
+    不评价方向（高直接 vs 高含蓄都算"清晰风格"）。
+    """
+    s1 = d5.get("s1_raw", 0) or 0
+    s2 = d5.get("s2_raw", 0) or 0
+    return min(1.0, (abs(s1) + abs(s2)) / 12.0)
+
+
 def _dim_chart(diagnosis: dict) -> dict:
-    """Convert diagnosis dimensions to structured chart data for 3 separate canvas charts."""
+    """Convert diagnosis dimensions to structured chart data.
+
+    新方案（三件套）：
+    - health_radar: 5 维"高=好"健康度雷达（替换旧 10 轴 combined-radar）
+    - d4_preference: 五瓣花数据（爱的语言偏好，top2 高亮）
+    - d5_quadrant: 象限点图数据（直接性 × 分享欲 2D 平面）
+
+    兼容：保留旧 d123/d4/d5 字段供老客户端用。
+    """
     dims = diagnosis.get("dimensions", {})
 
-    # D1/D2/D3 — raw score (-12 to +12) + interp label
+    # ── 旧字段（保留兼容）────────────────────────────────────────────────
     _names = {"D1": "依恋安全", "D2": "边界清晰", "D3": "冲突健康"}
     d123 = [
         {
@@ -210,12 +246,48 @@ def _dim_chart(diagnosis: dict) -> dict:
         }
         for k in ("D1", "D2", "D3")
     ]
-
-    # D4 — all 5 normalized love-language scores (0.0-1.0)
     d4_norm = dims.get("D4", {}).get("normalized", {t: 0.0 for t in ("T1","T2","T3","T4","T5")})
-
-    # D5 — s1/s2 labels for quadrant grid
     d5 = dims.get("D5", {})
+
+    # ── 新字段 1：5 维健康度雷达 ─────────────────────────────────────────
+    d1_raw = dims.get("D1", {}).get("raw", 0) or 0
+    d2_raw = dims.get("D2", {}).get("raw", 0) or 0
+    d3_raw = dims.get("D3", {}).get("raw", 0) or 0
+    health_radar = [
+        {"key": "D1",    "name": "依恋安全", "value": min(1.0, max(0.0, (d1_raw + 12) / 24))},
+        {"key": "D2",    "name": "边界清晰", "value": min(1.0, max(0.0, (d2_raw + 12) / 24))},
+        {"key": "D3",    "name": "冲突健康", "value": min(1.0, max(0.0, (d3_raw + 12) / 24))},
+        {"key": "AWARE", "name": "自我认知", "value": _aware_score(dims.get("D4", {}))},
+        {"key": "STYLE", "name": "表达成熟", "value": _style_clarity_score(d5)},
+    ]
+
+    # ── 新字段 2：D4 爱的语言偏好（五瓣花数据）──────────────────────────
+    d4_block = dims.get("D4", {}) or {}
+    top2 = d4_block.get("top2", []) or []
+    d4_details = diagnosis.get("D4_details", []) or []
+    name_by_code = {d.get("code", ""): d.get("name", "") for d in d4_details}
+    d4_preference = {
+        "items": [
+            {
+                "code":    code,
+                "name":    name_by_code.get(code, code),
+                "value":   float(d4_norm.get(code, 0.0) or 0.0),
+                "is_top2": code in top2,
+            }
+            for code in ("T1", "T2", "T3", "T4", "T5")
+        ],
+        "top2_names": [name_by_code.get(c, c) for c in top2],
+    }
+
+    # ── 新字段 3：D5 风格象限点图 ────────────────────────────────────────
+    d5_quadrant = {
+        "s1_raw":     d5.get("s1_raw", 0) or 0,
+        "s2_raw":     d5.get("s2_raw", 0) or 0,
+        "s1_label":   d5.get("s1", "中直接"),
+        "s2_label":   d5.get("s2", "中分享"),
+        "quadrant":   d5.get("quadrant", ""),
+        "style_name": diagnosis.get("D5_style_name", "") or "",
+    }
 
     return {
         "d123": d123,
@@ -226,6 +298,9 @@ def _dim_chart(diagnosis: dict) -> dict:
             "s1_raw": d5.get("s1_raw", 0),
             "s2_raw": d5.get("s2_raw", 0),
         },
+        "health_radar":  health_radar,
+        "d4_preference": d4_preference,
+        "d5_quadrant":   d5_quadrant,
     }
 
 

@@ -190,6 +190,64 @@ def test_dim_chart_empty_diagnosis_fills_defaults():
     assert chart["d5"]["s2"] == "中分享"
 
 
+def test_dim_chart_health_radar_5_axes():
+    """5 维健康度雷达：D1/D2/D3 raw 归一化、AWARE 来自 declared/top1 比、STYLE 来自风格明确度。"""
+    diag = {**_SAMPLE_DIAGNOSIS, "dimensions": {
+        **_SAMPLE_DIAGNOSIS["dimensions"],
+        "D4": {**_SAMPLE_DIAGNOSIS["dimensions"]["D4"], "declared": "T1"},  # declared == top1 → AWARE=1
+    }}
+    chart = _dim_chart(diag)
+    axes = {row["key"]: row for row in chart["health_radar"]}
+    assert set(axes) == {"D1", "D2", "D3", "AWARE", "STYLE"}
+    # D1 raw=9 → (9+12)/24 = 0.875
+    assert abs(axes["D1"]["value"] - 0.875) < 0.001
+    # D2 raw=6 → 0.75
+    assert abs(axes["D2"]["value"] - 0.75) < 0.001
+    # D3 raw=-3 → (−3+12)/24 = 0.375
+    assert abs(axes["D3"]["value"] - 0.375) < 0.001
+    # AWARE: declared=T1, T1 是 top1 → 1.0
+    assert axes["AWARE"]["value"] == 1.0
+    # STYLE: |5|+|4| = 9 → 9/12 = 0.75
+    assert abs(axes["STYLE"]["value"] - 0.75) < 0.001
+
+
+def test_dim_chart_aware_score_when_declared_not_top1():
+    """declared 不在 top1 时 AWARE 按比例下降。"""
+    diag = {**_SAMPLE_DIAGNOSIS, "dimensions": {
+        **_SAMPLE_DIAGNOSIS["dimensions"],
+        # T1=0.9 是 top1，但 declared 是 T3=0.5
+        "D4": {**_SAMPLE_DIAGNOSIS["dimensions"]["D4"], "declared": "T3"},
+    }}
+    chart = _dim_chart(diag)
+    aware = next(r for r in chart["health_radar"] if r["key"] == "AWARE")
+    # 0.5 / 0.9 ≈ 0.556
+    assert abs(aware["value"] - 0.5 / 0.9) < 0.01
+
+
+def test_dim_chart_d4_preference_marks_top2():
+    chart = _dim_chart(_SAMPLE_DIAGNOSIS)
+    pref = chart["d4_preference"]
+    items_by_code = {it["code"]: it for it in pref["items"]}
+    # 5 项齐全
+    assert set(items_by_code) == {"T1", "T2", "T3", "T4", "T5"}
+    # T1 / T2 是 top2
+    assert items_by_code["T1"]["is_top2"] is True
+    assert items_by_code["T2"]["is_top2"] is True
+    assert items_by_code["T3"]["is_top2"] is False
+    # 中文名命中（来自 D4_details）
+    assert items_by_code["T1"]["name"] == "言语肯定"
+    # top2_names 顺序与 top2 一致
+    assert pref["top2_names"] == ["言语肯定", "精心时刻"]
+
+
+def test_dim_chart_d5_quadrant_emits_coordinates():
+    chart = _dim_chart(_SAMPLE_DIAGNOSIS)
+    q = chart["d5_quadrant"]
+    assert q["s1_raw"] == 5 and q["s2_raw"] == 4
+    assert q["quadrant"] == "高直接×高分享"
+    assert q["style_name"] == "直爽热情型"
+
+
 def test_all_labels_includes_segment_decode_and_d4_d5():
     labels = _all_labels(_SAMPLE_DIAGNOSIS)
     by_dim = {l["dimension"]: l for l in labels}
