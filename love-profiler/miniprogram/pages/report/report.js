@@ -284,6 +284,8 @@ Page({
     dimChartReady: false,
     chartImgD123: '',
     chartImgCombined: '',
+    chartImgD4Bloom: '',
+    chartImgD5Quadrant: '',
     // 分段内容（新格式）
     sec: { Title: '', Opening: '', Attachment: '', Boundary: '', Conflict: '', Language: '', Style: '', Suggestion: '' },
     highlights: [],       // [{idx, title, text, severity, isPositive}]
@@ -422,9 +424,14 @@ Page({
         if (dimChart) {
           // streaming 区块进入 DOM 后 canvas 已存在，200ms 足够 canvas 初始化
           setTimeout(() => {
-            console.log('[charts] drawing d123=', !!dimChart.d123, 'health=', !!dimChart.health_radar);
+            console.log('[charts] drawing d123=', !!dimChart.d123,
+                        'health=', !!dimChart.health_radar,
+                        'd4=', !!dimChart.d4_preference,
+                        'd5=', !!dimChart.d5_quadrant);
             this._drawD123Gauges(dimChart.d123);
             this._drawCombinedRadar(dimChart.health_radar);
+            this._drawD4Bloom(dimChart.d4_preference);
+            this._drawD5Quadrant(dimChart.d5_quadrant);
           }, 200);
         }
       } else if (msg.type === 'section_start') {
@@ -716,6 +723,106 @@ Page({
         }, this);
       });
     } catch(e) { console.error('[health-radar] THROW', e.message, e); }
+  },
+
+  // ── 图表3：D4 爱的语言"五瓣花"───────────────────────────────────────
+  // 5 瓣按 normalized 精确缩放；三级配色：top1 暖橙 / top2 金色 / 3-5 淡灰
+  _drawD4Bloom(pref) {
+    if (!pref || !Array.isArray(pref.items) || pref.items.length !== 5) {
+      console.warn('[d4-bloom] expected 5 items, got', pref);
+      return;
+    }
+    const ctx = tt.createCanvasContext('d4-bloom', this);
+    try {
+      const W = 640, H = 640, cx = W / 2, cy = H / 2;
+      const maxR = 210, minR = 30;       // 花瓣最小/最大半径（保证 0 偏好也可见底纹）
+      const items = pref.items;
+
+      // 按 value 降序找 top1 / top2 索引
+      const ranked = items.map((it, i) => ({i, v: it.value || 0})).sort((a, b) => b.v - a.v);
+      const top1Idx = ranked[0].i;
+      const top2Idx = ranked[1] ? ranked[1].i : -1;
+
+      // 三级配色（cream × teal 主题对应的暖色）
+      const C_TOP1 = { fill: 'rgba(224,130,80,0.85)', stroke: '#C0622A', label: '#8B4513' };
+      const C_TOP2 = { fill: 'rgba(212,165,108,0.70)', stroke: '#A8814A', label: '#6F5230' };
+      const C_REST = { fill: 'rgba(180,170,160,0.30)', stroke: 'rgba(150,140,128,0.55)', label: 'rgba(110,100,90,0.85)' };
+
+      const colorOf = (idx) => idx === top1Idx ? C_TOP1 : idx === top2Idx ? C_TOP2 : C_REST;
+
+      // 5 瓣 × 72°，每瓣占 60°，瓣间 12° 留白
+      const SECTOR_DEG = 60;
+      const sectorRad = (SECTOR_DEG * Math.PI) / 180;
+      const angles = Array.from({length: 5}, (_, i) => -Math.PI / 2 + i * (2 * Math.PI / 5));
+
+      // 背景柔光圆
+      ctx.setFillStyle('rgba(248,245,241,0.55)');
+      ctx.beginPath(); ctx.arc(cx, cy, maxR + 24, 0, Math.PI * 2); ctx.fill();
+
+      // 外圈虚线参考圆（100% 标记）
+      ctx.setStrokeStyle('rgba(180,170,160,0.30)'); ctx.setLineWidth(1);
+      ctx.beginPath(); ctx.arc(cx, cy, maxR, 0, Math.PI * 2); ctx.stroke();
+
+      // 画 5 瓣
+      items.forEach((it, i) => {
+        const v = Math.max(0, Math.min(1, it.value || 0));
+        const r = minR + (maxR - minR) * v;
+        const ax = angles[i];
+        const c = colorOf(i);
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, ax - sectorRad / 2, ax + sectorRad / 2);
+        ctx.closePath();
+        ctx.setFillStyle(c.fill); ctx.fill();
+        ctx.setStrokeStyle(c.stroke); ctx.setLineWidth(2); ctx.stroke();
+      });
+
+      // 中心白圆 + top2 文字
+      ctx.beginPath(); ctx.arc(cx, cy, 70, 0, Math.PI * 2);
+      ctx.setFillStyle('#FFFFFF'); ctx.fill();
+      ctx.setStrokeStyle('rgba(200,190,182,0.55)'); ctx.setLineWidth(1.5); ctx.stroke();
+
+      ctx.setTextAlign('center');
+      ctx.setFontSize(18); ctx.setFillStyle('rgba(110,100,90,0.85)');
+      ctx.fillText('你最需要', cx, cy - 18);
+      ctx.setFontSize(22); ctx.setFillStyle('#3A3A4A');
+      const top2Names = (pref.top2_names || []).slice(0, 2);
+      ctx.fillText(top2Names[0] || '—', cx, cy + 10);
+      ctx.setFontSize(15); ctx.setFillStyle('rgba(130,120,112,0.85)');
+      ctx.fillText('+ ' + (top2Names[1] || '—'), cx, cy + 34);
+
+      // 外侧标签：中文名 + 百分比
+      items.forEach((it, i) => {
+        const ax = angles[i], cosA = Math.cos(ax), sinA = Math.sin(ax);
+        const lx = cx + Math.cos(ax) * (maxR + 38);
+        const ly = cy + Math.sin(ax) * (maxR + 38);
+        const align = cosA > 0.2 ? 'left' : cosA < -0.2 ? 'right' : 'center';
+        const c = colorOf(i);
+
+        ctx.setTextAlign(align);
+        ctx.setFontSize(22); ctx.setFillStyle(c.label);
+        ctx.fillText(it.name || it.code, lx, ly);
+        ctx.setFontSize(16); ctx.setFillStyle('rgba(130,120,112,0.85)');
+        ctx.fillText(Math.round((it.value || 0) * 100) + '%', lx, ly + 22);
+      });
+
+      ctx.draw(false, () => {
+        tt.canvasToTempFilePath({
+          canvasId: 'd4-bloom',
+          destWidth: W, destHeight: H,
+          success: res => { console.log('[d4-bloom] img ok'); this.setData({ chartImgD4Bloom: res.tempFilePath }); },
+          fail: err => console.error('[d4-bloom] toImg fail', err),
+        }, this);
+      });
+    } catch(e) { console.error('[d4-bloom] THROW', e.message, e); }
+  },
+
+  // ── 图表4：D5 表达风格象限点图（Step 4 占位，下一步实现）─────────────
+  _drawD5Quadrant(q) {
+    if (!q) return;
+    // 占位：暂时仅打印；下一步会画 9 宫格 + 点
+    console.log('[d5-quadrant] data', q);
   },
 
   restart() {
