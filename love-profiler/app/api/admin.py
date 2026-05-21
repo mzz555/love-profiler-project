@@ -27,7 +27,11 @@ from app.database import get_db
 from app.models.ai_call_log import AiCallLog
 from app.models.assessment import Assessment
 from app.models.report_quality_audit import ReportQualityAudit
-from app.services.admin_metrics import compute_llm_metrics
+from app.services.admin_metrics import (
+    compute_business_metrics,
+    compute_llm_metrics,
+    compute_quality_score_distribution,
+)
 
 
 _SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -456,6 +460,38 @@ async def metrics_llm(
       by_agent[{agent, total, success, error, error_rate}]
     """
     return compute_llm_metrics(db, hours=hours, top_n=top_n)
+
+
+@router.get("/api/metrics/business", include_in_schema=False)
+async def metrics_business(
+    days: int = Query(default=7, ge=1, le=90),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """业务指标聚合（仪表盘 Phase D.3）：用户/订单/16类/漏斗。
+
+    返回结构：
+      window_days,
+      daily_users[{date, new_users, completed_assessments}],
+      personality_distribution[{type_code, count, d1_group}],
+      funnel{stages{pending,generating,analyzed,complete}, total},
+      daily_orders[{date, paid, failed, pending, revenue_yuan}]
+    """
+    return compute_business_metrics(db, days=days)
+
+
+@router.get("/api/metrics/quality", include_in_schema=False)
+async def metrics_quality(
+    days: int = Query(default=30, ge=1, le=180),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """报告质量评分分布（LLM-as-judge overall_score 三段分布 + 均分）。
+
+    返回结构：
+      window_days, buckets{excellent,good,poor}, total, avg_score
+    """
+    return compute_quality_score_distribution(db, days=days)
 
 
 @router.get("/api/{table_name}", include_in_schema=False)

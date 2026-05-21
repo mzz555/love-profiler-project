@@ -479,3 +479,57 @@ def test_audits_respects_limit(client, db_session, monkeypatch):
     resp = client.get("/admin/api/audits?limit=3")
     assert resp.status_code == 200
     assert len(resp.json()["rows"]) == 3
+
+
+# ── Dashboard 指标端点（Phase D.3）─────────────────────
+def test_metrics_business_without_auth_returns_404(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
+    resp = client.get("/admin/api/metrics/business")
+    assert resp.status_code == 404
+
+
+def test_metrics_business_returns_expected_shape(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.get("/admin/api/metrics/business?days=7")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["window_days"] == 7
+    assert isinstance(data["daily_users"], list)
+    assert len(data["daily_users"]) == 7
+    assert isinstance(data["personality_distribution"], list)
+    assert "stages" in data["funnel"]
+    for k in ("pending", "generating", "analyzed", "complete"):
+        assert k in data["funnel"]["stages"]
+    assert isinstance(data["daily_orders"], list)
+    assert len(data["daily_orders"]) == 7
+
+
+def test_metrics_business_rejects_invalid_days(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    # ge=1, le=90 — 0 与 91 都应被 422 拒
+    assert client.get("/admin/api/metrics/business?days=0").status_code == 422
+    assert client.get("/admin/api/metrics/business?days=91").status_code == 422
+
+
+def test_metrics_quality_without_auth_returns_404(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "false")
+    resp = client.get("/admin/api/metrics/quality")
+    assert resp.status_code == 404
+
+
+def test_metrics_quality_returns_expected_shape(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    resp = client.get("/admin/api/metrics/quality?days=30")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["window_days"] == 30
+    assert set(data["buckets"].keys()) == {"excellent", "good", "poor"}
+    assert "total" in data
+    assert "avg_score" in data
+
+
+def test_metrics_quality_rejects_invalid_days(client, monkeypatch):
+    monkeypatch.setenv("DEV_MODE", "true")
+    # ge=1, le=180
+    assert client.get("/admin/api/metrics/quality?days=0").status_code == 422
+    assert client.get("/admin/api/metrics/quality?days=181").status_code == 422

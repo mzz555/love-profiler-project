@@ -5,13 +5,22 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from app.models.ai_call_log import AiCallLog
+from app.models.assessment import Assessment
+from app.models.order import Order
+from app.models.report_quality_audit import ReportQualityAudit
 from app.models.user import User
 from app.models.user_token_quota import UserTokenQuota
 from app.services.admin_metrics import (
     _percentile,
+    compute_assessment_funnel,
+    compute_business_metrics,
+    compute_daily_orders,
+    compute_daily_users,
     compute_duration_percentiles,
     compute_hourly_trend,
     compute_llm_metrics,
+    compute_personality_distribution,
+    compute_quality_score_distribution,
     compute_status_breakdown,
     compute_top_users_by_tokens,
 )
@@ -208,6 +217,178 @@ def test_status_breakdown_groups_by_agent_and_calculates_error_rate(db_session):
     assert by_agent["agent_b"]["error"] == 1
     assert by_agent["agent_b"]["error_rate"] == round(1 / 3, 4)
     assert by_agent["agent_a"]["error_rate"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# compute_llm_metrics (aggregate)
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Business metrics (Phase D.3 dashboard)
+# ---------------------------------------------------------------------------
+
+def _add_assessment(db, *, user_id: int, status: str = "complete",
+                    personality_type: str | None = "S-CL-H",
+                    session_id: str | None = None,
+                    created_at: datetime | None = None):
+    sid = session_id or f"sess_{user_id}_{status}_{datetime.now(timezone.utc).timestamp()}"
+    a = Assessment(
+        user_id=user_id, session_id=sid, status=status,
+        personality_type=personality_type, mode="chat",
+        created_at=created_at or datetime.now(timezone.utc),
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+def _add_order(db, *, user_id: int, assessment_id: int, status: str = "paid",
+               amount: int = 990, out_trade_no: str | None = None,
+               created_at: datetime | None = None):
+    tn = out_trade_no or f"trade_{user_id}_{assessment_id}_{status}_{datetime.now(timezone.utc).timestamp()}"
+    o = Order(
+        user_id=user_id, assessment_id=assessment_id, out_trade_no=tn,
+        amount=amount, status=status,
+        created_at=created_at or datetime.now(timezone.utc),
+    )
+    db.add(o)
+    db.commit()
+    db.refresh(o)
+    return o
+
+
+# --- compute_daily_users ---
+
+def test_daily_users_returns_correct_window_size(db_session):
+    out = compute_daily_users(db_session, days=7)
+    assert len(out) == 7
+    # 升序日期
+    dates = [r["date"] for r in out]
+    assert dates == sorted(dates)
+
+
+def test_daily_users_buckets_into_correct_date(db_session):
+    u = _add_user(db_session, openid="o_today_user")
+    _add_assessment(db_session, user_id=u.id, status="complete")
+    _add_assessment(db_session, user_id=u.id, status="pending")  # 不计完成
+
+    out = compute_daily_users(db_session, days=3)
+    today_bucket = out[-1]  # 升序最后一桶是今天
+    assert today_bucket["new_users"] >= 1
+    assert today_bucket["completed_assessments"] == 1
+
+
+# --- compute_personality_distribution ---
+
+def test_personality_distribution_groups_and_sorts(db_session):
+    u = _add_user(db_session, openid="o_pers_dist")
+    _add_assessment(db_session, user_id=u.id, status="complete", personality_type="S-CL-H")
+    _add_assessment(db_session, user_id=u.id, status="complete", personality_type="S-CL-H")
+    _add_assessment(db_session, user_id=u.id, status="complete", personality_type="MA-BL-P")
+    _add_assessment(db_session, user_id=u.id, status="pending",  personality_type="A-CL-H")  # 不计入
+
+    out = compute_personality_distribution(db_session, days=30)
+    by_code = {r["type_code"]: r for r in out}
+    assert by_code["S-CL-H"]["count"] == 2
+    assert by_code["MA-BL-P"]["count"] == 1
+    assert "A-CL-H" not in by_code
+    # 降序
+    counts = [r["count"] for r in out]
+    assert counts == sorted(counts, reverse=True)
+    # d1_group 从 type_code 首段抽取
+    assert by_code["S-CL-H"]["d1_group"] == "S"
+    assert by_code["MA-BL-P"]["d1_group"] == "MA"
+
+
+def test_personality_distribution_empty_returns_empty_list(db_session):
+    assert compute_personality_distribution(db_session, days=30) == []
+
+
+# --- compute_assessment_funnel ---
+
+def test_funnel_counts_each_status_independently(db_session):
+    u = _add_user(db_session, openid="o_funnel")
+    _add_assessment(db_session, user_id=u.id, status="pending")
+    _add_assessment(db_session, user_id=u.id, status="generating")
+    _add_assessment(db_session, user_id=u.id, status="analyzed")
+    _add_assessment(db_session, user_id=u.id, status="complete")
+    _add_assessment(db_session, user_id=u.id, status="complete")
+
+    out = compute_assessment_funnel(db_session, days=30)
+    assert out["stages"] == {"pending": 1, "generating": 1, "analyzed": 1, "complete": 2}
+    assert out["total"] == 5
+
+
+def test_funnel_empty_returns_zero_stages(db_session):
+    out = compute_assessment_funnel(db_session, days=7)
+    assert out["stages"] == {"pending": 0, "generating": 0, "analyzed": 0, "complete": 0}
+    assert out["total"] == 0
+
+
+# --- compute_daily_orders ---
+
+def test_daily_orders_returns_window_size(db_session):
+    out = compute_daily_orders(db_session, days=7)
+    assert len(out) == 7
+    for r in out:
+        assert {"date", "paid", "failed", "pending", "revenue_yuan"} <= set(r.keys())
+
+
+def test_daily_orders_revenue_only_from_paid(db_session):
+    u = _add_user(db_session, openid="o_orders_rev")
+    a = _add_assessment(db_session, user_id=u.id, status="complete")
+    _add_order(db_session, user_id=u.id, assessment_id=a.id, status="paid",   amount=990)
+    _add_order(db_session, user_id=u.id, assessment_id=a.id, status="paid",   amount=1990)
+    _add_order(db_session, user_id=u.id, assessment_id=a.id, status="failed", amount=990)
+    _add_order(db_session, user_id=u.id, assessment_id=a.id, status="pending", amount=990)
+
+    out = compute_daily_orders(db_session, days=3)
+    today = out[-1]
+    assert today["paid"] == 2
+    assert today["failed"] == 1
+    assert today["pending"] == 1
+    # 990 + 1990 = 2980 分 = 29.80 元
+    assert today["revenue_yuan"] == 29.80
+
+
+# --- compute_quality_score_distribution ---
+
+def test_quality_score_distribution_buckets_by_threshold(db_session):
+    u = _add_user(db_session, openid="o_quality")
+    a = _add_assessment(db_session, user_id=u.id, status="complete")
+    for score in (9, 8, 7, 6, 5, 3):
+        db_session.add(ReportQualityAudit(
+            assessment_id=a.id, judge_model="doubao-test",
+            coherence_score=score, readability_score=score, factual_score=score,
+            overall_score=score, duration_ms=10,
+        ))
+    db_session.commit()
+
+    out = compute_quality_score_distribution(db_session, days=30)
+    assert out["total"] == 6
+    assert out["buckets"] == {"excellent": 2, "good": 2, "poor": 2}
+    # 平均 (9+8+7+6+5+3)/6 = 6.33
+    assert out["avg_score"] == 6.33
+
+
+def test_quality_score_distribution_empty(db_session):
+    out = compute_quality_score_distribution(db_session, days=30)
+    assert out == {"window_days": 30, "buckets": {"excellent": 0, "good": 0, "poor": 0},
+                   "total": 0, "avg_score": 0.0}
+
+
+# --- compute_business_metrics (aggregate) ---
+
+def test_compute_business_metrics_returns_all_sections(db_session):
+    out = compute_business_metrics(db_session, days=7)
+    assert out["window_days"] == 7
+    assert "daily_users" in out
+    assert "personality_distribution" in out
+    assert "funnel" in out
+    assert "daily_orders" in out
+    assert len(out["daily_users"]) == 7
+    assert len(out["daily_orders"]) == 7
 
 
 # ---------------------------------------------------------------------------

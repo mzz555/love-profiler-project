@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Love Profiler · 管理后台</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <script>
   // 提前应用主题，避免首屏闪烁
   (function(){
@@ -161,6 +162,33 @@ pre.json{background:var(--code-bg);border:1px solid var(--border);border-radius:
 @keyframes spin{to{transform:rotate(360deg)}}
 .flash-green{animation:flashG .6s ease}
 @keyframes flashG{0%,100%{background:transparent}50%{background:rgba(74,222,128,.15)}}
+
+/* ===== Dashboard (overview) ===== */
+.range-toolbar{display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.range-toolbar .label{font-size:12px;color:var(--muted);margin-right:4px}
+.range-btn{background:transparent;border:1px solid var(--border);color:var(--text);
+           padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;
+           transition:background .15s,border-color .15s}
+.range-btn:hover{background:var(--hover)}
+.range-btn.active{background:rgba(79,175,175,.12);border-color:var(--accent);color:var(--accent)}
+.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:24px}
+.chart-grid.full{grid-template-columns:1fr}
+.chart-card{background:var(--card);border:1px solid var(--border);
+            border-radius:10px;padding:14px 16px}
+.chart-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.chart-title{font-size:13px;font-weight:600;color:var(--heading)}
+.chart-sub{font-size:11px;color:var(--muted)}
+.chart-box{width:100%;height:260px}
+.chart-box.tall{height:320px}
+.dur-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.dur-cell{background:var(--row-stripe);border-radius:6px;padding:8px;text-align:center}
+.dur-cell .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.dur-cell .v{font-size:18px;font-weight:700;color:var(--heading);margin-top:2px}
+.quality-mini{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}
+.quality-mini .q-cell{text-align:center;padding:8px;border-radius:6px;background:var(--row-stripe)}
+.quality-mini .q-cell .qk{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.quality-mini .q-cell .qv{font-size:18px;font-weight:700;margin-top:2px}
+.q-excellent{color:#4ade80}.q-good{color:#fbbf24}.q-poor{color:#f87171}
 </style>
 </head>
 <body>
@@ -308,40 +336,93 @@ function setMain(html) {
   document.getElementById('main').innerHTML = html;
 }
 
+// ===== 仪表盘状态 =====
+let _dashRangeDays = 7;        // 默认 7 天窗口
+let _dashLlmHours  = 24;       // LLM 监控固定 24h（最大不超过 168）
+const _dashCharts = {};        // {key: echarts instance}
+
+function _disposeDashCharts() {
+  Object.values(_dashCharts).forEach(c => { try { c.dispose(); } catch(e){} });
+  Object.keys(_dashCharts).forEach(k => delete _dashCharts[k]);
+}
+
+function _isDark() {
+  return document.documentElement.getAttribute('data-theme') !== 'light';
+}
+
+// 主题色板（基于 CSS var 落到 JS 端，dark/light 自动切换）
+function _palette() {
+  const dark = _isDark();
+  return {
+    text:    dark ? '#e2e8f0' : '#2A2A3A',
+    muted:   dark ? '#64748b' : '#8A857F',
+    border:  dark ? '#1e2535' : '#E0DAD3',
+    grid:    dark ? '#1c2330' : '#EDE7E0',
+    bg:      dark ? '#161b27' : '#FFFFFF',
+    accent:  dark ? '#3b82f6' : '#4FAFAF',
+    teal:    '#4FAFAF',
+    blue:    '#3b82f6',
+    green:   dark ? '#4ade80' : '#15803D',
+    yellow:  '#fbbf24',
+    red:     dark ? '#f87171' : '#DC2626',
+    purple:  '#a78bfa',
+    pink:    '#f472b6',
+    // D1 分组配色（16类柱状图按 D1 前缀分组）
+    d1Group: { S:'#4ade80', MS:'#3b82f6', MA:'#fbbf24', A:'#f87171' },
+  };
+}
+
+function _baseGrid() {
+  return { left: 40, right: 16, top: 28, bottom: 28, containLabel: true };
+}
+
+function _initChart(id, option) {
+  const dom = document.getElementById(id);
+  if (!dom || !window.echarts) return null;
+  const inst = echarts.init(dom, _isDark() ? 'dark' : null, { renderer: 'canvas' });
+  inst.setOption(option);
+  _dashCharts[id] = inst;
+  return inst;
+}
+
+function _fmtDateShort(s) {
+  if (!s) return '';
+  // 'YYYY-MM-DD' → 'MM-DD'
+  return s.length >= 10 ? s.slice(5, 10) : s;
+}
+
+function _fmtHourShort(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getHours())}:00`;
+}
+
 async function loadOverview() {
+  _disposeDashCharts();
   setMain('<div class="empty"><span class="spinner"></span>加载中…</div>');
-  const data = await apiFetch('/admin/api/overview');
-  if (!data) return;
-  const t = data.tables;
+
+  const days = _dashRangeDays;
+  const [ov, biz, llm, qual] = await Promise.all([
+    apiFetch('/admin/api/overview'),
+    apiFetch(`/admin/api/metrics/business?days=${days}`),
+    apiFetch(`/admin/api/metrics/llm?hours=${_dashLlmHours}&top_n=10`),
+    apiFetch(`/admin/api/metrics/quality?days=${Math.max(days, 30)}`),
+  ]);
+  if (!ov) return;
+
+  const t = ov.tables;
+  const uStats = t.users || {};
   const aStats = t.assessments || {};
   const oStats = t.orders || {};
+  const aiStats = t.ai_call_logs || {};
   const totalA = aStats.total || 0;
-  const byA = aStats.by_status || {};
-  const completeA = byA.complete || 0;
-  const analyzedA = byA.analyzed || 0;
-  const pendingA  = byA.pending  || 0;
-  const genA      = byA.generating || 0;
   const totalO = oStats.total || 0;
-  const byO = oStats.by_status || {};
-  const paidO   = byO.paid    || 0;
-  const failedO = byO.failed  || 0;
-  const pendO   = byO.pending || 0;
+  const paidO  = (oStats.by_status||{}).paid || 0;
+  const conversion = totalA > 0 ? (paidO / totalA * 100).toFixed(1) : '0.0';
+  const dur = (llm && llm.duration) || {};
 
-  const barA = totalA > 0 ? `
-    <div class="status-bar">
-      <div class="status-seg seg-complete" style="width:${completeA/totalA*100}%"></div>
-      <div class="status-seg seg-analyzed" style="width:${analyzedA/totalA*100}%"></div>
-      <div class="status-seg seg-pending"  style="width:${pendingA/totalA*100}%"></div>
-      <div class="status-seg seg-generating" style="width:${genA/totalA*100}%"></div>
-    </div>` : '';
-  const barO = totalO > 0 ? `
-    <div class="status-bar">
-      <div class="status-seg seg-paid"   style="width:${paidO/totalO*100}%"></div>
-      <div class="status-seg seg-failed" style="width:${failedO/totalO*100}%"></div>
-      <div class="status-seg seg-pending" style="width:${pendO/totalO*100}%"></div>
-    </div>` : '';
-
-  const recentRows = (data.recent_assessments || []).map(a => `
+  const recentRows = (ov.recent_assessments || []).map(a => `
     <tr>
       <td class="mono dim">#${a.id}</td>
       <td class="mono dim">${esc((a.session_id||'').slice(0,8))}</td>
@@ -350,40 +431,312 @@ async function loadOverview() {
       <td class="dim">${fmtDate(a.created_at)}</td>
     </tr>`).join('') || '<tr><td colspan="5" class="empty">暂无数据</td></tr>';
 
+  // 质量评分小卡
+  const qb = (qual && qual.buckets) || {excellent:0,good:0,poor:0};
+  const qTotal = qual && qual.total || 0;
+  const qPct = (n) => qTotal > 0 ? (n/qTotal*100).toFixed(0) + '%' : '—';
+
   setMain(`
-    <div class="section-title">概览</div>
+    <div class="section-title">仪表盘</div>
+    <div class="range-toolbar">
+      <span class="label">时间窗：</span>
+      <button class="range-btn ${days===1?'active':''}" onclick="setDashRange(1)">24h</button>
+      <button class="range-btn ${days===7?'active':''}" onclick="setDashRange(7)">7 天</button>
+      <button class="range-btn ${days===30?'active':''}" onclick="setDashRange(30)">30 天</button>
+      <span class="label" style="margin-left:16px">LLM 监控固定 24h</span>
+    </div>
+
     <div class="stat-grid">
       <div class="stat-card">
         <div class="stat-label">用户总数</div>
-        <div class="stat-val teal">${fmtNum((t.users||{}).total)}</div>
-        <div class="stat-sub">今日 +${(t.users||{}).today || 0}</div>
+        <div class="stat-val teal">${fmtNum(uStats.total)}</div>
+        <div class="stat-sub">今日 +${uStats.today || 0}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">测评记录</div>
         <div class="stat-val">${fmtNum(totalA)}</div>
         <div class="stat-sub">今日 +${aStats.today || 0}</div>
-        ${barA}
       </div>
       <div class="stat-card">
-        <div class="stat-label">订单</div>
-        <div class="stat-val">${fmtNum(totalO)}</div>
-        <div class="stat-sub">已付款 ${fmtNum(paidO)}</div>
-        ${barO}
+        <div class="stat-label">付费转化率</div>
+        <div class="stat-val green">${conversion}%</div>
+        <div class="stat-sub">已付 ${fmtNum(paidO)} / 测评 ${fmtNum(totalA)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">AI 调用（今日）</div>
-        <div class="stat-val">${fmtNum((t.ai_call_logs||{}).today)}</div>
-        <div class="stat-sub">总计 ${fmtNum((t.ai_call_logs||{}).total)}</div>
+        <div class="stat-val">${fmtNum(aiStats.today)}</div>
+        <div class="stat-sub">总计 ${fmtNum(aiStats.total)}</div>
       </div>
     </div>
-    <div class="section-title">最近 5 条测评</div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title">用户增长趋势</div>
+          <div class="chart-sub">最近 ${days} 天</div>
+        </div>
+        <div class="chart-box" id="ch_users"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title">答题漏斗</div>
+          <div class="chart-sub">${days} 天内 status 分布</div>
+        </div>
+        <div class="chart-box" id="ch_funnel"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title">16 类人格分布</div>
+          <div class="chart-sub">按 D1 依恋分组配色</div>
+        </div>
+        <div class="chart-box" id="ch_persona"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title">订单趋势 + 收入</div>
+          <div class="chart-sub">订单数（堆叠柱） + 收入（折线，元）</div>
+        </div>
+        <div class="chart-box" id="ch_orders"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title">AI 响应耗时分位（24h）</div>
+          <div class="chart-sub">success 调用，共 ${dur.count || 0} 次</div>
+        </div>
+        <div class="dur-row">
+          <div class="dur-cell"><div class="k">P50</div><div class="v">${fmtNum(dur.p50)}<span style="font-size:11px;color:var(--muted)">ms</span></div></div>
+          <div class="dur-cell"><div class="k">P95</div><div class="v">${fmtNum(dur.p95)}<span style="font-size:11px;color:var(--muted)">ms</span></div></div>
+          <div class="dur-cell"><div class="k">P99</div><div class="v">${fmtNum(dur.p99)}<span style="font-size:11px;color:var(--muted)">ms</span></div></div>
+          <div class="dur-cell"><div class="k">MAX</div><div class="v">${fmtNum(dur.max)}<span style="font-size:11px;color:var(--muted)">ms</span></div></div>
+        </div>
+        <div class="chart-box" id="ch_llm_trend" style="height:180px;margin-top:8px"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title">报告质量评分</div>
+          <div class="chart-sub">${Math.max(days, 30)} 天内 LLM-as-judge · 均分 ${(qual&&qual.avg_score) || 0}</div>
+        </div>
+        <div class="chart-box" id="ch_quality"></div>
+        <div class="quality-mini">
+          <div class="q-cell"><div class="qk">优秀 ≥8</div><div class="qv q-excellent">${qb.excellent} <span style="font-size:11px;color:var(--muted)">${qPct(qb.excellent)}</span></div></div>
+          <div class="q-cell"><div class="qk">良好 6-7</div><div class="qv q-good">${qb.good} <span style="font-size:11px;color:var(--muted)">${qPct(qb.good)}</span></div></div>
+          <div class="q-cell"><div class="qk">待改进 ≤5</div><div class="qv q-poor">${qb.poor} <span style="font-size:11px;color:var(--muted)">${qPct(qb.poor)}</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-grid full">
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <div class="chart-title">今日 Token 消耗 Top 10 用户</div>
+          <div class="chart-sub">prompt + completion，按 total 倒序</div>
+        </div>
+        <div class="chart-box tall" id="ch_tokens"></div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:8px">最近 5 条测评</div>
     <div class="tbl-wrap">
       <table>
         <thead><tr><th>ID</th><th>Session</th><th>类型</th><th>状态</th><th>时间</th></tr></thead>
         <tbody>${recentRows}</tbody>
       </table>
-    </div>`);
+    </div>
+  `);
+
+  _renderDashCharts(biz || {}, llm || {}, qual || {});
 }
+
+function setDashRange(d) {
+  _dashRangeDays = d;
+  loadOverview();
+}
+
+function _renderDashCharts(biz, llm, qual) {
+  const p = _palette();
+
+  // ① 用户增长 — 双线折线
+  const du = biz.daily_users || [];
+  _initChart('ch_users', {
+    grid: _baseGrid(),
+    tooltip: { trigger: 'axis' },
+    legend: { textStyle: { color: p.muted }, top: 0, right: 0 },
+    xAxis: {
+      type: 'category',
+      data: du.map(r => _fmtDateShort(r.date)),
+      axisLine: { lineStyle: { color: p.border } },
+      axisLabel: { color: p.muted, fontSize: 10 },
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: p.grid } },
+      axisLabel: { color: p.muted, fontSize: 10 },
+    },
+    series: [
+      { name: '新增用户', type: 'line', smooth: true, symbol: 'circle', symbolSize: 5,
+        data: du.map(r => r.new_users), lineStyle: { color: p.teal, width: 2 },
+        itemStyle: { color: p.teal },
+        areaStyle: { color: p.teal, opacity: 0.08 } },
+      { name: '完成测评', type: 'line', smooth: true, symbol: 'circle', symbolSize: 5,
+        data: du.map(r => r.completed_assessments), lineStyle: { color: p.blue, width: 2 },
+        itemStyle: { color: p.blue } },
+    ],
+  });
+
+  // ② 答题漏斗
+  const fn = (biz.funnel && biz.funnel.stages) || {};
+  _initChart('ch_funnel', {
+    tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+    legend: { textStyle: { color: p.muted }, top: 0, right: 0 },
+    series: [{
+      type: 'funnel',
+      left: '5%', right: '5%', top: 30, bottom: 10,
+      label: { color: p.text, fontSize: 12, formatter: '{b}: {c}' },
+      labelLine: { lineStyle: { color: p.muted } },
+      data: [
+        { name: '待答题', value: fn.pending || 0, itemStyle: { color: '#94a3b8' } },
+        { name: '生成中', value: fn.generating || 0, itemStyle: { color: p.yellow } },
+        { name: '已分析', value: fn.analyzed || 0, itemStyle: { color: p.blue } },
+        { name: '已完成', value: fn.complete || 0, itemStyle: { color: p.green } },
+      ],
+    }],
+  });
+
+  // ③ 16 类人格分布柱状
+  const pd = biz.personality_distribution || [];
+  _initChart('ch_persona', {
+    grid: { ..._baseGrid(), bottom: 56 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    xAxis: {
+      type: 'category',
+      data: pd.map(r => r.type_code),
+      axisLine: { lineStyle: { color: p.border } },
+      axisLabel: { color: p.muted, fontSize: 9, rotate: 35 },
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: p.grid } },
+      axisLabel: { color: p.muted, fontSize: 10 },
+    },
+    series: [{
+      type: 'bar',
+      data: pd.map(r => ({
+        value: r.count,
+        itemStyle: { color: p.d1Group[r.d1_group] || p.accent, borderRadius: [3,3,0,0] },
+      })),
+      barMaxWidth: 22,
+    }],
+  });
+
+  // ④ 订单趋势 — 堆叠柱 + 折线收入
+  const dorders = biz.daily_orders || [];
+  _initChart('ch_orders', {
+    grid: _baseGrid(),
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    legend: { textStyle: { color: p.muted }, top: 0, right: 0 },
+    xAxis: {
+      type: 'category',
+      data: dorders.map(r => _fmtDateShort(r.date)),
+      axisLine: { lineStyle: { color: p.border } },
+      axisLabel: { color: p.muted, fontSize: 10 },
+    },
+    yAxis: [
+      { type: 'value', name: '订单', nameTextStyle: { color: p.muted, fontSize: 10 },
+        splitLine: { lineStyle: { color: p.grid } },
+        axisLabel: { color: p.muted, fontSize: 10 } },
+      { type: 'value', name: '收入(¥)', nameTextStyle: { color: p.muted, fontSize: 10 },
+        splitLine: { show: false },
+        axisLabel: { color: p.muted, fontSize: 10 } },
+    ],
+    series: [
+      { name: '已付', type: 'bar', stack: 'orders', barMaxWidth: 22,
+        data: dorders.map(r => r.paid), itemStyle: { color: p.green } },
+      { name: '失败', type: 'bar', stack: 'orders', barMaxWidth: 22,
+        data: dorders.map(r => r.failed), itemStyle: { color: p.red } },
+      { name: '待支付', type: 'bar', stack: 'orders', barMaxWidth: 22,
+        data: dorders.map(r => r.pending), itemStyle: { color: p.muted } },
+      { name: '收入(¥)', type: 'line', smooth: true, yAxisIndex: 1, symbol: 'circle', symbolSize: 5,
+        data: dorders.map(r => r.revenue_yuan), lineStyle: { color: p.yellow, width: 2 },
+        itemStyle: { color: p.yellow } },
+    ],
+  });
+
+  // ⑤ LLM 调用量小时趋势（堆叠柱 success/error）
+  const tr = llm.hourly_trend || [];
+  _initChart('ch_llm_trend', {
+    grid: { left: 36, right: 8, top: 18, bottom: 22, containLabel: true },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { textStyle: { color: p.muted, fontSize: 10 }, top: 0, right: 0 },
+    xAxis: {
+      type: 'category',
+      data: tr.map(r => _fmtHourShort(r.hour)),
+      axisLine: { lineStyle: { color: p.border } },
+      axisLabel: { color: p.muted, fontSize: 9, interval: 3 },
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: p.grid } },
+      axisLabel: { color: p.muted, fontSize: 10 },
+    },
+    series: [
+      { name: 'success', type: 'bar', stack: 'calls', barMaxWidth: 14,
+        data: tr.map(r => r.success), itemStyle: { color: p.green } },
+      { name: 'error', type: 'bar', stack: 'calls', barMaxWidth: 14,
+        data: tr.map(r => r.error), itemStyle: { color: p.red } },
+    ],
+  });
+
+  // ⑥ 报告质量评分 — 环形
+  const qb = qual.buckets || { excellent:0, good:0, poor:0 };
+  _initChart('ch_quality', {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { textStyle: { color: p.muted, fontSize: 10 }, top: 0, right: 0 },
+    series: [{
+      type: 'pie',
+      radius: ['45%', '70%'],
+      center: ['50%', '55%'],
+      avoidLabelOverlap: true,
+      label: { color: p.text, fontSize: 11, formatter: '{b}\n{d}%' },
+      labelLine: { lineStyle: { color: p.muted } },
+      data: [
+        { name: '优秀 ≥8', value: qb.excellent, itemStyle: { color: p.green } },
+        { name: '良好 6-7', value: qb.good,     itemStyle: { color: p.yellow } },
+        { name: '待改进 ≤5', value: qb.poor,    itemStyle: { color: p.red } },
+      ],
+    }],
+  });
+
+  // ⑦ Token Top 10 横向条形
+  const tu = llm.top_users || [];
+  _initChart('ch_tokens', {
+    grid: { left: 110, right: 24, top: 28, bottom: 28, containLabel: true },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { textStyle: { color: p.muted }, top: 0, right: 0 },
+    xAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: p.grid } },
+      axisLabel: { color: p.muted, fontSize: 10 },
+    },
+    yAxis: {
+      type: 'category',
+      inverse: true,
+      data: tu.map(u => u.openid_masked || ('#' + u.user_id)),
+      axisLine: { lineStyle: { color: p.border } },
+      axisLabel: { color: p.muted, fontSize: 11 },
+    },
+    series: [
+      { name: 'prompt', type: 'bar', stack: 'tk', barMaxWidth: 16,
+        data: tu.map(u => u.prompt_tokens), itemStyle: { color: p.blue } },
+      { name: 'completion', type: 'bar', stack: 'tk', barMaxWidth: 16,
+        data: tu.map(u => u.completion_tokens), itemStyle: { color: p.teal } },
+    ],
+  });
+}
+
+// 窗口大小变化时让所有图表自适应
+window.addEventListener('resize', () => {
+  Object.values(_dashCharts).forEach(c => { try { c.resize(); } catch(e){} });
+});
 
 // 表名中文映射
 const TABLE_NAMES = {
@@ -726,6 +1079,10 @@ function toggleTheme() {
   const next = cur === 'dark' ? 'light' : 'dark';
   localStorage.setItem('admin-theme', next);
   applyTheme(next);
+  // 仪表盘视图下：切换主题需要重建图表（ECharts 主题在 init 时一次性应用）
+  if (_curView === 'overview' && Object.keys(_dashCharts).length > 0) {
+    loadOverview();
+  }
 }
 applyTheme(localStorage.getItem('admin-theme') || 'dark');
 
