@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>love-profiler · 业务全景</title>
+<style>
+  :root {
+    --bg: #FAF6F0;
+    --card: #FFFFFF;
+    --ink: #2A2723;
+    --ink-2: #6B6256;
+    --ink-3: #A39B8E;
+    --line: #ECE4D6;
+
+    --pink:   #FF7A8A; --pink-soft:   #FFE7EC;
+    --mint:   #5FC7B7; --mint-soft:   #DDF4EF;
+    --plum:   #9C82F0; --plum-soft:   #ECE5FE;
+    --honey:  #FFA94D; --honey-soft:  #FFEAD2;
+    --sky:    #5FAEEE; --sky-soft:    #E1F0FF;
+
+    --r: 18px;
+    --shadow: 0 1px 2px rgba(45, 35, 25, 0.04), 0 8px 28px rgba(45, 35, 25, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "PingFang SC", "Microsoft YaHei", "Inter", system-ui, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(700px 500px at 10% 0%, rgba(255, 122, 138, 0.08), transparent 60%),
+      radial-gradient(600px 400px at 95% 20%, rgba(156, 130, 240, 0.07), transparent 60%),
+      radial-gradient(600px 400px at 50% 100%, rgba(95, 199, 183, 0.06), transparent 60%);
+  }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 64px 32px 96px; }
+
+  /* ============ HERO ============ */
+  .hero { margin-bottom: 56px; }
+  .hero .crumb {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; letter-spacing: 0.16em;
+    color: var(--ink-3); text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .hero .crumb::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--pink);
+  }
+  .hero h1 {
+    margin: 0 0 14px;
+    font-size: 44px; line-height: 1.2;
+    font-weight: 700; letter-spacing: -0.02em;
+  }
+  .hero h1 .accent {
+    background: linear-gradient(120deg, var(--pink), var(--plum));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p {
+    margin: 0; max-width: 660px;
+    color: var(--ink-2); font-size: 16px;
+  }
+
+  /* ============ CAPSULES ============ */
+  .capsules {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin: 28px 0 0;
+  }
+  .cap {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .cap b { color: var(--ink); font-weight: 700; }
+  .cap .dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  }
+  .cap.c1 .dot { background: var(--pink); }
+  .cap.c2 .dot { background: var(--mint); }
+  .cap.c3 .dot { background: var(--plum); }
+  .cap.c4 .dot { background: var(--honey); }
+  .cap.c5 .dot { background: var(--sky); }
+
+  /* ============ SECTION HEADER ============ */
+  .section { margin-top: 72px; }
+  .section-head {
+    display: flex; align-items: baseline; gap: 14px;
+    margin-bottom: 28px;
+  }
+  .section-head h2 {
+    margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.01em;
+  }
+  .section-head .tip {
+    color: var(--ink-3); font-size: 13px;
+  }
+
+  /* ============ BIG FLOW · 一张图 ============ */
+  .flow {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    padding: 36px;
+    box-shadow: var(--shadow);
+  }
+  .lanes {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .lane {
+    border-radius: 22px;
+    padding: 22px 24px;
+    position: relative;
+  }
+  .lane.l1 { background: var(--pink-soft);  }
+  .lane.l2 { background: var(--mint-soft);  }
+  .lane.l3 { background: var(--plum-soft);  }
+  .lane.l4 { background: var(--honey-soft); }
+
+  .lane-head {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 16px;
+  }
+  .lane-num {
+    width: 38px; height: 38px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 16px;
+    flex-shrink: 0;
+  }
+  .l1 .lane-num { background: var(--pink);  }
+  .l2 .lane-num { background: var(--mint);  }
+  .l3 .lane-num { background: var(--plum);  }
+  .l4 .lane-num { background: var(--honey); }
+
+  .lane-title {
+    font-size: 18px; font-weight: 700;
+  }
+  .lane-tag {
+    margin-left: auto;
+    font-size: 11px; letter-spacing: 0.18em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.7);
+    color: var(--ink-2);
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .lane.three .steps { grid-template-columns: repeat(3, 1fr); }
+  .lane.two   .steps { grid-template-columns: repeat(2, 1fr); }
+  .lane.four  .steps { grid-template-columns: repeat(4, 1fr); }
+
+  .step {
+    background: rgba(255,255,255,0.85);
+    border-radius: 14px;
+    padding: 14px 16px;
+    position: relative;
+  }
+  .step .step-num {
+    font-size: 11px; letter-spacing: 0.18em;
+    color: var(--ink-3);
+    margin-bottom: 4px;
+  }
+  .step .step-name {
+    font-weight: 700; font-size: 14.5px;
+    margin-bottom: 4px;
+  }
+  .step .step-desc {
+    color: var(--ink-2); font-size: 12.5px; line-height: 1.6;
+  }
+
+  /* 泳道间的箭头 */
+  .lane::after {
+    content: "↓";
+    position: absolute;
+    left: 50%; bottom: -22px; transform: translateX(-50%);
+    width: 28px; height: 28px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-3); font-size: 14px; font-weight: 700;
+    z-index: 1;
+  }
+  .lane:last-child::after { display: none; }
+
+  /* ============ ROLE CARDS · 谁在工作 ============ */
+  .roles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .role {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .role::before {
+    content: "";
+    position: absolute; left: 0; top: 0; right: 0; height: 4px;
+  }
+  .role.r1::before { background: var(--pink);  }
+  .role.r2::before { background: var(--mint);  }
+  .role.r3::before { background: var(--plum);  }
+  .role.r4::before { background: var(--honey); }
+
+  .role .role-tag {
+    font-size: 11px; letter-spacing: 0.16em;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .role h4 {
+    margin: 0 0 8px;
+    font-size: 16px; font-weight: 700;
+  }
+  .role p {
+    margin: 0;
+    color: var(--ink-2); font-size: 13px; line-height: 1.7;
+  }
+  .role .role-tech {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+
+  /* ============ DIMS · 测五维 ============ */
+  .dims {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
+  .dim {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 20px 18px;
+    position: relative;
+  }
+  .dim .dim-code {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+  .dim.d1 .dim-code { background: var(--pink-soft);  color: var(--pink);  }
+  .dim.d2 .dim-code { background: var(--mint-soft);  color: var(--mint);  }
+  .dim.d3 .dim-code { background: var(--plum-soft);  color: var(--plum);  }
+  .dim.d4 .dim-code { background: var(--honey-soft); color: var(--honey); }
+  .dim.d5 .dim-code { background: var(--sky-soft);   color: var(--sky);   }
+
+  .dim h4 {
+    margin: 0 0 6px;
+    font-size: 15px; font-weight: 700;
+  }
+  .dim p {
+    margin: 0;
+    color: var(--ink-2); font-size: 12.5px; line-height: 1.6;
+  }
+  .dim .dim-poles {
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px dashed var(--line);
+    font-size: 11px;
+    color: var(--ink-3);
+    display: flex; justify-content: space-between;
+  }
+
+  /* ============ REPORT SECTIONS · 报告 9 段 ============ */
+  .report {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 26px;
+  }
+  .report .strip {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 8px;
+  }
+  .seg {
+    text-align: center;
+    padding: 14px 8px;
+    border-radius: 12px;
+    background: linear-gradient(160deg, rgba(255, 122, 138, 0.08), rgba(156, 130, 240, 0.08));
+    border: 1px solid var(--line);
+  }
+  .seg .seg-num {
+    font-size: 10px; letter-spacing: 0.16em;
+    color: var(--ink-3);
+  }
+  .seg .seg-name {
+    margin-top: 4px;
+    font-weight: 700; font-size: 13px;
+  }
+  .seg .seg-zh {
+    color: var(--ink-2); font-size: 11px;
+    margin-top: 2px;
+  }
+
+  /* ============ NUMBERS ============ */
+  .nums {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .num {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 24px;
+    text-align: left;
+  }
+  .num .v {
+    font-size: 34px; font-weight: 800;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .num.n1 .v { color: var(--pink);  }
+  .num.n2 .v { color: var(--mint);  }
+  .num.n3 .v { color: var(--plum);  }
+  .num.n4 .v { color: var(--honey); }
+  .num .k {
+    margin-top: 4px;
+    color: var(--ink-2); font-size: 13px;
+  }
+
+  /* ============ FOOTER ============ */
+  .footer {
+    margin-top: 80px;
+    text-align: center;
+    color: var(--ink-3);
+    font-size: 12px;
+  }
+
+  /* responsive */
+  @media (max-width: 920px) {
+    .hero h1 { font-size: 32px; }
+    .roles, .dims, .nums { grid-template-columns: repeat(2, 1fr); }
+    .lane.three .steps, .lane.four .steps { grid-template-columns: 1fr; }
+    .lane.two .steps { grid-template-columns: 1fr; }
+    .report .strip { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <div class="crumb">love-profiler · business overview</div>
+    <h1>30 道题之后，<br>AI 看见<span class="accent">你的样子</span></h1>
+    <p>一个跑在抖音小程序里的恋爱人格测评。这页用一张图讲清楚：用户从打开到拿到报告，中间究竟发生了什么。</p>
+
+    <div class="capsules">
+      <span class="cap c1"><span class="dot"></span><b>30</b> 道题</span>
+      <span class="cap c2"><span class="dot"></span><b>5</b> 个维度 D1-D5</span>
+      <span class="cap c3"><span class="dot"></span><b>16</b> 种人格端点</span>
+      <span class="cap c4"><span class="dot"></span>双 Agent 协作</span>
+      <span class="cap c5"><span class="dot"></span>WebSocket 流式</span>
+    </div>
+  </header>
+
+  <!-- ============ 一张图 ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>一图看懂</h2>
+      <span class="tip">从用户点进小程序，到看见自己的报告</span>
+    </div>
+
+    <div class="flow">
+      <div class="lanes">
+
+        <!-- LANE 1: 用户答题 -->
+        <div class="lane l1 three">
+          <div class="lane-head">
+            <div class="lane-num">1</div>
+            <div class="lane-title">用户在小程序里答题</div>
+            <span class="lane-tag">CLIENT</span>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">STEP 01</div>
+              <div class="step-name">打开首页</div>
+              <div class="step-desc">抖音入口 → 黑金玻璃拟态主视觉 → 开始测试 CTA</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 02</div>
+              <div class="step-name">阅读介绍</div>
+              <div class="step-desc">3 屏轮播说明：规则、隐私、五维度</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 03</div>
+              <div class="step-name">答 30 道题</div>
+              <div class="step-desc">单选题，覆盖 D1-D5；完成后提交</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LANE 2: 服务端打分 -->
+        <div class="lane l2 three">
+          <div class="lane-head">
+            <div class="lane-num">2</div>
+            <div class="lane-title">服务端把答案变成人格画像</div>
+            <span class="lane-tag">SERVER · Agent A</span>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">STEP 04</div>
+              <div class="step-name">校验入参</div>
+              <div class="step-desc">/quiz/submit 检查 30 题完整性 + pydantic 守门</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 05</div>
+              <div class="step-name">Agent A 算分</div>
+              <div class="step-desc">汇总五维 interp → 拼装 16 端点 type_code</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 06</div>
+              <div class="step-name">DB 富化素材</div>
+              <div class="step-desc">查 base_love_type / highlights → 喂养 Agent B</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LANE 3: AI 写报告 -->
+        <div class="lane l3 three">
+          <div class="lane-head">
+            <div class="lane-num">3</div>
+            <div class="lane-title">AI 一段段把报告写出来</div>
+            <span class="lane-tag">AI · Agent B</span>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">STEP 07</div>
+              <div class="step-name">Agent B 流式生成</div>
+              <div class="step-desc">温度 0.6，9 个 section 顺序输出</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 08</div>
+              <div class="step-name">质量门校验</div>
+              <div class="step-desc">正则拆段 + 字数检查；不合格自动重写</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 09</div>
+              <div class="step-name">入库</div>
+              <div class="step-desc">写 assessments 表，记录 prompt_version</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LANE 4: 用户拿到报告 -->
+        <div class="lane l4 three">
+          <div class="lane-head">
+            <div class="lane-num">4</div>
+            <div class="lane-title">用户实时看到自己的报告</div>
+            <span class="lane-tag">CLIENT</span>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">STEP 10</div>
+              <div class="step-name">WebSocket 推流</div>
+              <div class="step-desc">报告边写边推，用户看到逐段冒出</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 11</div>
+              <div class="step-name">报告页渲染</div>
+              <div class="step-desc">9 段叙事文本 + 类型卡 + 五维雷达</div>
+            </div>
+            <div class="step">
+              <div class="step-num">STEP 12</div>
+              <div class="step-name">分享 / 异步审计</div>
+              <div class="step-desc">用户分享给朋友；后台 LLM 裁判异步评分</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 谁在工作 ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>谁在工作</h2>
+      <span class="tip">四个角色，各司其职</span>
+    </div>
+
+    <div class="roles">
+      <div class="role r1">
+        <div class="role-tag">CLIENT</div>
+        <h4>抖音小程序</h4>
+        <p>用户答题、看报告、分享的所有界面；通过 WebSocket 跟后端实时通信。</p>
+        <div class="role-tech">6 页流程 · 玻璃拟态 UI</div>
+      </div>
+      <div class="role r2">
+        <div class="role-tag">AGENT A</div>
+        <h4>打分员</h4>
+        <p>不调用 LLM，纯规则。把 30 个原始答案汇总成五维度得分和 16 端点类型代码。</p>
+        <div class="role-tech">规则引擎 · 缩写映射</div>
+      </div>
+      <div class="role r3">
+        <div class="role-tag">AGENT B</div>
+        <h4>报告写手</h4>
+        <p>调用 LLM 流式生成 9 段叙事文本。温度 0.6，温暖个性化；带质量门重试。</p>
+        <div class="role-tech">豆包模型 · stream · t=0.6</div>
+      </div>
+      <div class="role r4">
+        <div class="role-tag">DATABASE</div>
+        <h4>素材库</h4>
+        <p>类型字典、爱语定义、洞察写作种子。给 Agent B 喂养专属"小抄"，模型只看用户切片。</p>
+        <div class="role-tech">base_love_type · highlights</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 测什么 ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>测哪 5 个维度</h2>
+      <span class="tip">每道题都打在这 5 把尺子上</span>
+    </div>
+
+    <div class="dims">
+      <div class="dim d1">
+        <span class="dim-code">D1</span>
+        <h4>依恋</h4>
+        <p>面对亲密时是渴望靠近还是本能退后</p>
+        <div class="dim-poles"><span>安全</span><span>焦虑/回避</span></div>
+      </div>
+      <div class="dim d2">
+        <span class="dim-code">D2</span>
+        <h4>边界</h4>
+        <p>关系里的"我"和"我们"如何划分</p>
+        <div class="dim-poles"><span>清晰</span><span>融合</span></div>
+      </div>
+      <div class="dim d3">
+        <span class="dim-code">D3</span>
+        <h4>冲突</h4>
+        <p>吵架时是追上去解决还是先躲一边</p>
+        <div class="dim-poles"><span>追</span><span>逃</span></div>
+      </div>
+      <div class="dim d4">
+        <span class="dim-code">D4</span>
+        <h4>爱的语言</h4>
+        <p>5 种爱语里你最依赖的两种</p>
+        <div class="dim-poles"><span>top2</span><span>+ 主观对齐</span></div>
+      </div>
+      <div class="dim d5">
+        <span class="dim-code">D5</span>
+        <h4>表达风格</h4>
+        <p>说爱时是直球派、暗示派还是行动派</p>
+        <div class="dim-poles"><span>直白</span><span>含蓄</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 报告 9 段 ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>报告里写了 9 段</h2>
+      <span class="tip">Agent B 严格按顺序输出，少一段就重写</span>
+    </div>
+
+    <div class="report">
+      <div class="strip">
+        <div class="seg"><div class="seg-num">01</div><div class="seg-name">Title</div><div class="seg-zh">类型标题</div></div>
+        <div class="seg"><div class="seg-num">02</div><div class="seg-name">Opening</div><div class="seg-zh">开篇画像</div></div>
+        <div class="seg"><div class="seg-num">03</div><div class="seg-name">Attachment</div><div class="seg-zh">D1 依恋</div></div>
+        <div class="seg"><div class="seg-num">04</div><div class="seg-name">Boundary</div><div class="seg-zh">D2 边界</div></div>
+        <div class="seg"><div class="seg-num">05</div><div class="seg-name">Conflict</div><div class="seg-zh">D3 冲突</div></div>
+        <div class="seg"><div class="seg-num">06</div><div class="seg-name">Language</div><div class="seg-zh">D4 爱语</div></div>
+        <div class="seg"><div class="seg-num">07</div><div class="seg-name">Style</div><div class="seg-zh">D5 风格</div></div>
+        <div class="seg"><div class="seg-num">08</div><div class="seg-name">Highlight</div><div class="seg-zh">深层洞察</div></div>
+        <div class="seg"><div class="seg-num">09</div><div class="seg-name">Suggestion</div><div class="seg-zh">关系建议</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 关键数字 ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>一些数字</h2>
+      <span class="tip">你可能想了解的硬指标</span>
+    </div>
+
+    <div class="nums">
+      <div class="num n1">
+        <div class="v">30</div>
+        <div class="k">道题 · 覆盖 5 维度</div>
+      </div>
+      <div class="num n2">
+        <div class="v">16</div>
+        <div class="k">种人格端点类型</div>
+      </div>
+      <div class="num n3">
+        <div class="v">9</div>
+        <div class="k">段叙事报告</div>
+      </div>
+      <div class="num n4">
+        <div class="v">350</div>
+        <div class="k">自动化测试守门</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">
+    love-profiler · 业务全景 · 本文件可直接编辑替换
+  </div>
+</main>
+</body>
+</html>
