@@ -286,6 +286,7 @@ Page({
     chartImgCombined: '',
     chartImgD4Bloom: '',
     chartImgD5Quadrant: '',
+    chartImgFullRadar: '',
     // 分段内容（新格式）
     sec: { Title: '', Opening: '', Attachment: '', Boundary: '', Conflict: '', Language: '', Style: '', Suggestion: '' },
     highlights: [],       // [{idx, title, text, severity, isPositive}]
@@ -432,6 +433,7 @@ Page({
             this._drawCombinedRadar(dimChart.health_radar);
             this._drawD4Bloom(dimChart.d4_preference);
             this._drawD5Quadrant(dimChart.d5_quadrant);
+            this._drawFullRadar(dimChart.d123, dimChart.d4, dimChart.d5);
           }, 200);
         }
       } else if (msg.type === 'section_start') {
@@ -816,6 +818,109 @@ Page({
         }, this);
       });
     } catch(e) { console.error('[d4-bloom] THROW', e.message, e); }
+  },
+
+  // ── 图表5：10 轴全维全景雷达（D1-D3 + T1-T5 + S1-S2）─────────────────
+  // 作为"全景参考图"，与 5 维健康度并列；语义上跨混"健康/偏好/风格"，
+  // 不作为读图核心，但视觉饱满便于整体观感与海报展示
+  _drawFullRadar(d123, d4, d5) {
+    if (!d123 || d123.length < 3 || !d4 || !d5) return;
+    const ctx = tt.createCanvasContext('full-radar', this);
+    try {
+      const W = 640, H = 640, cx = W / 2, cy = H / 2, maxR = 220, N = 10;
+
+      const s1Raw = typeof d5.s1_raw === 'number' ? d5.s1_raw : 0;
+      const s2Raw = typeof d5.s2_raw === 'number' ? d5.s2_raw : 0;
+
+      const vals = [
+        (d123[0].raw + 12) / 24,
+        (d123[1].raw + 12) / 24,
+        (d123[2].raw + 12) / 24,
+        parseFloat(d4.T1 || 0),
+        parseFloat(d4.T2 || 0),
+        parseFloat(d4.T3 || 0),
+        parseFloat(d4.T4 || 0),
+        parseFloat(d4.T5 || 0),
+        (s1Raw + 6) / 12,
+        (s2Raw + 6) / 12,
+      ];
+      const labels = ['依恋', '边界', '冲突', '言语', '时刻', '惊喜', '服务', '接触', '直接', '分享'];
+      const COLORS = ['#FF7B6E','#4FC3F7','#CE93D8','#FF8A65','#F48FB1','#E91E8C','#AB47BC','#EC407A','#FFB74D','#FFA726'];
+      const G_FILL = ['rgba(255,120,100,0.07)','rgba(244,143,177,0.07)','rgba(255,183,77,0.07)'];
+      const G_AXES = [[0,1,2],[3,4,5,6,7],[8,9]];
+
+      const angles = Array.from({length: N}, (_, i) => -Math.PI / 2 + i * 2 * Math.PI / N);
+      const pt = (a, r) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+
+      // 背景圆
+      ctx.setFillStyle('rgba(248,245,241,0.6)');
+      ctx.beginPath(); ctx.arc(cx, cy, maxR + 8, 0, Math.PI * 2); ctx.fill();
+
+      // 组扇形底色（D1-3 / T1-5 / S1-2 三组）
+      G_AXES.forEach((idxArr, gi) => {
+        const aStart = angles[idxArr[0]] - Math.PI / N;
+        const aEnd   = angles[idxArr[idxArr.length - 1]] + Math.PI / N;
+        ctx.beginPath(); ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, maxR + 4, aStart, aEnd);
+        ctx.closePath();
+        ctx.setFillStyle(G_FILL[gi]); ctx.fill();
+      });
+
+      // 网格多边形
+      [0.25, 0.5, 0.75, 1.0].forEach(lvl => {
+        const pts = angles.map(a => pt(a, maxR * lvl));
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < N; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.setStrokeStyle(lvl === 1 ? 'rgba(150,140,132,0.50)' : 'rgba(200,190,182,0.25)');
+        ctx.setLineWidth(lvl === 1 ? 2 : 1); ctx.stroke();
+      });
+
+      // 轴线
+      angles.forEach((a, i) => {
+        const {x, y} = pt(a, maxR);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y);
+        ctx.setStrokeStyle(_hexAlpha(COLORS[i], 0.33)); ctx.setLineWidth(1.5); ctx.stroke();
+      });
+
+      // 数据多边形
+      const dpts = vals.map((v, i) => pt(angles[i], maxR * Math.max(0, Math.min(1, v))));
+      ctx.beginPath(); ctx.moveTo(dpts[0].x, dpts[0].y);
+      for (let i = 1; i < N; i++) ctx.lineTo(dpts[i].x, dpts[i].y);
+      ctx.closePath();
+      ctx.setFillStyle('rgba(79,175,175,0.22)'); ctx.fill();
+      ctx.setStrokeStyle('#4FAFAF'); ctx.setLineWidth(3); ctx.stroke();
+
+      // 数据节点（10 色端点 + 白心）
+      dpts.forEach(({x, y}, i) => {
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.setFillStyle(COLORS[i]); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.setFillStyle('#FFFFFF'); ctx.fill();
+      });
+
+      // 标签
+      labels.forEach((lbl, i) => {
+        const a = angles[i], cosA = Math.cos(a), sinA = Math.sin(a);
+        const {x, y} = pt(a, maxR + 38);
+        const align = cosA > 0.2 ? 'left' : cosA < -0.2 ? 'right' : 'center';
+        const dy = sinA < -0.4 ? -4 : sinA > 0.4 ? 12 : 6;
+        ctx.setTextAlign(align);
+        ctx.setFontSize(20); ctx.setFillStyle(COLORS[i]);
+        ctx.fillText(lbl, x, y + dy);
+        ctx.setFontSize(16); ctx.setFillStyle('rgba(130,120,112,0.80)');
+        ctx.fillText(Math.round(Math.max(0, Math.min(1, vals[i])) * 100) + '%', x, y + dy + 22);
+      });
+
+      ctx.draw(false, () => {
+        tt.canvasToTempFilePath({
+          canvasId: 'full-radar',
+          destWidth: W, destHeight: H,
+          success: res => { console.log('[full-radar] img ok'); this.setData({ chartImgFullRadar: res.tempFilePath }); },
+          fail: err => console.error('[full-radar] toImg fail', err),
+        }, this);
+      });
+    } catch(e) { console.error('[full-radar] THROW', e.message, e); }
   },
 
   // ── 图表4：D5 表达风格象限点图（9 宫格 + 用户定位点）─────────────────

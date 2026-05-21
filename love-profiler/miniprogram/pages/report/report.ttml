@@ -5,6 +5,7 @@
   <canvas canvas-id="combined-radar" class="chart-canvas-offscreen" style="width:640px;height:640px;" />
   <canvas canvas-id="d4-bloom"  class="chart-canvas-offscreen" style="width:640px;height:640px;" />
   <canvas canvas-id="d5-quadrant" class="chart-canvas-offscreen" style="width:640px;height:640px;" />
+  <canvas canvas-id="full-radar"  class="chart-canvas-offscreen" style="width:640px;height:640px;" />
 
   <!-- Ambient background orbs -->
   <view class="bg-orb bg-orb-1" />
@@ -137,6 +138,19 @@
             </view>
           </view>
           <image tt:if="{{chartImgD5Quadrant}}" src="{{chartImgD5Quadrant}}" class="rpt-chart-combined" mode="aspectFit" />
+          <view tt:else class="rpt-chart-ph"><text class="rpt-chart-ph-txt">图表生成中…</text></view>
+        </view>
+      </view>
+      <view class="rpt-chart-row">
+        <view class="rpt-chart-card rpt-chart-card-combined">
+          <view class="rpt-chart-card-hd">
+            <view class="rpt-cc-icon-wrap rpt-cc-combined"><text class="rpt-cc-icon">🌐</text></view>
+            <view>
+              <text class="rpt-cc-title">全维度全景雷达</text>
+              <text class="rpt-cc-sub">D1-D3 + 5 类爱语 + 2 风格子面</text>
+            </view>
+          </view>
+          <image tt:if="{{chartImgFullRadar}}" src="{{chartImgFullRadar}}" class="rpt-chart-combined" mode="aspectFit" />
           <view tt:else class="rpt-chart-ph"><text class="rpt-chart-ph-txt">图表生成中…</text></view>
         </view>
       </view>
