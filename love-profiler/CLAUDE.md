@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-抖音小程序全栈项目，用于 AI 恋爱人格测评。用户完成 30 道固定选择题，Agent A 做**纯 Python 确定性评分计算**输出结构化诊断，Agent B（LLM）基于诊断生成人格报告，用户通过看激励视频广告解锁报告。
+抖音小程序全栈项目，用于 AI 恋爱人格测评。用户完成 30 道固定选择题，**scoring engine（纯 Python 确定性评分，原 Agent A）**输出结构化诊断，**report writer（LLM，原 Agent B）**基于诊断生成人格报告，用户通过看激励视频广告解锁报告。
 
 仓库包含两个子项目：
 - **后端**：`love-profiler/` — FastAPI + SQLAlchemy + 本地 Supabase CLI
@@ -45,26 +45,31 @@ pytest --cov=app --cov-report=term-missing
 
 ## 架构
 
-### 双 Agent 流程
+### 双引擎流程（scoring engine + report writer）
 
 ```
 POST /quiz/start  →  从 Supabase 拉 30 道题，返回 session_id + questions
 前端本地逐题展示（一答一问，选项按钮，30 题选完）
 POST /quiz/submit →  answer_package_builder 组装答题包
-                      Agent A（纯 Python 确定性评分）→ 诊断包 JSON
+                      scoring_engine（纯 Python 确定性评分）→ 诊断包 JSON
                       写入 assessment: answers_json / diagnosis_json / status="analyzed"
 用户看广告 → POST /unlock/ad → 解锁
-POST /result      →  Agent B (LLM, temp=0.6) 读取 diagnosis_json → 报告 JSON
+POST /result      →  report_writer (LLM, temp=0.6) 读取 diagnosis_json → 报告 JSON
                       写入 assessment: report_json / report_text / personality_type / status="complete"
                       重复调用直接返回缓存（status=="complete"）
 ```
+
+> **命名演进**：原 Agent A → `scoring_engine`，原 Agent B → `report_writer`，原 `agent_b_runner` → `report_writer_runner`。
+> Exception 类同步重命名：`AgentAError → ScoringError`、`AgentBError → ReportWriterError`。
+> `ai_call_logs.agent` 列保留字符串 `"agent_a"` / `"agent_b"` 不变（兼容历史数据 + admin 筛选）。
 
 ### 核心服务职责
 
 | 文件 | 职责 |
 |------|------|
-| `app/agents/agent_a.py` | 接收答题包 → 纯 Python 确定性评分（5 维度算分 + 16 类分型 + 跨维度审查），输出结构化诊断 JSON。**无 LLM 调用**。|
-| `app/agents/agent_b.py` | 接收诊断包 → LLM 写报告 → 输出报告 JSON（report_text + sections）|
+| `app/agents/scoring_engine.py` | 接收答题包 → 纯 Python 确定性评分（5 维度算分 + 16 类分型 + 跨维度审查），输出结构化诊断 JSON。**无 LLM 调用**。|
+| `app/agents/report_writer.py` | 接收诊断包 → LLM 写报告 → 输出报告 JSON（report_text + sections）|
+| `app/services/report_writer_runner.py` | report writer 的后台调度器（asyncio.create_task），用于 /quiz/submit 后台触发 + WS 流式恢复 |
 | `app/services/answer_package_builder.py` | 组装答题包：解析分值字符串、标记 D3-Q06 追逃亚型、注入题目元数据 |
 | `app/services/llm_client.py` | 豆包（字节跳动火山引擎）API 的异步封装，含计时和全链路日志 |
 | `app/services/llm_logger.py` | AI 调用日志写入 `logs/ai_calls.jsonl`（system_prompt/messages/response/token 全记录）|
@@ -214,6 +219,6 @@ WebSocket 消息类型：`meta` / `section_start` / `section_chunk` / `section_e
 - `git add -u` 只 stage 已跟踪的修改，**新文件全部漏掉**
 - 看 `git status --short` 只关注 M/D 行忽略 ?? 行
 
-**历史教训（2026-05-14）**：工作区累积 ~60 个文件改动 + 多个整目录 untracked（含 `agent_a.py` / `agent_b.py` / `ws_result.py` 等核心代码），从未版本化。用了 6 个 commit 才整理干净。
+**历史教训（2026-05-14）**：工作区累积 ~60 个文件改动 + 多个整目录 untracked（含 `scoring_engine.py` / `report_writer.py` / `ws_result.py` 等核心代码，当时还叫 `agent_a.py` / `agent_b.py`），从未版本化。用了 6 个 commit 才整理干净。
 
 不主动 push（Claude Code 默认安全规则）：必须用户明确说 "push" 才执行 `git push`。

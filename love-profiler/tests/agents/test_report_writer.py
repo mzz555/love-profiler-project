@@ -8,7 +8,11 @@ import httpx
 import pytest
 import respx
 
-from app.agents.agent_b import AgentBError, build_user_message, run
+from app.agents.report_writer import (
+    ReportWriterError as AgentBError,  # alias for minimal test diff
+    build_user_message,
+    run,
+)
 
 DOUBAO_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 
@@ -165,7 +169,7 @@ def test_build_user_message_empty_highlights_marks_skip():
 async def test_run_stream_yields_chunks_then_final_dict():
     """run_stream 应实时 yield 文本片段，最后 yield 一次 {report_text: 全文, quality_warnings: [...]}"""
     from unittest.mock import patch
-    from app.agents.agent_b import run_stream
+    from app.agents.report_writer import run_stream
 
     # 把合规 REPORT_TEXT 切成 4 段，保留原序作为 chunk
     n = len(REPORT_TEXT)
@@ -176,7 +180,7 @@ async def test_run_stream_yields_chunks_then_final_dict():
         for p in pieces:
             yield p
 
-    with patch("app.agents.agent_b.stream_chat_completion", new=fake_stream):
+    with patch("app.agents.report_writer.stream_chat_completion", new=fake_stream):
         out = []
         async for item in run_stream(DIAGNOSIS, session_id="abcdefgh"):
             out.append(item)
@@ -192,14 +196,14 @@ async def test_run_stream_yields_chunks_then_final_dict():
 async def test_run_stream_raises_on_quality_gate_failure():
     """LLM 输出缺 --Attachment-- → AgentBError(quality_gate_failed)，不发 final dict。"""
     from unittest.mock import patch
-    from app.agents.agent_b import run_stream
+    from app.agents.report_writer import run_stream
 
     broken = REPORT_TEXT.replace("--Attachment--", "--ZZZSkip--")
 
     async def fake_stream(**kwargs):
         yield broken
 
-    with patch("app.agents.agent_b.stream_chat_completion", new=fake_stream):
+    with patch("app.agents.report_writer.stream_chat_completion", new=fake_stream):
         with pytest.raises(AgentBError, match="quality_gate_failed"):
             async for _ in run_stream(DIAGNOSIS):
                 pass
@@ -238,13 +242,13 @@ async def test_run_raises_when_all_quality_gate_failures():
 async def test_run_stream_raises_on_empty_response():
     """流式 LLM 全程返回空白（仅空格/换行）应抛 AgentBError，不发 final dict。"""
     from unittest.mock import patch
-    from app.agents.agent_b import run_stream
+    from app.agents.report_writer import run_stream
 
     async def fake_empty(**kwargs):
         for _ in range(3):
             yield "   "  # 全空白
 
-    with patch("app.agents.agent_b.stream_chat_completion", new=fake_empty):
+    with patch("app.agents.report_writer.stream_chat_completion", new=fake_empty):
         with pytest.raises(AgentBError):
             async for _ in run_stream(DIAGNOSIS):
                 pass
@@ -253,14 +257,14 @@ async def test_run_stream_raises_on_empty_response():
 # ── Phase C.1 · resumed_sections + append_resume_directive ─────────────────
 
 def test_append_resume_directive_no_op_when_resumed_empty():
-    from app.agents.agent_b import append_resume_directive
+    from app.agents.report_writer import append_resume_directive
     msg = "原始 user msg"
     assert append_resume_directive(msg, None) == msg
     assert append_resume_directive(msg, {}) == msg
 
 
 def test_append_resume_directive_lists_completed_and_next():
-    from app.agents.agent_b import append_resume_directive
+    from app.agents.report_writer import append_resume_directive
     msg = "原始 user msg"
     out = append_resume_directive(msg, {
         "Title": "《稳重的航标》",
@@ -274,7 +278,7 @@ def test_append_resume_directive_lists_completed_and_next():
 
 
 def test_append_resume_directive_truncates_long_snippets():
-    from app.agents.agent_b import append_resume_directive
+    from app.agents.report_writer import append_resume_directive
     very_long = "x" * 1000
     out = append_resume_directive("msg", {"Title": very_long})
     # 摘要应有省略号，且不会把整段塞进去
@@ -284,7 +288,7 @@ def test_append_resume_directive_truncates_long_snippets():
 
 def test_append_resume_directive_all_done_returns_msg_unchanged():
     """所有 9 个 sections 都在 resumed 里时不应再要求接续。"""
-    from app.agents.agent_b import SECTION_ORDER, append_resume_directive
+    from app.agents.report_writer import SECTION_ORDER, append_resume_directive
     resumed = {name: "已完成" for name in SECTION_ORDER}
     msg = "原始"
     assert append_resume_directive(msg, resumed) == msg
@@ -292,7 +296,7 @@ def test_append_resume_directive_all_done_returns_msg_unchanged():
 
 def test_append_resume_directive_skips_gaps_and_picks_first_missing():
     """resumed 中段不连续时，取第一个 SECTION_ORDER 缺的作为接续起点。"""
-    from app.agents.agent_b import append_resume_directive
+    from app.agents.report_writer import append_resume_directive
     out = append_resume_directive(
         "msg",
         {"Title": "T", "Opening": "O", "Conflict": "C"},  # 缺 Attachment / Boundary
@@ -304,9 +308,9 @@ def test_append_resume_directive_skips_gaps_and_picks_first_missing():
 async def test_run_stream_resumed_prepends_completed_sections_to_final_text():
     """run_stream 在 resumed 模式下，最终 yield 的 report_text 应包含已完成段。"""
     from unittest.mock import patch
-    from app.agents.agent_b import run_stream
+    from app.agents.report_writer import run_stream
 
-    # 所有段都给足字数以通过 quality gate（Attachment/Boundary/Conflict ≥100, Language/Style ≥80）
+    # 所有段都给足字数以通过 quality gate（Attachment/Boundary/Conflict/Language/Style ≥80）
     resumed = {
         "Title":      "《稳重的航标》",
         "Opening":    "你的稳不需要被看见，危机出现时你已经在想怎么解决。" + ("·" * 120),
@@ -323,7 +327,7 @@ async def test_run_stream_resumed_prepends_completed_sections_to_final_text():
         for c in (new_segment[:30], new_segment[30:]):
             yield c
 
-    with patch("app.agents.agent_b.stream_chat_completion", new=fake_stream):
+    with patch("app.agents.report_writer.stream_chat_completion", new=fake_stream):
         out = []
         async for item in run_stream(DIAGNOSIS, resumed_sections=resumed):
             out.append(item)

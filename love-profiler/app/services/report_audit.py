@@ -119,7 +119,7 @@ async def audit_assessment(
 ) -> ReportQualityAudit | None:
     """对一份已完成的 assessment 执行一次审计；返回写入的审计行（失败返回 None）。
 
-    自带 DB session（与 agent_b_runner 同模式），方便从 background task 调用。
+    自带 DB session（与 report_writer_runner 同模式），方便从 background task 调用。
     JUDGE_ENABLED=false 时直接跳过返回 None。
     """
     if not is_enabled():

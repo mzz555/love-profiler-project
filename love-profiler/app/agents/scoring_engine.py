@@ -1,5 +1,5 @@
 """
-Agent A — pure-Python scoring engine.
+Scoring engine — pure-Python deterministic scoring (formerly Agent A).
 Processes answer_package (list[dict]) → structured diagnosis dict.
 No LLM call; all computation is deterministic arithmetic.
 """
@@ -10,8 +10,8 @@ _D4_MAX: dict[str, int] = {"T1": 9, "T2": 8, "T3": 6, "T4": 9, "T5": 8}
 _OPTION_TO_T: dict[str, str] = {"a": "T1", "b": "T2", "c": "T3", "d": "T4", "e": "T5"}
 
 
-class AgentAError(Exception):
-    """Raised when Agent A cannot complete scoring."""
+class ScoringError(Exception):
+    """Raised when the scoring engine cannot complete its computation."""
 
 
 def _intensity_interp(raw: int, dim: str) -> str:
@@ -241,10 +241,10 @@ async def run(
     """Score answer package and return structured diagnosis dict.
 
     Raises:
-        AgentAError: If answer_package is empty.
+        ScoringError: If answer_package is empty.
     """
     if not answer_package:
-        raise AgentAError("Empty answer package")
+        raise ScoringError("Empty answer package")
     result = _compute_diagnosis(answer_package, session_id=session_id)
     result["question_set_version"] = question_set_version
     return result

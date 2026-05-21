@@ -1,5 +1,5 @@
 """
-Agent B — diagnosis dict → plain-text personality report.
+Report writer — diagnosis dict → plain-text personality report (formerly Agent B).
 Temperature: 0.6 (warm, personalized narrative).
 
 The system prompt is the verbatim docs file (no runtime mutation).
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 _PROMPT_FILE = pathlib.Path(__file__).parents[2] / "docs" / "agent-b-system-prompt.md"
 _PROMPT_RAW = _PROMPT_FILE.read_text(encoding="utf-8")
-AGENT_B_SYSTEM_PROMPT = _PROMPT_RAW.split("\n## 版本记录")[0].rstrip()
+REPORT_WRITER_SYSTEM_PROMPT = _PROMPT_RAW.split("\n## 版本记录")[0].rstrip()
 
 
 def _parse_prompt_version(raw: str) -> str:
@@ -41,7 +41,7 @@ PROMPT_VERSION: str = _parse_prompt_version(_PROMPT_RAW)
 REPORT_VERSION: int = 1
 
 
-class AgentBError(Exception):
+class ReportWriterError(Exception):
     """Raised when Agent B fails to return meaningful text."""
 
 
@@ -184,7 +184,7 @@ async def run_stream(
         dict — {"report_text": "..."} (exactly one item, at the end)
 
     Raises:
-        AgentBError: if response is empty.
+        ReportWriterError: if response is empty.
         LLMError:    if the API call fails.
     """
     user_msg = append_resume_directive(build_user_message(diagnosis), resumed_sections)
@@ -199,7 +199,7 @@ async def run_stream(
     usage_sink: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
 
     async for chunk in stream_chat_completion(
-        system_prompt=AGENT_B_SYSTEM_PROMPT,
+        system_prompt=REPORT_WRITER_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_msg}],
         temperature=0.6,
         usage_sink=usage_sink,
@@ -208,7 +208,7 @@ async def run_stream(
         yield chunk
 
     if not all_text.strip():
-        raise AgentBError("run_stream: empty response")
+        raise ReportWriterError("run_stream: empty response")
 
     # Resume 模式：把已落库 section + LLM 新输出拼回完整 report，
     # 让 quality gate 仍能校验整体合规，写库也写完整版本。
@@ -226,7 +226,7 @@ async def run_stream(
         warnings = check_report(combined_text, diagnosis)
     except QualityGateError as exc:
         logger.error("[agent_b/quality] hard fail session=%s: %s", sid_short, exc)
-        raise AgentBError(f"quality_gate_failed: {exc}") from exc
+        raise ReportWriterError(f"quality_gate_failed: {exc}") from exc
     for w in warnings:
         logger.warning("[agent_b/quality] soft warning session=%s: %s", sid_short, w)
 
@@ -260,7 +260,7 @@ async def run(
         Full report text string.
 
     Raises:
-        AgentBError: If response is empty after 2 attempts.
+        ReportWriterError: If response is empty after 2 attempts.
         LLMError:    If the API call itself fails.
     """
     base_msg = build_user_message(diagnosis)
@@ -277,7 +277,7 @@ async def run(
         content = base_msg if attempt == 0 else base_msg + retry_suffix
         per_call: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
         raw = await chat_completion(
-            system_prompt=AGENT_B_SYSTEM_PROMPT,
+            system_prompt=REPORT_WRITER_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}],
             temperature=0.6,
             agent="agent_b",
@@ -308,5 +308,5 @@ async def run(
         return raw
 
     if last_quality_error is not None:
-        raise AgentBError(f"quality_gate_failed: {last_quality_error}") from last_quality_error
-    raise AgentBError("Agent B returned empty text after 2 attempts")
+        raise ReportWriterError(f"quality_gate_failed: {last_quality_error}") from last_quality_error
+    raise ReportWriterError("Agent B returned empty text after 2 attempts")

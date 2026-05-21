@@ -64,6 +64,36 @@ async def fetch_love_type(type_code: str) -> dict | None:
     return await run_in_threadpool(_fetch_love_type_sync, type_code)
 
 
+_all_love_types_cache: list[dict] | None = None
+
+
+def _fetch_all_love_types_sync() -> list[dict]:
+    db = SessionLocal()
+    try:
+        result = db.execute(
+            text(
+                "SELECT id, type_code, type_name, img_path "
+                "FROM base_love_type ORDER BY id ASC"
+            )
+        )
+        return [dict(row._mapping) for row in result]
+    finally:
+        db.close()
+
+
+async def fetch_all_love_types() -> list[dict]:
+    """按 id ASC 拉取全部 16 类恋爱人格的展示字段（首页轮播用，进程内缓存）。
+
+    Returns:
+        [{id, type_code, type_name, img_path}, ...] 共 16 条。img_path 为逗号分隔
+        的 "man路径,woman路径"，与 loading.js 现有解析方式保持一致。
+    """
+    global _all_love_types_cache
+    if _all_love_types_cache is None:
+        _all_love_types_cache = await run_in_threadpool(_fetch_all_love_types_sync)
+    return _all_love_types_cache
+
+
 def _fetch_d4_details_sync(codes: list[str]) -> list[dict]:
     if not codes:
         return []

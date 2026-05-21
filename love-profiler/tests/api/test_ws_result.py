@@ -392,7 +392,7 @@ def test_ws_returns_429_when_quota_exceeded(client, db_session, user_id, monkeyp
     db_session.commit()
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream") as mock_stream:
+    with patch("app.api.ws_result.report_stream") as mock_stream:
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             msg = json.loads(ws.receive_text())
@@ -431,7 +431,7 @@ def test_ws_analyzed_writes_token_quota_after_success(client, db_session, user_i
         }
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+    with patch("app.api.ws_result.report_stream", side_effect=fake_run_stream):
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             while True:
@@ -468,7 +468,7 @@ def test_ws_analyzed_runs_agent_b_and_writes_complete(client, db_session, user_i
         yield {"report_text": "--Title--稳重的航标--Opening--开篇画像"}
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+    with patch("app.api.ws_result.report_stream", side_effect=fake_run_stream):
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             msgs = []
@@ -493,7 +493,7 @@ def test_ws_analyzed_runs_agent_b_and_writes_complete(client, db_session, user_i
 
 def test_ws_analyzed_agent_b_failure_releases_claim(client, db_session, user_id):
     """Agent B 抛 AgentBError → 发 502 + status 回滚到 analyzed。"""
-    from app.agents.agent_b import AgentBError
+    from app.agents.report_writer import ReportWriterError as AgentBError  # keep local alias for minimal test diff
 
     a = _make_assessment(db_session, user_id, status="analyzed")
     _make_paid_order(db_session, user_id, a.id)
@@ -503,7 +503,7 @@ def test_ws_analyzed_agent_b_failure_releases_claim(client, db_session, user_id)
         raise AgentBError("simulated failure")
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+    with patch("app.api.ws_result.report_stream", side_effect=fake_run_stream):
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             msgs = []
@@ -527,7 +527,7 @@ def test_ws_analyzed_agent_b_failure_releases_claim(client, db_session, user_id)
 
 def test_ws_failure_preserves_partial_sections_for_resume(client, db_session, user_id):
     """Agent B 写到 Opening 段抛错 → partial_sections 应保留 Title。"""
-    from app.agents.agent_b import AgentBError
+    from app.agents.report_writer import ReportWriterError as AgentBError  # keep local alias for minimal test diff
     from app.models.assessment import Assessment
 
     a = _make_assessment(db_session, user_id, status="analyzed")
@@ -540,7 +540,7 @@ def test_ws_failure_preserves_partial_sections_for_resume(client, db_session, us
         raise AgentBError("crash mid-stream")
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+    with patch("app.api.ws_result.report_stream", side_effect=fake_run_stream):
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             while True:
@@ -585,7 +585,7 @@ def test_ws_success_clears_partial_sections(client, db_session, user_id):
         }
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+    with patch("app.api.ws_result.report_stream", side_effect=fake_run_stream):
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             while True:
@@ -632,7 +632,7 @@ def test_ws_reconnect_replays_and_resumes(client, db_session, user_id):
         }
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+    with patch("app.api.ws_result.report_stream", side_effect=fake_run_stream):
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             msgs = []
@@ -686,7 +686,7 @@ def test_ws_resume_disabled_by_env(client, db_session, user_id, monkeypatch):
         }
 
     token = _auth_token(user_id)
-    with patch("app.api.ws_result.agent_b_run_stream", side_effect=fake_run_stream):
+    with patch("app.api.ws_result.report_stream", side_effect=fake_run_stream):
         with client.websocket_connect(f"/ws/result?token={token}") as ws:
             ws.send_text(json.dumps({"session_id": "ws-test-session"}))
             while True:

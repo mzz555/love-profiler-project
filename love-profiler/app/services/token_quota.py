@@ -9,7 +9,7 @@
 - USER_DAILY_TOKEN_QUOTA：单用户单日上限，默认 20000（约 5-10 份完整报告）
 - DEV_MODE：true 时彻底 bypass（开发体验优先）
 
-接入点：app/agents/agent_b.py + app/services/agent_b_runner.py + app/api/ws_result.py
+接入点：app/agents/report_writer.py + app/services/report_writer_runner.py + app/api/ws_result.py
 """
 
 from __future__ import annotations

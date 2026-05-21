@@ -1,6 +1,6 @@
 """Agent B prompt_version 解析测试（Phase A.3）。"""
 
-from app.agents.agent_b import (
+from app.agents.report_writer import (
     PROMPT_VERSION,
     REPORT_VERSION,
     _parse_prompt_version,

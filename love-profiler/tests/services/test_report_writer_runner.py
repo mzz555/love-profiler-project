@@ -1,4 +1,4 @@
-"""Tests for app/services/agent_b_runner.py.
+"""Tests for app/services/report_writer_runner.py (formerly agent_b_runner).
 
 run_and_persist 用全局 SessionLocal 写库，跟 conftest 的 per-test
 engine 是两个 DB。测试里把模块级 SessionLocal 替换为返回测试 db_session
@@ -11,9 +11,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.agents.agent_b import AgentBError
+from app.agents.report_writer import ReportWriterError as AgentBError  # alias
 from app.models.assessment import Assessment
-from app.services import agent_b_runner
+from app.services import report_writer_runner as agent_b_runner  # alias
 from app.services.llm_client import LLMError
 
 
@@ -64,7 +64,7 @@ async def test_run_and_persist_success_updates_status_and_text(shared_session_lo
     a = _make_generating_assessment(shared_session_local)
     fake_text = "稳重的航标这是 Agent B 写出来的报告"
 
-    with patch("app.services.agent_b_runner.agent_b_run",
+    with patch("app.services.report_writer_runner.write_report",
                new=AsyncMock(return_value=fake_text)):
         await agent_b_runner.run_and_persist(
             a.id, a.session_id,
@@ -80,7 +80,7 @@ async def test_run_and_persist_success_updates_status_and_text(shared_session_lo
     rj = json.loads(saved.report_json)
     assert rj == {"raw_llm_output": fake_text}
     # Phase A.3: 写库时落 prompt_version / report_version
-    from app.agents.agent_b import PROMPT_VERSION, REPORT_VERSION
+    from app.agents.report_writer import PROMPT_VERSION, REPORT_VERSION
     assert saved.prompt_version == PROMPT_VERSION
     assert saved.report_version == REPORT_VERSION
 
@@ -107,7 +107,7 @@ async def test_run_and_persist_accumulates_token_quota(shared_session_local, mon
             usage_sink["completion_tokens"] = 500
         return "稳重的航标——完整报告"
 
-    with patch("app.services.agent_b_runner.agent_b_run", new=fake_run):
+    with patch("app.services.report_writer_runner.write_report", new=fake_run):
         await agent_b_runner.run_and_persist(
             a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},
             user_id=user.id,
@@ -137,7 +137,7 @@ async def test_run_and_persist_without_user_id_skips_quota(shared_session_local)
             usage_sink["completion_tokens"] = 200
         return "无用户 id 不写 quota"
 
-    with patch("app.services.agent_b_runner.agent_b_run", new=fake_run):
+    with patch("app.services.report_writer_runner.write_report", new=fake_run):
         await agent_b_runner.run_and_persist(
             a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},
         )
@@ -156,7 +156,7 @@ async def test_run_and_persist_skips_update_when_status_not_generating(shared_se
     a.personality_type = "X-X-X"
     shared_session_local.commit()
 
-    with patch("app.services.agent_b_runner.agent_b_run",
+    with patch("app.services.report_writer_runner.write_report",
                new=AsyncMock(return_value="新报告，不应覆盖")):
         await agent_b_runner.run_and_persist(
             a.id, a.session_id,
@@ -179,7 +179,7 @@ async def test_run_and_persist_skips_update_when_status_not_generating(shared_se
 async def test_run_and_persist_agent_b_error_resets_to_analyzed(shared_session_local):
     a = _make_generating_assessment(shared_session_local, session_id="ab-fail")
 
-    with patch("app.services.agent_b_runner.agent_b_run",
+    with patch("app.services.report_writer_runner.write_report",
                new=AsyncMock(side_effect=AgentBError("simulated"))):
         await agent_b_runner.run_and_persist(
             a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},
@@ -196,7 +196,7 @@ async def test_run_and_persist_agent_b_error_resets_to_analyzed(shared_session_l
 async def test_run_and_persist_llm_error_resets_to_analyzed(shared_session_local):
     a = _make_generating_assessment(shared_session_local, session_id="llm-fail")
 
-    with patch("app.services.agent_b_runner.agent_b_run",
+    with patch("app.services.report_writer_runner.write_report",
                new=AsyncMock(side_effect=LLMError("upstream 500"))):
         await agent_b_runner.run_and_persist(
             a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},
@@ -215,7 +215,7 @@ async def test_run_and_persist_failure_does_not_revert_non_generating(shared_ses
     a.report_text = "已完成"
     shared_session_local.commit()
 
-    with patch("app.services.agent_b_runner.agent_b_run",
+    with patch("app.services.report_writer_runner.write_report",
                new=AsyncMock(side_effect=AgentBError("late failure"))):
         await agent_b_runner.run_and_persist(
             a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},
@@ -235,7 +235,7 @@ async def test_run_and_persist_failure_does_not_revert_non_generating(shared_ses
 async def test_schedule_returns_task_and_runs_in_background(shared_session_local):
     a = _make_generating_assessment(shared_session_local, session_id="scheduled")
 
-    with patch("app.services.agent_b_runner.agent_b_run",
+    with patch("app.services.report_writer_runner.write_report",
                new=AsyncMock(return_value="后台任务产出")):
         task = agent_b_runner.schedule(
             a.id, a.session_id, diagnosis={"type_code": "S-CL-H"},

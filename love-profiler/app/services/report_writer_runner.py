@@ -1,15 +1,16 @@
-"""Background runner for Agent B — shared by /quiz/submit and /result polling."""
+"""Background runner for the report writer — shared by /quiz/submit and /result polling
+(formerly write_reportner)."""
 
 import asyncio
 import json
 import logging
 import time
 
-from app.agents.agent_b import (
-    AgentBError,
+from app.agents.report_writer import (
+    ReportWriterError,
     PROMPT_VERSION,
     REPORT_VERSION,
-    run as agent_b_run,
+    run as write_report,
 )
 from app.database import SessionLocal
 from app.models.assessment import Assessment
@@ -36,7 +37,7 @@ async def run_and_persist(
     db = SessionLocal()
     try:
         usage_sink: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
-        report_text = await agent_b_run(diagnosis, session_id=session_id, usage_sink=usage_sink)
+        report_text = await write_report(diagnosis, session_id=session_id, usage_sink=usage_sink)
         personality_type = diagnosis.get("type_code", "")
 
         # Conditional update — single statement avoids the read-then-write race when
@@ -78,7 +79,7 @@ async def run_and_persist(
             usage_sink["prompt_tokens"], usage_sink["completion_tokens"],
             updated, (time.monotonic() - t0) * 1000,
         )
-    except (AgentBError, LLMError) as exc:
+    except (ReportWriterError, LLMError) as exc:
         logger.error(
             "[%s] agent_b 失败 assessment_id=%s %.0fms: %s",
             log_prefix, assessment_id, (time.monotonic() - t0) * 1000, exc,

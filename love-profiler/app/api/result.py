@@ -18,12 +18,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.agents.agent_b import AgentBError, run as agent_b_run
+from app.agents.report_writer import ReportWriterError, run as write_report
 from app.database import SessionLocal, get_db
 from app.limiter import limiter
 from app.middleware.auth import get_current_user_id
 from app.models.assessment import Assessment
-from app.services import agent_b_runner
+from app.services import report_writer_runner
 from app.services.access_control import is_unlocked
 from app.services.llm_client import LLMError
 from app.services.token_quota import QuotaExceededError, check_quota
@@ -130,7 +130,7 @@ async def get_result(
     assessment.status = "generating"
     db.commit()
     logger.info("[result] 启动 agent_b 后台任务 assessment_id=%s", assessment.id)
-    agent_b_runner.schedule(
+    report_writer_runner.schedule(
         assessment.id, body.session_id, diagnosis,
         log_prefix="result/bg", user_id=user_id,
     )
@@ -216,8 +216,8 @@ async def stream_result(
             ptype = _personality_type_ready
         else:
             try:
-                text = await agent_b_run(_diagnosis_data, session_id=session_id_str)
-            except (AgentBError, LLMError) as exc:
+                text = await write_report(_diagnosis_data, session_id=session_id_str)
+            except (ReportWriterError, LLMError) as exc:
                 logger.error("[result/stream] agent_b 失败: %s", exc)
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Agent B failed'}, ensure_ascii=False)}\n\n"
                 return

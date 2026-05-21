@@ -406,7 +406,7 @@ def test_stream_runs_agent_b_and_persists(client, db_session):
 
     fake_text = "--Title--稳重的航标 这是 Agent B 写出来的报告正文"
     with patch(
-        "app.api.result.agent_b_run",
+        "app.api.result.write_report",
         new=AsyncMock(return_value=fake_text),
     ):
         with client.stream(
@@ -426,14 +426,14 @@ def test_stream_runs_agent_b_and_persists(client, db_session):
 def test_stream_returns_sse_error_when_agent_b_fails(client, db_session):
     """Agent B 抛 AgentBError → SSE 应吐 error event 且不中断 200 响应。"""
     from unittest.mock import patch, AsyncMock
-    from app.agents.agent_b import AgentBError
+    from app.agents.report_writer import ReportWriterError
 
     user, headers = _make_user_and_token(db_session, "o_stream_b_fail")
     a = _make_analyzed_assessment(db_session, user.id, "sess-stream-b-fail")
 
     with patch(
-        "app.api.result.agent_b_run",
-        new=AsyncMock(side_effect=AgentBError("simulated")),
+        "app.api.result.write_report",
+        new=AsyncMock(side_effect=ReportWriterError("simulated")),
     ):
         with client.stream(
             "POST", "/result/stream",

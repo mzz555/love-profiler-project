@@ -2,7 +2,11 @@ import copy
 
 import pytest
 
-from app.agents.agent_a import AgentAError, _compute_diagnosis, run
+from app.agents.scoring_engine import (
+    ScoringError as AgentAError,  # alias for minimal test diff
+    _compute_diagnosis,
+    run,
+)
 
 
 # ── helpers to build consistent answer packages ────────────────────────────────

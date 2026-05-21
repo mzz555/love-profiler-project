@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
-from app.agents.agent_a import AgentAError, run as agent_a_run
+from app.agents.scoring_engine import ScoringError, run as score_run
 from app.database import get_db
 from app.schemas.diagnosis import Diagnosis
 from app.services.llm_client import LLMError
@@ -22,6 +22,7 @@ from app.middleware.auth import get_current_user_id
 from app.models.assessment import Assessment
 from app.services.answer_package_builder import build_answer_package
 from app.services.supabase_client import (
+    fetch_all_love_types,
     fetch_d4_details,
     fetch_d5_guide,
     fetch_highlights_by_codes,
@@ -134,8 +135,8 @@ async def quiz_submit(
 
     t_agent = time.monotonic()
     try:
-        diagnosis = await agent_a_run(answer_package, session_id=body.session_id, question_set_version=body.question_set_version)
-    except (AgentAError, LLMError) as exc:
+        diagnosis = await score_run(answer_package, session_id=body.session_id, question_set_version=body.question_set_version)
+    except (ScoringError, LLMError) as exc:
         logger.error("[quiz/submit] agent_a 失败 %.0fms: %s", (time.monotonic() - t_agent) * 1000, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -166,6 +167,7 @@ async def quiz_submit(
     diagnosis["type_name"]    = love_type["type_name"]
     diagnosis["type_tagline"] = love_type.get("tagline", "") or ""
     diagnosis["type_anchor"]  = love_type.get("detail", "") or ""
+    diagnosis["img_path"]     = love_type.get("img_path", "") or ""
     logger.info("[quiz/submit] base_love_type 命中 type_code=%s type_name=%s", type_code, love_type["type_name"])
 
     # 查 D1/D2/D3 段落解码，随 meta 消息下发前端展示人格卡标签
@@ -254,3 +256,23 @@ async def quiz_submit(
     )
     img_path = love_type.get("img_path", "") or ""
     return SubmitResponse(assessment_id=assessment.id, status="analyzed", img_path=img_path)
+
+
+@router.get("/types")
+async def list_types(_uid: int = Depends(get_current_user_id)) -> dict:
+    """返回 16 类恋爱人格的展示字段（按 id ASC），供首页轮播 portrait 使用。
+
+    img_path 与现有 chat→loading→report 链路保持一致：单字符串字段，
+    内容形如 "man路径,woman路径"，客户端按性别 split 取段。
+    """
+    rows = await fetch_all_love_types()
+    types = [
+        {
+            "id": r["id"],
+            "type_code": r["type_code"],
+            "type_name": r["type_name"],
+            "img_path": r.get("img_path") or "",
+        }
+        for r in rows
+    ]
+    return {"types": types}

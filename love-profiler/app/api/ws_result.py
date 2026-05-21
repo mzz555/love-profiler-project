@@ -25,11 +25,11 @@ import jwt
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from app.agents.agent_b import (
-    AgentBError,
+from app.agents.report_writer import (
+    ReportWriterError,
     PROMPT_VERSION,
     REPORT_VERSION,
-    run_stream as agent_b_run_stream,
+    run_stream as report_stream,
 )
 from app.database import get_db
 from app.middleware.auth import TOKEN_ALGORITHM, _jwt_secret
@@ -294,6 +294,7 @@ async def _stream_cached(websocket: WebSocket, assessment: Assessment) -> None:
         "personality_type": ptype,
         "type_name": type_name,
         "type_tagline": diagnosis.get("type_tagline", ""),
+        "img_path": diagnosis.get("img_path", ""),
         "dim_chart": _dim_chart(diagnosis),
         "highlights_meta": _highlights_meta(diagnosis),
         "segment_decode": _all_labels(diagnosis),
@@ -375,6 +376,7 @@ async def _stream_agent_b(
         "personality_type": ptype,
         "type_name": type_name,
         "type_tagline": type_tagline,
+        "img_path": diagnosis.get("img_path", ""),
         "dim_chart": _dim_chart(diagnosis),
         "highlights_meta": _highlights_meta(diagnosis),
         "segment_decode": _all_labels(diagnosis),
@@ -385,7 +387,7 @@ async def _stream_agent_b(
     # 把已完成 sections replay 给前端，保证 UI 完整
     if resumed:
         replay_streamer = _SectionStreamer(websocket, _send)
-        from app.agents.agent_b import SECTION_ORDER
+        from app.agents.report_writer import SECTION_ORDER
         replay_text = "".join(
             f"--{name}--\n{resumed[name]}\n"
             for name in SECTION_ORDER
@@ -414,7 +416,7 @@ async def _stream_agent_b(
     # 只在确实有 resumed 时才传 kwarg，保持对老 agent_b.run_stream 签名（含测试 mock）兼容
     extra_kwargs = {"resumed_sections": resumed} if resumed else {}
     try:
-        async for item in agent_b_run_stream(
+        async for item in report_stream(
             diagnosis,
             session_id=session_id,
             **extra_kwargs,
@@ -427,7 +429,7 @@ async def _stream_agent_b(
             else:
                 final_report = item
         await streamer.done()
-    except (AgentBError, LLMError) as exc:
+    except (ReportWriterError, LLMError) as exc:
         logger.error("[ws/result] agent_b 流式失败 %.0fms: %s", (time.monotonic() - t0) * 1000, exc)
         # 保留 partial_sections 供下次接续，仅状态回滚到 analyzed
         _release_claim(db, assessment_id)
