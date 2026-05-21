@@ -95,8 +95,8 @@
           <view class="rpt-chart-card-hd">
             <view class="rpt-cc-icon-wrap rpt-cc-combined"><text class="rpt-cc-icon">🕸</text></view>
             <view>
-              <text class="rpt-cc-title">恋爱人格全维雷达</text>
-              <text class="rpt-cc-sub">10 项维度综合画像</text>
+              <text class="rpt-cc-title">恋爱人格健康度</text>
+              <text class="rpt-cc-sub">5 维核心指标 · 越高越健康</text>
             </view>
           </view>
           <image tt:if="{{chartImgCombined}}" src="{{chartImgCombined}}" class="rpt-chart-combined" mode="aspectFit" />

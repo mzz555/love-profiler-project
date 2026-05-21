@@ -422,9 +422,9 @@ Page({
         if (dimChart) {
           // streaming 区块进入 DOM 后 canvas 已存在，200ms 足够 canvas 初始化
           setTimeout(() => {
-            console.log('[charts] drawing d123=', !!dimChart.d123, 'd4=', !!dimChart.d4, 'd5=', !!dimChart.d5);
+            console.log('[charts] drawing d123=', !!dimChart.d123, 'health=', !!dimChart.health_radar);
             this._drawD123Gauges(dimChart.d123);
-            this._drawCombinedRadar(dimChart.d123, dimChart.d4, dimChart.d5);
+            this._drawCombinedRadar(dimChart.health_radar);
           }, 200);
         }
       } else if (msg.type === 'section_start') {
@@ -625,106 +625,97 @@ Page({
     } catch(e) { console.error('[d123] THROW', e.message, e); }
   },
 
-  // ── 图表2：10轴全维雷达（D1-D3 + T1-T5 + S1-S2）──────────────────────
-  _drawCombinedRadar(d123, d4, d5) {
-    if (!d123 || d123.length < 3 || !d4 || !d5) return;
+  // ── 图表2：5 维健康度雷达（依恋/边界/冲突/自我认知/表达成熟）──────────
+  // 语义统一"高=好"，让用户一眼看懂自己哪里强、哪里弱
+  _drawCombinedRadar(healthRadar) {
+    if (!Array.isArray(healthRadar) || healthRadar.length !== 5) {
+      console.warn('[health-radar] expected 5 axes, got', healthRadar);
+      return;
+    }
     const ctx = tt.createCanvasContext('combined-radar', this);
     try {
-      const W = 640, H = 640, cx = W / 2, cy = H / 2, maxR = 220, N = 10;
+      const W = 640, H = 640, cx = W / 2, cy = H / 2, maxR = 200, N = 5;
+      const vals = healthRadar.map(r => Math.max(0, Math.min(1, parseFloat(r.value) || 0)));
+      const labels = healthRadar.map(r => r.name || r.key);
 
-      const s1Raw = typeof d5.s1_raw === 'number' ? d5.s1_raw : 0;
-      const s2Raw = typeof d5.s2_raw === 'number' ? d5.s2_raw : 0;
-
-      const vals = [
-        (d123[0].raw + 12) / 24,
-        (d123[1].raw + 12) / 24,
-        (d123[2].raw + 12) / 24,
-        parseFloat(d4.T1 || 0),
-        parseFloat(d4.T2 || 0),
-        parseFloat(d4.T3 || 0),
-        parseFloat(d4.T4 || 0),
-        parseFloat(d4.T5 || 0),
-        (s1Raw + 6) / 12,
-        (s2Raw + 6) / 12,
-      ];
-      const labels = ['依恋', '边界', '冲突', '言语', '时刻', '惊喜', '服务', '接触', '直接', '分享'];
-      const COLORS = ['#FF7B6E','#4FC3F7','#CE93D8','#FF8A65','#F48FB1','#E91E8C','#AB47BC','#EC407A','#FFB74D','#FFA726'];
-      const G_FILL = ['rgba(255,120,100,0.07)','rgba(244,143,177,0.07)','rgba(255,183,77,0.07)'];
-      const G_AXES = [[0,1,2],[3,4,5,6,7],[8,9]];
+      const PRIMARY = '#4FAFAF';     // teal 主色
+      const PRIMARY_LIGHT = 'rgba(79,175,175,0.22)';
+      const PRIMARY_DARK  = '#3A8C8C';
+      const GRID = 'rgba(180,170,160,0.20)';
+      const GRID_OUTER = 'rgba(150,140,132,0.45)';
+      const LABEL = '#3A3A4A';
+      const VALUE = 'rgba(110,100,90,0.85)';
 
       const angles = Array.from({length: N}, (_, i) => -Math.PI / 2 + i * 2 * Math.PI / N);
       const pt = (a, r) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
 
-      // 背景圆
-      ctx.setFillStyle('rgba(248,245,241,0.6)');
-      ctx.beginPath(); ctx.arc(cx, cy, maxR + 8, 0, Math.PI * 2); ctx.fill();
+      // 背景柔光圆
+      ctx.setFillStyle('rgba(248,245,241,0.55)');
+      ctx.beginPath(); ctx.arc(cx, cy, maxR + 12, 0, Math.PI * 2); ctx.fill();
 
-      // 组扇形底色
-      G_AXES.forEach((idxArr, gi) => {
-        const aStart = angles[idxArr[0]] - Math.PI / N;
-        const aEnd   = angles[idxArr[idxArr.length - 1]] + Math.PI / N;
-        ctx.beginPath(); ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, maxR + 4, aStart, aEnd);
-        ctx.closePath();
-        ctx.setFillStyle(G_FILL[gi]); ctx.fill();
-      });
-
-      // 网格多边形
+      // 网格五边形（25/50/75/100）
       [0.25, 0.5, 0.75, 1.0].forEach(lvl => {
         const pts = angles.map(a => pt(a, maxR * lvl));
         ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < N; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.closePath();
-        ctx.setStrokeStyle(lvl === 1 ? 'rgba(150,140,132,0.50)' : 'rgba(200,190,182,0.25)');
+        ctx.setStrokeStyle(lvl === 1 ? GRID_OUTER : GRID);
         ctx.setLineWidth(lvl === 1 ? 2 : 1); ctx.stroke();
       });
 
       // 轴线
-      angles.forEach((a, i) => {
+      angles.forEach((a) => {
         const {x, y} = pt(a, maxR);
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y);
-        ctx.setStrokeStyle(_hexAlpha(COLORS[i], 0.33)); ctx.setLineWidth(1.5); ctx.stroke();
+        ctx.setStrokeStyle(GRID); ctx.setLineWidth(1); ctx.stroke();
       });
 
       // 数据多边形
-      const dpts = vals.map((v, i) => pt(angles[i], maxR * Math.max(0, Math.min(1, v))));
+      const dpts = vals.map((v, i) => pt(angles[i], maxR * v));
       ctx.beginPath(); ctx.moveTo(dpts[0].x, dpts[0].y);
       for (let i = 1; i < N; i++) ctx.lineTo(dpts[i].x, dpts[i].y);
       ctx.closePath();
-      ctx.setFillStyle('rgba(79,175,175,0.22)'); ctx.fill();
-      ctx.setStrokeStyle('#4FAFAF'); ctx.setLineWidth(3); ctx.stroke();
+      ctx.setFillStyle(PRIMARY_LIGHT); ctx.fill();
+      ctx.setStrokeStyle(PRIMARY); ctx.setLineWidth(3); ctx.stroke();
 
-      // 数据节点
-      dpts.forEach(({x, y}, i) => {
-        ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2);
-        ctx.setFillStyle(COLORS[i]); ctx.fill();
+      // 数据节点（深 teal 圆 + 白心）
+      dpts.forEach(({x, y}) => {
+        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.setFillStyle(PRIMARY_DARK); ctx.fill();
         ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2);
         ctx.setFillStyle('#FFFFFF'); ctx.fill();
       });
 
-      // 标签（字号更大，偏移更大）
+      // 标签 + 百分比
       labels.forEach((lbl, i) => {
         const a = angles[i], cosA = Math.cos(a), sinA = Math.sin(a);
-        const {x, y} = pt(a, maxR + 38);
+        const {x, y} = pt(a, maxR + 44);
         const align = cosA > 0.2 ? 'left' : cosA < -0.2 ? 'right' : 'center';
-        const dy = sinA < -0.4 ? -4 : sinA > 0.4 ? 12 : 6;
+        const dy = sinA < -0.4 ? -2 : sinA > 0.4 ? 14 : 6;
         ctx.setTextAlign(align);
-        ctx.setFontSize(20); ctx.setFillStyle(COLORS[i]);
+        ctx.setFontSize(24); ctx.setFillStyle(LABEL);
         ctx.fillText(lbl, x, y + dy);
-        ctx.setFontSize(16); ctx.setFillStyle('rgba(130,120,112,0.80)');
-        ctx.fillText(Math.round(Math.max(0, Math.min(1, vals[i])) * 100) + '%', x, y + dy + 22);
+        ctx.setFontSize(18); ctx.setFillStyle(VALUE);
+        ctx.fillText(Math.round(vals[i] * 100) + '%', x, y + dy + 26);
       });
 
-      // canvas 已是 640px，无需 ×2
+      // 中心总分（5 维平均），辅助一眼读图
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      ctx.setTextAlign('center');
+      ctx.setFontSize(20); ctx.setFillStyle(VALUE);
+      ctx.fillText('综合', cx, cy - 12);
+      ctx.setFontSize(40); ctx.setFillStyle(PRIMARY_DARK);
+      ctx.fillText(Math.round(avg * 100) + '%', cx, cy + 26);
+
       ctx.draw(false, () => {
         tt.canvasToTempFilePath({
           canvasId: 'combined-radar',
           destWidth: W, destHeight: H,
-          success: res => { console.log('[combined] img ok'); this.setData({ chartImgCombined: res.tempFilePath }); },
-          fail: err => console.error('[combined] toImg fail', err),
+          success: res => { console.log('[health-radar] img ok'); this.setData({ chartImgCombined: res.tempFilePath }); },
+          fail: err => console.error('[health-radar] toImg fail', err),
         }, this);
       });
-    } catch(e) { console.error('[combined] THROW', e.message, e); }
+    } catch(e) { console.error('[health-radar] THROW', e.message, e); }
   },
 
   restart() {
