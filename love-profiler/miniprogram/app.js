@@ -3,11 +3,15 @@
 // 修改 BASE_URL 为生产域名后上线
 // =====================================================================
 
-const BASE_URL = 'http://localhost:8000';
-const IS_DEV = BASE_URL.includes('localhost');
+// 真机调试时 localhost 指手机自己，必须用开发机的局域网 IP
+// 192.168.3.179 = 当前 WiFi 网卡 IP，手机与电脑须在同一 WiFi
+// 后端启动须绑 0.0.0.0: uvicorn app.main:app --host 0.0.0.0 --port 8000
+const BASE_URL = 'http://192.168.3.179:8000';
+const IS_DEV = BASE_URL.includes('localhost') || /^http:\/\/(127\.|172\.|192\.168\.|10\.)/.test(BASE_URL);
 
 App({
   isDev: IS_DEV,
+  baseUrl: BASE_URL,
   globalData: {
     token: null,
     sessionId: null,

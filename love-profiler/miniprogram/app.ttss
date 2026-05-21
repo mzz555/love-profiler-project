@@ -1,8 +1,27 @@
+/* ══════════════════════════════════════════════════════════════
+   主题色板（奶米 × 薄荷青绿 Light Theme）
+   ──────────────────────────────────────────────────────────────
+   底色:     #F5F0EB  奶米
+   卡片:     #FFFFFF / #F8F6F3
+   主色:     #4FAFAF → #62C2C2 → #7DCECE → #8ED8D8  (薄荷青绿渐变)
+   文字:     #1C1C2E 主 / #7A7A8A 副 / #AAAABB 辅
+   健康端:   #1E9B6B  柔绿
+   问题端:   #E08250  暖橙
+   D1-D5:    #7B9EFF #4FAFAF #85C4A0 #F5A455 #E87070  (chat 维度配色)
+   描边:     #E8E4DF
+   圆角:     28rpx 卡 / 100rpx 胶囊
+   阴影:     0 6rpx 32rpx rgba(0,0,0,0.08)   柔光
+            0 8rpx 28rpx rgba(79,175,175,0.30)  薄荷重影 (主 CTA)
+   改样式前以代码为权威；如发现某页面跑题以本色板为准。
+   ══════════════════════════════════════════════════════════════ */
+
 page {
   background-color: #F5F0EB;
   font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
   box-sizing: border-box;
   color: #1C1C2E;
+  /* 禁用横向滚动与 bounce：所有页面的根容器统一防止横向溢出回弹 */
+  overflow-x: hidden;
 }
 
 @keyframes pageIn {

@@ -21,17 +21,65 @@
       <text class="body-desc">了解你真实的恋爱模式，发现你独特的情感特质与亲密需求。</text>
     </view>
 
-    <!-- 标准版 -->
+    <!-- 标准版 + 16 类人格轮播（同一张卡） -->
     <view class="card card-standard" bindtap="startQuick">
-      <view class="card-left">
-        <text class="card-title">标准版</text>
-        <text class="card-desc">30 道题，快速了解你的关系模式</text>
-        <view class="card-meta">
-          <view class="badge badge-free"><text class="badge-text">免费</text></view>
-          <text class="card-time">⏱ 约 10 分钟</text>
+      <view class="card-top">
+        <view class="card-left">
+          <text class="card-title">标准版</text>
+          <text class="card-desc">30 道题，快速了解你的关系模式</text>
+          <view class="card-meta">
+            <view class="badge badge-free"><text class="badge-text">免费</text></view>
+            <text class="card-time">⏱ 约 10 分钟</text>
+          </view>
+        </view>
+        <view class="card-arrow"><text class="arrow-text">›</text></view>
+      </view>
+
+      <view class="card-divider" tt:if="{{portraitsReady}}" />
+
+      <view
+        class="card-portraits"
+        tt:if="{{portraitsReady}}"
+        style="background: {{currentGroup.accent}};"
+        key="{{batchIdx}}"
+      >
+        <view class="card-portraits-head">
+          <view class="group-info">
+            <text class="group-name" style="color: {{currentGroup.primary}};">{{currentGroup.name}}</text>
+            <text class="group-tagline">{{currentGroup.tagline}}</text>
+          </view>
+          <view class="portraits-dots">
+            <view
+              tt:for="{{totalBatches}}"
+              tt:for-item="dot"
+              tt:for-index="di"
+              tt:key="di"
+              class="portraits-dot {{di === batchIdx ? 'portraits-dot-active' : ''}}"
+              style="{{di === batchIdx ? 'background:' + currentGroup.primary + ';' : ''}}"
+            />
+          </view>
+        </view>
+
+        <view class="chips-row">
+          <view
+            class="chip"
+            tt:for="{{portraits}}"
+            tt:key="id"
+            style="color: {{currentGroup.primary}}; border-color: {{currentGroup.primary}};"
+          >
+            <text class="chip-text">{{item.type_code}}</text>
+          </view>
+        </view>
+
+        <view class="portraits-row">
+          <view class="portrait-item" tt:for="{{portraits}}" tt:key="id">
+            <view class="portrait-img-wrap" style="background: #FFFFFF; border-color: {{currentGroup.primary}};">
+              <image class="portrait-img" src="{{item.img}}" mode="aspectFit" lazy-load="true" />
+            </view>
+            <text class="portrait-name">{{item.type_name}}</text>
+          </view>
         </view>
       </view>
-      <view class="card-arrow"><text class="arrow-text">›</text></view>
     </view>
 
     <!-- Footer -->

@@ -1,21 +1,28 @@
-page { background: #08080F; }
+/* ══════════════════════════════════════════
+   Gender — Light Theme (Cream × Teal)
+   呼应 index 的 hero 渐变风格 + 白卡片
+   ══════════════════════════════════════════ */
+
+page { background: #F5F0EB; }
 
 .page {
   width: 100vw;
   height: 100vh;
-  background: linear-gradient(175deg, #06060E 0%, #080812 20%, #0A0A18 50%, #0C0B1E 100%);
+  background: linear-gradient(160deg, #4FAFAF 0%, #62C2C2 45%, #7DCECE 80%, #8ED8D8 100%);
   position: relative;
   overflow: hidden;
   animation: pageIn 0.45s ease-out both;
 }
 
+/* ── Ambient orbs ─ 白色淡晕替换深色 nebula ── */
 .nebula { position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; }
-.nebula-1 { width: 520rpx; height: 520rpx; top: -120rpx; left: -140rpx; background: radial-gradient(circle, rgba(100,35,170,0.14) 0%, transparent 70%); }
-.nebula-2 { width: 440rpx; height: 440rpx; top: 200rpx; right: -100rpx; background: radial-gradient(circle, rgba(180,130,60,0.09) 0%, transparent 70%); }
-.nebula-3 { width: 380rpx; height: 380rpx; bottom: 100rpx; left: 40%; margin-left: -190rpx; background: radial-gradient(circle, rgba(60,120,190,0.06) 0%, transparent 70%); }
+.nebula-1 { width: 520rpx; height: 520rpx; top: -120rpx; left: -140rpx; background: rgba(255,255,255,0.10); }
+.nebula-2 { width: 440rpx; height: 440rpx; top: 200rpx; right: -100rpx; background: rgba(255,255,255,0.06); }
+.nebula-3 { width: 380rpx; height: 380rpx; bottom: 100rpx; left: 40%; margin-left: -190rpx; background: rgba(255,255,255,0.04); }
 
+/* ── Stars ─ 改为白色小光点 ── */
 .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
-.star { position: absolute; border-radius: 50%; background: rgba(220,210,190,0.75); }
+.star { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.6); }
 .star:nth-child(1)  { width:4rpx; height:4rpx; top:30rpx; left:80rpx; }
 .star:nth-child(2)  { width:3rpx; height:3rpx; top:80rpx; left:560rpx; }
 .star:nth-child(3)  { width:5rpx; height:5rpx; top:50rpx; left:340rpx; }
@@ -42,30 +49,28 @@ page { background: #08080F; }
 }
 
 .logo-wrap {
-  width: 100rpx; height: 100rpx;
-  border-radius: 28rpx;
-  background: linear-gradient(155deg, rgba(200,160,80,0.16), rgba(140,100,50,0.06));
-  border: 1.5rpx solid rgba(200,160,80,0.22);
+  width: 112rpx; height: 112rpx;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.22);
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 32rpx;
+  box-shadow: 0 6rpx 32rpx rgba(0,0,0,0.10), inset 0 1rpx 0 rgba(255,255,255,0.4);
 }
 
 .logo-mark {
-  font-size: 48rpx; line-height: 1;
-  color: transparent;
-  background: linear-gradient(160deg, #E8D090, #C8A050, #A07830, #D4B870);
-  -webkit-background-clip: text;
-  background-clip: text;
+  font-size: 52rpx;
+  color: #FFFFFF;
+  line-height: 1;
 }
 
 .title {
-  font-size: 36rpx; font-weight: 600;
-  color: rgba(240,225,200,0.90); letter-spacing: 4rpx;
+  font-size: 36rpx; font-weight: 700;
+  color: #FFFFFF; letter-spacing: 4rpx;
   margin-bottom: 12rpx;
 }
 
 .subtitle {
-  font-size: 24rpx; color: rgba(200,180,160,0.40);
+  font-size: 24rpx; color: rgba(255,255,255,0.78);
   letter-spacing: 2rpx; margin-bottom: 60rpx;
 }
 
@@ -78,28 +83,29 @@ page { background: #08080F; }
   border-radius: 28rpx;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 20rpx;
-  background: linear-gradient(165deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015));
-  border: 1rpx solid rgba(255,255,255,0.07);
-  box-shadow: 0 8rpx 32rpx rgba(0,0,0,0.35), inset 0 1rpx 0 rgba(255,255,255,0.04);
+  background: #FFFFFF;
+  border: 1.5rpx solid rgba(255,255,255,0.4);
+  box-shadow: 0 12rpx 40rpx rgba(0,0,0,0.18), inset 0 1rpx 0 rgba(255,255,255,0.6);
   position: relative; overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .gender-card::before {
   content: '';
   position: absolute; top: 0; left: 0; right: 0; height: 2rpx;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
 }
 
-.gender-card:active { transform: scale(0.95); opacity: 0.8; }
+.gender-card:active { transform: scale(0.95); opacity: 0.92; }
 
 .card-male {
-  border-color: rgba(140,160,190,0.20);
-  box-shadow: 0 8rpx 32rpx rgba(0,0,0,0.35), 0 0 40rpx rgba(140,160,190,0.08);
+  border-color: rgba(123,158,255,0.30);
+  box-shadow: 0 12rpx 40rpx rgba(0,0,0,0.16), 0 0 40rpx rgba(123,158,255,0.14);
 }
 
 .card-female {
-  border-color: rgba(200,120,140,0.20);
-  box-shadow: 0 8rpx 32rpx rgba(0,0,0,0.35), 0 0 40rpx rgba(200,120,140,0.08);
+  border-color: rgba(244,143,177,0.30);
+  box-shadow: 0 12rpx 40rpx rgba(0,0,0,0.16), 0 0 40rpx rgba(244,143,177,0.14);
 }
 
 .gender-emoji {
@@ -107,10 +113,10 @@ page { background: #08080F; }
   line-height: 1;
 }
 
-.card-male .gender-emoji { color: #8898B0; }
-.card-female .gender-emoji { color: #C08090; }
+.card-male .gender-emoji { color: #7B9EFF; }
+.card-female .gender-emoji { color: #F48FB1; }
 
 .gender-label {
-  font-size: 32rpx; font-weight: 600;
-  color: rgba(240,225,200,0.85); letter-spacing: 4rpx;
+  font-size: 32rpx; font-weight: 700;
+  color: #1C1C2E; letter-spacing: 4rpx;
 }

@@ -15,10 +15,23 @@
       <view class="hero-portrait-glow" />
       <image class="hero-portrait-img" src="{{heroImageUrl}}" mode="aspectFill" />
     </view>
-    <view tt:else>
-      <view class="loading-pulse-ring" />
-      <view class="loading-pulse-ring loading-ring-delay" />
+    <view tt:else class="loading-pulse-stage">
+      <!-- 4 层错峰扩散的薄荷绿环 -->
+      <view class="loading-pulse-ring r1" />
+      <view class="loading-pulse-ring r2" />
+      <view class="loading-pulse-ring r3" />
+      <view class="loading-pulse-ring r4" />
+      <!-- 半透白色 frosted-glass 静态外环 -->
+      <view class="loading-glass-ring" />
+      <!-- 中心心跳 emoji -->
       <text class="loading-heart">💗</text>
+      <!-- 飘动粒子 6 颗 -->
+      <view class="loading-particle p1" />
+      <view class="loading-particle p2" />
+      <view class="loading-particle p3" />
+      <view class="loading-particle p4" />
+      <view class="loading-particle p5" />
+      <view class="loading-particle p6" />
     </view>
     <text class="loading-title">正在解读你的恋爱密码</text>
     <text class="loading-sub">AI 正在为你撰写专属报告</text>
@@ -26,6 +39,25 @@
 
   <!-- ─── Streaming State ─── -->
   <view tt:elif="{{streaming}}" class="streaming-wrap">
+
+    <!-- AI 正在写作的顶部扫光条（streamingDone=true 时停止） -->
+    <view tt:if="{{!streamingDone}}" class="stream-scan-wave" />
+
+    <!-- Phase 5 · 完成时星花 micro-celebration (2.4s 后自动消失) -->
+    <view tt:if="{{showCelebration}}" class="celebration-stage">
+      <text class="celebration-star s1">✦</text>
+      <text class="celebration-star s2">✨</text>
+      <text class="celebration-star s3">✦</text>
+      <text class="celebration-star s4">❀</text>
+      <text class="celebration-star s5">✦</text>
+      <text class="celebration-star s6">✨</text>
+      <text class="celebration-star s7">❀</text>
+      <text class="celebration-star s8">✦</text>
+      <text class="celebration-star s9">✨</text>
+      <text class="celebration-star s10">✦</text>
+      <text class="celebration-star s11">❀</text>
+      <text class="celebration-star s12">✨</text>
+    </view>
 
     <!-- 头部：人格卡片（仿图片样式） -->
     <view class="str-hero-card">
@@ -90,8 +122,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-opening"><text class="rpt-sec-icon">✦</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-opening">开篇画像</text>
-          <view class="rpt-sec-line rpt-ln-opening" />
+          <text class="rpt-sec-num">PORTRAIT</text>
+          <text class="rpt-sec-label">开篇画像</text>
         </view>
       </view>
       <text class="rpt-sec-body">{{sec.Opening}}<text tt:if="{{!streamingDone && curSec==='Opening'}}" class="rpt-cursor">▋</text></text>
@@ -111,8 +143,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-d1"><text class="rpt-sec-icon">🫂</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-d1">依恋模式</text>
-          <view class="rpt-sec-line rpt-ln-d1" />
+          <text class="rpt-sec-num">D1 · 维度</text>
+          <text class="rpt-sec-label">依恋模式</text>
         </view>
       </view>
       <text class="rpt-sec-body">{{sec.Attachment}}<text tt:if="{{!streamingDone && curSec==='Attachment'}}" class="rpt-cursor">▋</text></text>
@@ -122,8 +154,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-d2"><text class="rpt-sec-icon">🌊</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-d2">边界感知</text>
-          <view class="rpt-sec-line rpt-ln-d2" />
+          <text class="rpt-sec-num">D2 · 维度</text>
+          <text class="rpt-sec-label">边界感知</text>
         </view>
       </view>
       <text class="rpt-sec-body">{{sec.Boundary}}<text tt:if="{{!streamingDone && curSec==='Boundary'}}" class="rpt-cursor">▋</text></text>
@@ -133,8 +165,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-d3"><text class="rpt-sec-icon">⚡</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-d3">冲突风格</text>
-          <view class="rpt-sec-line rpt-ln-d3" />
+          <text class="rpt-sec-num">D3 · 维度</text>
+          <text class="rpt-sec-label">冲突风格</text>
         </view>
       </view>
       <text class="rpt-sec-body">{{sec.Conflict}}<text tt:if="{{!streamingDone && curSec==='Conflict'}}" class="rpt-cursor">▋</text></text>
@@ -144,8 +176,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-d4"><text class="rpt-sec-icon">💝</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-d4">爱的语言</text>
-          <view class="rpt-sec-line rpt-ln-d4" />
+          <text class="rpt-sec-num">D4 · 维度</text>
+          <text class="rpt-sec-label">爱的语言</text>
         </view>
       </view>
       <text class="rpt-sec-body">{{sec.Language}}<text tt:if="{{!streamingDone && curSec==='Language'}}" class="rpt-cursor">▋</text></text>
@@ -155,8 +187,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-d5"><text class="rpt-sec-icon">🎭</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-d5">表达风格</text>
-          <view class="rpt-sec-line rpt-ln-d5" />
+          <text class="rpt-sec-num">D5 · 维度</text>
+          <text class="rpt-sec-label">表达风格</text>
         </view>
       </view>
       <text class="rpt-sec-body">{{sec.Style}}<text tt:if="{{!streamingDone && curSec==='Style'}}" class="rpt-cursor">▋</text></text>
@@ -176,8 +208,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-hl"><text class="rpt-sec-icon">🔮</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-hl">深层洞察</text>
-          <view class="rpt-sec-line rpt-ln-hl" />
+          <text class="rpt-sec-num">INSIGHTS</text>
+          <text class="rpt-sec-label">深层洞察</text>
         </view>
       </view>
       <view tt:for="{{highlights}}" tt:key="idx" class="rpt-hl-item">
@@ -196,8 +228,8 @@
       <view class="rpt-sec-header">
         <view class="rpt-sec-icon-wrap rpt-iw-suggestion"><text class="rpt-sec-icon">🌱</text></view>
         <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-label rpt-lbl-suggestion">给你的建议</text>
-          <view class="rpt-sec-line rpt-ln-suggestion" />
+          <text class="rpt-sec-num">SUGGESTION</text>
+          <text class="rpt-sec-label">给你的建议</text>
         </view>
       </view>
       <text class="rpt-sec-body">{{sec.Suggestion}}<text tt:if="{{!streamingDone && curSec==='Suggestion'}}" class="rpt-cursor">▋</text></text>
@@ -210,8 +242,29 @@
       </view>
     </view>
 
-    <!-- 生成完成后显示解锁按钮 -->
-    <view tt:if="{{streamingDone}}" class="str-unlock-section">
+    <!-- 生成完成后显示操作区 + 解锁更多
+         showPoster=true 时整块隐藏，防止 native <button> 遮挡 poster modal -->
+    <view tt:if="{{streamingDone && !showPoster}}" class="str-done-section">
+
+      <!-- ── 操作 CTA 区 ── -->
+      <view class="str-actions">
+        <button class="str-cta str-cta-primary" bindtap="generatePoster">
+          <text class="str-cta-ico">🖼</text>
+          <text class="str-cta-txt">生成分享海报</text>
+        </button>
+        <view class="str-cta-row">
+          <button class="str-cta str-cta-ghost str-cta-half" bindtap="restart">
+            <text class="str-cta-ico-sm">↻</text>
+            <text class="str-cta-txt-sm">再测一次</text>
+          </button>
+          <button tt:if="{{!isHistory}}" class="str-cta str-cta-ghost str-cta-half" bindtap="goHistory">
+            <text class="str-cta-ico-sm">⏱</text>
+            <text class="str-cta-txt-sm">历史记录</text>
+          </button>
+        </view>
+      </view>
+
+      <!-- ── 解锁更多 ── -->
       <view class="unlock-label-row">
         <view class="unlock-divider" />
         <text class="unlock-label">解锁更多测评</text>
@@ -231,9 +284,17 @@
           <view class="unlock-card-badge"><text class="unlock-badge-text">即将上线</text></view>
         </view>
       </view>
-      <view class="str-restart-row">
-        <button class="str-btn-restart" bindtap="restart">再测一次</button>
+
+      <!-- Phase 5 · 已读完提示（滑到底部时浮现） -->
+      <view class="read-done-tip">
+        <view class="read-done-line" />
+        <view class="read-done-badge">
+          <text class="read-done-icon">✓</text>
+          <text class="read-done-text">已读完整份报告</text>
+        </view>
+        <view class="read-done-line" />
       </view>
+
     </view>
 
   </view>
@@ -385,7 +446,6 @@
       <!-- Action Buttons -->
       <view class="actions">
         <button class="btn-primary" bindtap="generatePoster">🖼 生成分享海报</button>
-        <button class="btn-secondary" open-type="share">💌 分享给朋友</button>
         <view class="btn-row">
           <button class="btn-ghost btn-ghost-half" bindtap="restart">再测一次</button>
           <button tt:if="{{!isHistory}}" class="btn-ghost btn-ghost-half" bindtap="goHistory">历史记录</button>
@@ -425,11 +485,13 @@
   <view tt:if="{{showPoster}}" class="poster-modal">
     <view class="poster-mask" bindtap="closePoster" />
     <view class="poster-wrap">
+      <view class="poster-close-x" bindtap="closePoster" hover-class="poster-close-x-hover">
+        <text class="poster-close-x-icon">×</text>
+      </view>
       <image src="{{posterPath}}" class="poster-img" mode="aspectFit" show-menu-by-longpress="true" />
-      <text class="poster-tip">长按图片可保存或分享</text>
       <view class="poster-btns">
         <button class="btn-save" bindtap="savePoster">保存到相册</button>
-        <button class="btn-close-poster" bindtap="closePoster">关闭</button>
+        <button class="btn-share" open-type="share" data-channel="video">分享给朋友</button>
       </view>
     </view>
   </view>

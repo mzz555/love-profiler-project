@@ -122,8 +122,18 @@
   background: #F8F6F3;
   border: 1.5rpx solid #E8E4DF;
   animation-delay: 0.10s;
+  /* 覆盖 .card 默认的 row 布局，让 portraits 行能堆叠在下半部分 */
+  flex-direction: column;
+  align-items: stretch;
 }
 .card-standard:active { background: #F0EDE8; }
+
+/* 卡片上半部分：原 row 布局（标题/描述/badges + arrow） */
+.card-top {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
 
 /* Deep card */
 .card-deep {
@@ -224,4 +234,152 @@
   font-size: 22rpx;
   color: #AAAABB;
   letter-spacing: 1rpx;
+}
+
+/* ── 卡片下半部分：16 类人格分组展示（TypeQuest 风） ── */
+.card-divider {
+  margin: 24rpx 0 20rpx;
+  height: 1rpx;
+  background: linear-gradient(90deg, transparent, #E0DDD6 50%, transparent);
+}
+
+/* 分组容器：内嵌小卡，背景色随 currentGroup.accent 切换 */
+.card-portraits {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 24rpx 20rpx 22rpx;
+  border-radius: 22rpx;
+  /* 整组切批时整体淡入 */
+  animation: batchFadeIn 0.45s ease-out both;
+  /* background 由 inline style 提供 */
+  transition: background-color 0.4s ease;
+}
+
+/* 顶部分组头部：标题/标语 + 圆点指示器 */
+.card-portraits-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+.group-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.group-name {
+  font-size: 30rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+  line-height: 1.2;
+  /* color 由 inline style 提供 */
+}
+.group-tagline {
+  font-size: 20rpx;
+  color: #6A6A7A;
+  letter-spacing: 0.5rpx;
+  margin-top: 6rpx;
+  line-height: 1.3;
+}
+
+.portraits-dots {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 8rpx;
+  flex-shrink: 0;
+}
+.portraits-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.10);
+  transition: all 0.3s ease;
+}
+.portraits-dot-active {
+  width: 28rpx;
+  border-radius: 6rpx;
+  /* background 由 inline style 提供主题色 */
+}
+
+/* 4 个 type_code chip 横排 */
+.chips-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18rpx;
+}
+.chip {
+  flex: 1;
+  margin-right: 8rpx;
+  padding: 6rpx 0;
+  border-radius: 14rpx;
+  border: 1.5rpx solid;
+  background: rgba(255,255,255,0.6);
+  text-align: center;
+  /* border-color / color 由 inline style 提供 */
+}
+.chip:last-child { margin-right: 0; }
+.chip-text {
+  font-size: 18rpx;
+  font-weight: 700;
+  letter-spacing: 0.5rpx;
+  line-height: 1.4;
+}
+
+/* 横排 4 个怪兽 */
+.portraits-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.portrait-item {
+  width: 22%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.portrait-img-wrap {
+  width: 116rpx;
+  height: 116rpx;
+  border-radius: 20rpx;
+  border: 1.5rpx solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10rpx;
+  /* background / border-color 由 inline style 提供 */
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06);
+}
+.portrait-img {
+  width: 96rpx;
+  height: 96rpx;
+}
+
+.portrait-name {
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #1C1C2E;
+  letter-spacing: 0.3rpx;
+  line-height: 1.3;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@keyframes batchFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

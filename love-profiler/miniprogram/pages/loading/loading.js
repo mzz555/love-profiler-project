@@ -32,7 +32,7 @@ Page({
       const paths = decodeURIComponent(options.img_path).split(',');
       // paths[0] = man, paths[1] = woman
       const idx = (options.gender === 'male') ? 0 : 1;
-      const imgUrl = 'http://localhost:8000' + (paths[idx] || paths[0]);
+      const imgUrl = app.baseUrl + (paths[idx] || paths[0]);
       this.setData({ imageUrl: imgUrl });
     }
     this._startTime = Date.now();

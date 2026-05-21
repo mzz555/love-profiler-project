@@ -20,6 +20,50 @@ function _roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// 抖音 Canvas 1.0 不支持 8 位 hex alpha (#RRGGBBAA)，必须用 rgba()
+function _hexAlpha(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+}
+
+// 抖音 Canvas 1.0 没有 createRadialGradient，用 6 层同心圆 + 平方衰减 alpha 模拟羽化
+function _radialGlow(ctx, cx, cy, r, rgbTriplet, maxAlpha) {
+  const layers = 6;
+  for (let i = layers; i >= 1; i--) {
+    const t = i / layers;
+    const a = maxAlpha * (1 - t) * (1 - t);
+    if (a < 0.005) continue;
+    ctx.setFillStyle('rgba(' + rgbTriplet + ',' + a.toFixed(3) + ')');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * t, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// 抖音 Canvas 1.0 没有 setLineDash，虚线必须手画短线段
+function _dashedLine(ctx, x1, y1, x2, y2, color, dashLen, gapLen) {
+  dashLen = dashLen || 3;
+  gapLen  = gapLen  || 3;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+  const ux = dx / len, uy = dy / len;
+  const segCount = Math.floor(len / (dashLen + gapLen));
+  ctx.setStrokeStyle(color);
+  ctx.setLineWidth(1);
+  ctx.beginPath();
+  for (let i = 0; i < segCount; i++) {
+    const t = i * (dashLen + gapLen);
+    const sx = x1 + t * ux, sy = y1 + t * uy;
+    const ex = sx + dashLen * ux, ey = sy + dashLen * uy;
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+  }
+  ctx.stroke();
+}
+
 function _wrapText(ctx, text, maxWidth) {
   const lines = [];
   let line = '';
@@ -227,6 +271,8 @@ Page({
     isHistory: false,
     showPoster: false,
     posterPath: '',
+    // Phase 5 心动级互动
+    showCelebration: false,
     // 流式生成状态
     streaming: false,
     streamingDone: false,
@@ -260,7 +306,7 @@ Page({
 
     let heroImageUrl = '';
     if (options.img_path) {
-      heroImageUrl = 'http://localhost:8000' + decodeURIComponent(options.img_path);
+      heroImageUrl = app.baseUrl + decodeURIComponent(options.img_path);
     }
 
     this.setData({
@@ -352,7 +398,8 @@ Page({
           idx: h.idx, title: h.title || '', severity: h.severity || 'medium', isPositive: !!h.is_positive,
         }));
         const preHighlights = highlightsMeta.map(h => ({ ...h, text: '' }));
-        this.setData({
+        // 流式模式下 onLoad 没拿到 img_path（路由没传），从 meta 补 → heroImageUrl
+        const patch = {
           loading: false,
           streaming: true,
           streamingText: '',
@@ -366,7 +413,12 @@ Page({
           curSec: '',
           dimChart,
           dimChartReady: !!dimChart,
-        });
+        };
+        if (msg.img_path && !this.data.heroImageUrl) {
+          patch.heroImageUrl = app.baseUrl + decodeURIComponent(msg.img_path);
+          setTimeout(() => this.setData({ heroImageReady: true }), 50);
+        }
+        this.setData(patch);
         if (dimChart) {
           // streaming 区块进入 DOM 后 canvas 已存在，200ms 足够 canvas 初始化
           setTimeout(() => {
@@ -420,7 +472,15 @@ Page({
       personalityType,
       streamingText: rawOutput,
       streamingDone: true,
+      showCelebration: true,
     });
+    // Phase 5 心动级互动：完成时震动 + 2.4s 星花 micro-celebration
+    if (tt.vibrateShort) {
+      tt.vibrateShort({ type: 'medium' });
+    }
+    setTimeout(() => {
+      this.setData({ showCelebration: false });
+    }, 2400);
   },
 
   _onStreamError(code) {
@@ -623,7 +683,7 @@ Page({
       angles.forEach((a, i) => {
         const {x, y} = pt(a, maxR);
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y);
-        ctx.setStrokeStyle(COLORS[i] + '55'); ctx.setLineWidth(1.5); ctx.stroke();
+        ctx.setStrokeStyle(_hexAlpha(COLORS[i], 0.33)); ctx.setLineWidth(1.5); ctx.stroke();
       });
 
       // 数据多边形
@@ -685,117 +745,505 @@ Page({
   },
 
   generatePoster() {
+    console.log('[poster] start');
     tt.showLoading({ title: '生成中...' });
-    const { personalityType, reportText, parsed } = this.data;
-    const displayName = parsed.typeName || personalityType;
-    const tagline = parsed.typeTagline || '';
-    const portraitText = parsed.portrait.text || reportText;
-    const summary = portraitText.includes('。')
+    // 抖音 Canvas drawImage 需要本地路径，先把 heroImageUrl 转 tempPath
+    const heroImageUrl = this.data.heroImageUrl;
+    if (heroImageUrl) {
+      tt.getImageInfo({
+        src: heroImageUrl,
+        success: (res) => {
+          console.log('[poster] hero img resolved', res.path);
+          this._renderPoster(res.path || '');
+        },
+        fail: (err) => {
+          console.warn('[poster] hero img resolve fail, fallback to text avatar', err);
+          this._renderPoster('');
+        },
+      });
+    } else {
+      console.log('[poster] no heroImageUrl, use text avatar');
+      this._renderPoster('');
+    }
+  },
+
+  _renderPoster(localImgPath) {
+    const t0 = Date.now();
+    const ms = () => Date.now() - t0;
+    const {
+      personalityType, reportText, parsed,
+      streamingTypeName, streamingTypeTagline, sec,
+      segmentDecode, highlights, dimChart,
+    } = this.data;
+
+    const displayName = (parsed && parsed.typeName) || streamingTypeName || personalityType || '恋爱侧写';
+    const tagline     = (parsed && parsed.typeTagline) || streamingTypeTagline || '';
+    const portraitText = (parsed && parsed.portrait && parsed.portrait.text)
+                       || (sec && sec.Opening) || reportText || '';
+    const descLine = portraitText.includes('。')
       ? portraitText.split('。')[0] + '。'
-      : portraitText.slice(0, 60);
+      : portraitText.slice(0, 32);
+    const subDesc = tagline || descLine || '稳定、清晰，你在关系里像一座让人安心靠近的灯塔。';
+    const avatarText = (displayName || '').slice(0, 2);
+
+    // tags 数据: segmentDecode 的 label_cn (D1/D2/D3) — 优先真实，兜底参考图原文
+    const tagDefaults = ['安全感', '边界感', '引导型'];
+    const tags = (segmentDecode && segmentDecode.length >= 3)
+      ? segmentDecode.slice(0, 3).map((s, i) => (s.label_cn || s.code || tagDefaults[i]).slice(0, 5))
+      : tagDefaults;
+
+    // traits 直接用参考图三句精选文案（highlights 是诊断警示项，不是 trait 描述，不接入）
+    const traits = [
+      '情绪稳定，能给关系提供秩序',
+      '表达直接，不轻易被情绪裹挟',
+      '愿意认真经营长期关系',
+    ];
+
+    // 雷达 5 维 + score 4 条
+    // 维度映射: 稳定性←D1依恋健康  责任感←D2边界清晰  沟通力←D5表达稳定  包容力←D3冲突韧性
+    const _clamp = v => Math.max(0.05, Math.min(1, v));
+    let radarVals = [0.85, 0.78, 0.72, 0.68, 0.80];
+    let scorePcts = [90, 85, 80, 75];
+    if (dimChart && dimChart.d123 && dimChart.d4 && dimChart.d5) {
+      const d1n = ((dimChart.d123[0] && dimChart.d123[0].raw || 0) + 12) / 24;
+      const d2n = ((dimChart.d123[1] && dimChart.d123[1].raw || 0) + 12) / 24;
+      const d3n = ((dimChart.d123[2] && dimChart.d123[2].raw || 0) + 12) / 24;
+      const t4Max = Math.max(
+        parseFloat(dimChart.d4.T1 || 0), parseFloat(dimChart.d4.T2 || 0),
+        parseFloat(dimChart.d4.T3 || 0), parseFloat(dimChart.d4.T4 || 0),
+        parseFloat(dimChart.d4.T5 || 0),
+      );
+      const s1n = (parseFloat(dimChart.d5.s1_raw || 0) + 6) / 12;
+      const s2n = (parseFloat(dimChart.d5.s2_raw || 0) + 6) / 12;
+      const d5avg = (s1n + s2n) / 2;
+      radarVals = [d1n, d2n, d3n, t4Max, d5avg].map(_clamp);
+      scorePcts = [
+        Math.round(_clamp(d1n)   * 100), // 稳定性 ← D1
+        Math.round(_clamp(d2n)   * 100), // 责任感 ← D2
+        Math.round(_clamp(d5avg) * 100), // 沟通力 ← D5
+        Math.round(_clamp(d3n)   * 100), // 包容力 ← D3
+      ];
+    }
 
     const ctx = tt.createCanvasContext('poster', this);
-    const W = 375, H = 600;
+    const W = 420, H = 660;
 
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#2D0050');
-    bg.addColorStop(0.5, '#6A0572');
-    bg.addColorStop(1, '#C2185B');
+    // ═══ 背景: 多层渐变叠加 (粉红→橙黄→淡紫→淡绿) ═══
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0,    '#ffd4dd');
+    bg.addColorStop(0.42, '#fff0d5');
+    bg.addColorStop(0.76, '#e8dcff');
+    bg.addColorStop(1,    '#d9fff2');
     ctx.setFillStyle(bg);
     ctx.fillRect(0, 0, W, H);
 
-    // Decorative circle top-right
-    ctx.setFillStyle('rgba(255,255,255,0.06)');
-    ctx.beginPath();
-    ctx.arc(W - 20, 30, 110, 0, Math.PI * 2);
-    ctx.fill();
+    // 左上暖白柔光 (径向用同心圆 6 层模拟)
+    _radialGlow(ctx, W * 0.12, H * 0.08, W * 0.45, '255,255,255', 0.85);
 
-    // Decorative circle bottom-left
-    ctx.setFillStyle('rgba(255,255,255,0.04)');
-    ctx.beginPath();
-    ctx.arc(20, H - 30, 90, 0, Math.PI * 2);
-    ctx.fill();
+    // 右上粉光
+    _radialGlow(ctx, W * 0.86, H * 0.14, W * 0.50, '255,233,245', 0.78);
 
-    // White card
-    ctx.setFillStyle('rgba(255,255,255,0.95)');
-    ctx.setShadow(0, 12, 30, 'rgba(0,0,0,0.25)');
-    _roundRect(ctx, 24, 130, W - 48, 340, 20);
-    ctx.fill();
-    ctx.setShadow(0, 0, 0, 'transparent');
+    // 左下绿光
+    _radialGlow(ctx, W * 0.12, H * 0.86, W * 0.55, '204,255,238', 0.46);
 
-    // Emoji
-    ctx.setTextAlign('center');
-    ctx.setFontSize(56);
-    ctx.setFillStyle('#fff');
-    ctx.fillText('💗', W / 2, 72);
+    // 右中粉色半透明 (::after 模拟)
+    _radialGlow(ctx, W - 78 + 105, 220, 105, '255,130,156', 0.18);
 
-    // App name
-    ctx.setFillStyle('rgba(255,255,255,0.88)');
-    ctx.font = '500 18px sans-serif';
-    ctx.fillText('恋爱侧写', W / 2, 110);
-
-    // Card: label
-    ctx.setFillStyle('#999');
-    ctx.font = '400 12px sans-serif';
-    ctx.fillText('你的恋爱人格是', W / 2, 178);
-
-    // Type name
-    ctx.setFillStyle('#C2185B');
-    ctx.font = '700 34px sans-serif';
-    ctx.fillText(displayName, W / 2, 230);
-
-    // Tagline
-    if (tagline) {
-      ctx.setFillStyle('#7B1FA2');
-      ctx.font = '400 14px sans-serif';
-      ctx.fillText(tagline, W / 2, 262);
-    }
-
-    // Divider
-    ctx.setStrokeStyle('#F8BBD0');
+    // 外层 1px 描边 + 内层 10px inner border
+    ctx.setStrokeStyle('rgba(255,255,255,0.78)');
     ctx.setLineWidth(1);
-    ctx.beginPath();
-    ctx.moveTo(60, 284);
-    ctx.lineTo(W - 60, 284);
+    _roundRect(ctx, 0.5, 0.5, W - 1, H - 1, 34);
+    ctx.stroke();
+    ctx.setStrokeStyle('rgba(255,255,255,0.72)');
+    _roundRect(ctx, 10, 10, W - 20, H - 20, 28);
     ctx.stroke();
 
-    // Summary text
-    ctx.setFillStyle('#555');
-    ctx.font = '400 12px sans-serif';
-    const lines = _wrapText(ctx, summary, W - 90);
-    lines.slice(0, 7).forEach((line, i) => {
-      ctx.fillText(line, W / 2, 308 + i * 21);
+    // ═══ 装饰元素 (ribbon / heart×2 / star×2) ═══
+    // Ribbon (右上倾斜 28°)
+    ctx.save();
+    ctx.translate(W - 56, 24);
+    ctx.rotate(28 * Math.PI / 180);
+    const ribbonGrad = ctx.createLinearGradient(0, 0, 118, 0);
+    ribbonGrad.addColorStop(0, 'rgba(255,146,166,0.72)');
+    ribbonGrad.addColorStop(1, 'rgba(255,218,171,0.78)');
+    ctx.setFillStyle(ribbonGrad);
+    _roundRect(ctx, 0, 0, 118, 22, 11);
+    ctx.fill();
+    ctx.restore();
+
+    // Heart 1 (左上, -14°)
+    ctx.save();
+    ctx.translate(38, 44);
+    ctx.rotate(-14 * Math.PI / 180);
+    ctx.setFillStyle('rgba(255,109,138,0.7)');
+    ctx.setFontSize(22);
+    ctx.setTextAlign('center');
+    ctx.fillText('💗', 0, 0);
+    ctx.restore();
+
+    // Heart 2 (右上, 12°)
+    ctx.save();
+    ctx.translate(W - 50, 56);
+    ctx.rotate(12 * Math.PI / 180);
+    ctx.setFillStyle('rgba(255,109,138,0.72)');
+    ctx.setFontSize(18);
+    ctx.fillText('💕', 0, 0);
+    ctx.restore();
+
+    // Star 1 (右上)
+    ctx.setFillStyle('#ffb95e');
+    ctx.setFontSize(18);
+    ctx.setTextAlign('center');
+    ctx.fillText('✦', W - 72, 108);
+
+    // Star 2 (左下, 与 footer 同水平)
+    ctx.setFillStyle('#ffca66');
+    ctx.fillText('✦', 32, H - 24);
+
+    // ═══ Header: eyebrow / H1 渐变 / subtitle ═══
+    ctx.setTextAlign('center');
+
+    // Eyebrow capsule
+    ctx.setFillStyle('rgba(255,255,255,0.58)');
+    _roundRect(ctx, W / 2 - 80, 66, 160, 26, 13);
+    ctx.fill();
+    ctx.setFillStyle('#d95b77');
+    ctx.setFontSize(13);
+    ctx.fillText('💘 LOVE PROFILE', W / 2, 83);
+
+    // H1 渐变文字
+    const h1Y = 122;
+    const h1Grad = ctx.createLinearGradient(W * 0.2, h1Y, W * 0.8, h1Y);
+    h1Grad.addColorStop(0,    '#ff5d7c');
+    h1Grad.addColorStop(0.55, '#ff8c63');
+    h1Grad.addColorStop(1,    '#ff5f9b');
+    ctx.setFillStyle(h1Grad);
+    ctx.setFontSize(28);
+    ctx.fillText('恋爱侧写报告', W / 2, h1Y);
+
+    // Subtitle
+    ctx.setFillStyle('rgba(75,50,66,0.74)');
+    ctx.setFontSize(13);
+    ctx.fillText('看见你的关系模式，找到更适合的爱', W / 2, 148);
+
+    // ═══ Profile 卡 (avatar + type-name + tags) ═══
+    const profileY = 168;
+    const profileH = 156;
+    ctx.setFillStyle('#FFFFFF');
+    ctx.setShadow(0, 16, 30, 'rgba(205,98,130,0.16)');
+    _roundRect(ctx, 22, profileY, W - 44, profileH, 26);
+    ctx.fill();
+    ctx.setShadow(0, 0, 0, 'rgba(0,0,0,0)');
+    // 卡片内部粉白渐变罩
+    const profileTint = ctx.createLinearGradient(0, profileY, 0, profileY + profileH);
+    profileTint.addColorStop(0, 'rgba(255,255,255,0)');
+    profileTint.addColorStop(1, 'rgba(255,241,238,0.45)');
+    ctx.setFillStyle(profileTint);
+    _roundRect(ctx, 22, profileY, W - 44, profileH, 26);
+    ctx.fill();
+    // 卡片描边
+    ctx.setStrokeStyle('rgba(255,255,255,0.68)');
+    ctx.setLineWidth(1);
+    _roundRect(ctx, 22.5, profileY + 0.5, W - 45, profileH - 1, 26);
+    ctx.stroke();
+
+    // Avatar 区 (78×92 圆角矩形 — 容纳人格小怪兽图)
+    const avX = 30, avY = profileY + 12, avW = 78, avH = 92;
+    const avGrad = ctx.createLinearGradient(avX, avY, avX + avW, avY + avH);
+    avGrad.addColorStop(0,    '#ffd0dc');
+    avGrad.addColorStop(0.54, '#ffe6c7');
+    avGrad.addColorStop(1,    '#c9f7ea');
+    ctx.setFillStyle(avGrad);
+    ctx.setShadow(0, 12, 20, 'rgba(255,111,141,0.22)');
+    _roundRect(ctx, avX, avY, avW, avH, 18);
+    ctx.fill();
+    ctx.setShadow(0, 0, 0, 'rgba(0,0,0,0)');
+    ctx.setStrokeStyle('rgba(255,255,255,0.7)');
+    ctx.setLineWidth(1);
+    _roundRect(ctx, avX + 0.5, avY + 0.5, avW - 1, avH - 1, 18);
+    ctx.stroke();
+    // 人格图 OR 字符兜底
+    if (localImgPath) {
+      const padX = 4, padY = 4;
+      ctx.drawImage(localImgPath, avX + padX, avY + padY, avW - padX * 2, avH - padY * 2);
+    } else {
+      ctx.setFillStyle('#d95775');
+      ctx.setFontSize(22);
+      ctx.setTextAlign('center');
+      ctx.fillText(avatarText, avX + avW / 2, avY + avH / 2 + 8);
+    }
+
+    // Type name (渐变文字)
+    const tnX = avX + avW + 14;
+    const tnY = avY + 28;
+    ctx.setTextAlign('left');
+    const tnGrad = ctx.createLinearGradient(tnX, tnY, tnX + 200, tnY);
+    tnGrad.addColorStop(0, '#ff617b');
+    tnGrad.addColorStop(1, '#ff8f58');
+    ctx.setFillStyle(tnGrad);
+    ctx.setFontSize(22);
+    ctx.fillText(displayName.slice(0, 9), tnX, tnY);
+
+    // Type desc
+    ctx.setFillStyle('rgba(75,50,66,0.72)');
+    ctx.setFontSize(12);
+    const descLines = _wrapText(ctx, subDesc, W - tnX - 30);
+    descLines.slice(0, 2).forEach((line, i) => {
+      ctx.fillText(line, tnX, tnY + 20 + i * 15);
     });
 
-    // Bottom bar
-    const bottomBg = ctx.createLinearGradient(0, H - 70, 0, H);
-    bottomBg.addColorStop(0, 'rgba(45,0,80,0)');
-    bottomBg.addColorStop(1, 'rgba(45,0,80,0.8)');
-    ctx.setFillStyle(bottomBg);
-    ctx.fillRect(0, H - 70, W, 70);
+    // Tags (3 个胶囊)
+    const tagY = profileY + 108;
+    const tagH = 32;
+    const tagGap = 8;
+    const tagAreaX = 22 + 18;
+    const tagAreaW = W - 44 - 36;
+    const tagW = (tagAreaW - tagGap * 2) / 3;
+    const TAG_COLORS = [
+      { c1: '#fff2f5', c2: '#ffd6df', text: '#e95579', bd: 'rgba(255,134,158,0.45)', emoji: '🛡' },
+      { c1: '#f6f1ff', c2: '#e7dcff', text: '#8560e8', bd: 'rgba(159,127,244,0.36)', emoji: '☁' },
+      { c1: '#eefff9', c2: '#d1f7ec', text: '#2d9f8e', bd: 'rgba(91,202,176,0.36)', emoji: '🧭' },
+    ];
+    for (let i = 0; i < 3; i++) {
+      const tx = tagAreaX + i * (tagW + tagGap);
+      const tg = ctx.createLinearGradient(tx, tagY, tx, tagY + tagH);
+      tg.addColorStop(0, TAG_COLORS[i].c1);
+      tg.addColorStop(1, TAG_COLORS[i].c2);
+      ctx.setFillStyle(tg);
+      _roundRect(ctx, tx, tagY, tagW, tagH, 17);
+      ctx.fill();
+      ctx.setStrokeStyle(TAG_COLORS[i].bd);
+      ctx.setLineWidth(1);
+      _roundRect(ctx, tx + 0.5, tagY + 0.5, tagW - 1, tagH - 1, 17);
+      ctx.stroke();
 
-    ctx.setFillStyle('rgba(255,255,255,0.85)');
-    ctx.font = '400 13px sans-serif';
-    ctx.fillText('💕 恋爱侧写小程序', W / 2, H - 36);
-    ctx.setFillStyle('rgba(255,255,255,0.5)');
-    ctx.font = '400 11px sans-serif';
-    ctx.fillText('长按图片保存 · 分享给你在乎的人', W / 2, H - 16);
+      ctx.setFillStyle(TAG_COLORS[i].text);
+      ctx.setFontSize(12);
+      ctx.setTextAlign('center');
+      const lbl = (tags[i] || '').slice(0, 5);
+      ctx.fillText(TAG_COLORS[i].emoji + ' ' + lbl, tx + tagW / 2, tagY + 21);
+    }
 
-    ctx.draw(false, () => {
+    // ═══ Panel 1: 你的恋爱特质 ═══
+    const p1Y = profileY + profileH + 12;
+    const p1H = 116;
+    ctx.setFillStyle('rgba(255,255,255,0.78)');
+    ctx.setShadow(0, 14, 28, 'rgba(204,95,128,0.14)');
+    _roundRect(ctx, 22, p1Y, W - 44, p1H, 24);
+    ctx.fill();
+    ctx.setShadow(0, 0, 0, 'rgba(0,0,0,0)');
+    ctx.setStrokeStyle('rgba(255,255,255,0.72)');
+    ctx.setLineWidth(1);
+    _roundRect(ctx, 22.5, p1Y + 0.5, W - 45, p1H - 1, 24);
+    ctx.stroke();
+
+    // panel-title 倾斜胶囊
+    ctx.save();
+    ctx.translate(22 + 16, p1Y + 12);
+    ctx.rotate(-1 * Math.PI / 180);
+    const pt1Grad = ctx.createLinearGradient(0, 0, 122, 0);
+    pt1Grad.addColorStop(0, '#ff748f');
+    pt1Grad.addColorStop(1, '#ff9a76');
+    ctx.setFillStyle(pt1Grad);
+    ctx.setShadow(0, 8, 14, 'rgba(255,105,137,0.22)');
+    _roundRect(ctx, 0, 0, 124, 28, 10);
+    ctx.fill();
+    ctx.setShadow(0, 0, 0, 'rgba(0,0,0,0)');
+    ctx.setFillStyle('#FFFFFF');
+    ctx.setFontSize(14);
+    ctx.setTextAlign('center');
+    ctx.fillText('你的恋爱特质', 62, 19);
+    ctx.restore();
+
+    // Traits 列表 (3 条 + 虚线)
+    traits.forEach((t, i) => {
+      const ty = p1Y + 58 + i * 20;
+      ctx.setFillStyle('#ff6685');
+      ctx.setFontSize(13);
+      ctx.setTextAlign('left');
+      ctx.fillText('❤', 22 + 16, ty);
+
+      ctx.setFillStyle('rgba(75,50,66,0.8)');
+      ctx.setFontSize(13);
+      ctx.fillText(t, 22 + 36, ty);
+
+      if (i < traits.length - 1) {
+        _dashedLine(ctx, 22 + 16, ty + 8, W - 22 - 16, ty + 8, 'rgba(222,117,147,0.28)');
+      }
+    });
+
+    // ═══ Panel 2: 关系能力图谱 + Radar + Score ═══
+    const p2Y = p1Y + p1H + 12;
+    const p2H = 148;
+    ctx.setFillStyle('rgba(255,255,255,0.78)');
+    ctx.setShadow(0, 14, 28, 'rgba(204,95,128,0.14)');
+    _roundRect(ctx, 22, p2Y, W - 44, p2H, 24);
+    ctx.fill();
+    ctx.setShadow(0, 0, 0, 'rgba(0,0,0,0)');
+    ctx.setStrokeStyle('rgba(255,255,255,0.72)');
+    ctx.setLineWidth(1);
+    _roundRect(ctx, 22.5, p2Y + 0.5, W - 45, p2H - 1, 24);
+    ctx.stroke();
+
+    // Radar (左侧 120×120 — 收紧)
+    const radarCx = 22 + 16 + 56;
+    const radarCy = p2Y + 14 + 56;
+    const radarR = 48;
+    ctx.setFillStyle('#fff7f8');
+    ctx.beginPath();
+    ctx.arc(radarCx, radarCy, radarR + 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.setStrokeStyle('rgba(255,117,149,0.25)');
+    ctx.setLineWidth(1);
+    ctx.beginPath();
+    ctx.arc(radarCx, radarCy, radarR + 4, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const N = 5;
+    const angles = Array.from({ length: N }, (_, i) => -Math.PI / 2 + i * 2 * Math.PI / N);
+    const pt = (a, r) => ({ x: radarCx + r * Math.cos(a), y: radarCy + r * Math.sin(a) });
+
+    // 网格 3 层
+    [0.45, 0.7, 1.0].forEach(lvl => {
+      const pts = angles.map(a => pt(a, radarR * lvl));
+      ctx.setStrokeStyle('rgba(205,111,145,0.22)');
+      ctx.setLineWidth(1);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let j = 1; j < N; j++) ctx.lineTo(pts[j].x, pts[j].y);
+      ctx.closePath();
+      ctx.stroke();
+    });
+
+    // 轴线
+    angles.forEach(a => {
+      const e = pt(a, radarR);
+      ctx.setStrokeStyle('rgba(205,111,145,0.2)');
+      ctx.setLineWidth(1);
+      ctx.beginPath();
+      ctx.moveTo(radarCx, radarCy);
+      ctx.lineTo(e.x, e.y);
+      ctx.stroke();
+    });
+
+    // 数据多边形
+    const dpts = radarVals.map((v, i) => pt(angles[i], radarR * v));
+    const radarGrad = ctx.createLinearGradient(radarCx - radarR, radarCy - radarR, radarCx + radarR, radarCy + radarR);
+    radarGrad.addColorStop(0, 'rgba(255,115,144,0.72)');
+    radarGrad.addColorStop(1, 'rgba(255,159,117,0.52)');
+    ctx.setFillStyle(radarGrad);
+    ctx.beginPath();
+    ctx.moveTo(dpts[0].x, dpts[0].y);
+    for (let i = 1; i < N; i++) ctx.lineTo(dpts[i].x, dpts[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.setStrokeStyle('#ff6d8a');
+    ctx.setLineWidth(2);
+    ctx.beginPath();
+    ctx.moveTo(dpts[0].x, dpts[0].y);
+    for (let i = 1; i < N; i++) ctx.lineTo(dpts[i].x, dpts[i].y);
+    ctx.closePath();
+    ctx.stroke();
+
+    // 端点 5 色圆点
+    const RADAR_DOTS = ['#ff5f82', '#ff8d60', '#ffc064', '#9f7af0', '#5fd0b5'];
+    dpts.forEach((d, i) => {
+      ctx.setFillStyle(RADAR_DOTS[i]);
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, 3.8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // chart-title + score-list (右侧)
+    const slX = 22 + 16 + 120 + 14;
+    const slY = p2Y + 18;
+    ctx.setFillStyle('#6d435c');
+    ctx.setFontSize(14);
+    ctx.setTextAlign('left');
+    ctx.fillText('关系能力图谱', slX, slY + 6);
+
+    const SCORE_LABELS = ['稳定性', '责任感', '沟通力', '包容力'];
+    for (let i = 0; i < 4; i++) {
+      const sy = slY + 26 + i * 22;
+      ctx.setFillStyle('rgba(75,50,66,0.72)');
+      ctx.setFontSize(12);
+      ctx.setTextAlign('left');
+      ctx.fillText(SCORE_LABELS[i], slX, sy);
+
+      ctx.setFillStyle('#ff6685');
+      ctx.setFontSize(12);
+      ctx.setTextAlign('right');
+      ctx.fillText(scorePcts[i] + '%', W - 22 - 16, sy);
+
+      if (i < 3) {
+        _dashedLine(ctx, slX, sy + 7, W - 22 - 16, sy + 7, 'rgba(191,125,158,0.2)');
+      }
+    }
+
+    // ═══ Footer (流光线 + 文字) — 接在 panel2 后 ═══
+    const ftY = p2Y + p2H + 24;
+    const lnA1 = ctx.createLinearGradient(W * 0.18, ftY, W * 0.36, ftY);
+    lnA1.addColorStop(0, 'rgba(230,102,139,0)');
+    lnA1.addColorStop(0.5, 'rgba(230,102,139,0.45)');
+    lnA1.addColorStop(1, 'rgba(230,102,139,0)');
+    ctx.setStrokeStyle(lnA1);
+    ctx.setLineWidth(1);
+    ctx.beginPath();
+    ctx.moveTo(W * 0.18, ftY);
+    ctx.lineTo(W * 0.36, ftY);
+    ctx.stroke();
+
+    const lnA2 = ctx.createLinearGradient(W * 0.64, ftY, W * 0.82, ftY);
+    lnA2.addColorStop(0, 'rgba(230,102,139,0)');
+    lnA2.addColorStop(0.5, 'rgba(230,102,139,0.45)');
+    lnA2.addColorStop(1, 'rgba(230,102,139,0)');
+    ctx.setStrokeStyle(lnA2);
+    ctx.beginPath();
+    ctx.moveTo(W * 0.64, ftY);
+    ctx.lineTo(W * 0.82, ftY);
+    ctx.stroke();
+
+    ctx.setFillStyle('rgba(103,67,87,0.74)');
+    ctx.setFontSize(13);
+    ctx.setTextAlign('center');
+    ctx.fillText('分享你的恋爱侧写', W / 2, ftY + 5);
+
+    // 8 秒超时兜底：抖音 Canvas API 偶尔静默挂掉，避免用户永远看"生成中"
+    const timeoutTimer = setTimeout(() => {
+      console.error('[poster] TIMEOUT 8s — canvas/file API 未响应');
+      tt.hideLoading();
+      tt.showToast({ title: '海报生成超时，请重试', icon: 'none', duration: 3000 });
+    }, 8000);
+
+    console.log('[poster] before ctx.draw', ms(), 'ms');
+    // 不依赖 ctx.draw 的 callback（抖音上某些场景永不触发），改用固定延迟兜底
+    // 新画布 420x920 + ~200 drawCall (含多层 gradient + radar)，延迟从 400ms 提到 600ms
+    ctx.draw(false);
+    console.log('[poster] ctx.draw called (no cb), wait 600ms then export', ms(), 'ms');
+    setTimeout(() => {
+      console.log('[poster] calling canvasToTempFilePath', ms(), 'ms');
       tt.canvasToTempFilePath({
         canvasId: 'poster',
         destWidth: W * 2,
         destHeight: H * 2,
         success: (res) => {
+          clearTimeout(timeoutTimer);
+          console.log('[poster] OK', ms(), 'ms', res.tempFilePath);
           tt.hideLoading();
+          // Phase 5：海报生成成功的轻量震动反馈
+          if (tt.vibrateShort) {
+            tt.vibrateShort({ type: 'light' });
+          }
           this.setData({ posterPath: res.tempFilePath, showPoster: true });
         },
-        fail: () => {
+        fail: (err) => {
+          clearTimeout(timeoutTimer);
+          console.error('[poster] canvasToTempFilePath FAIL', ms(), 'ms', err);
           tt.hideLoading();
           tt.showToast({ title: '海报生成失败，请重试', icon: 'none' });
         },
       }, this);
-    });
+    }, 600);
   },
 
   savePoster() {
@@ -811,11 +1259,23 @@ Page({
   },
 
   onShareAppMessage() {
-    const { personalityType, parsed } = this.data;
-    const name = parsed.typeName || personalityType;
+    const { personalityType, parsed, streamingTypeName, posterPath } = this.data;
+    const name = (parsed && parsed.typeName) || streamingTypeName || personalityType || '恋爱侧写';
     return {
+      channel: 'video',
       title: '我的恋爱人格是「' + name + '」，来测测你的～',
+      desc: '看见你的关系模式，找到更适合的爱',
+      imageUrl: posterPath || '',
       path: '/pages/index/index',
+      extra: { image: posterPath || '' },
+      success: () => {
+        console.log('[share] success');
+        tt.showToast({ title: '分享成功', icon: 'success', duration: 1500 });
+      },
+      fail: (err) => {
+        console.warn('[share] fail', err);
+        tt.showToast({ title: '分享取消', icon: 'none', duration: 1500 });
+      },
     };
   },
 
