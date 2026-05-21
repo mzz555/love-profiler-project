@@ -52,7 +52,7 @@ def test_quiz_submit_runs_agent_a(client, auth_headers, db_session):
     mock_love_type = {
         "type_code": "S-CL-H", "type_name": "稳重的航标",
         "img_path": "/img/scl-h.png",
-        "detail": "你像一座稳重的航标，关系里给得出稳定。",  # ≥10 字符以满足 Diagnosis.type_anchor 校验
+        "detail": "你像一座稳重的航标，关系里给得出稳定。",  # ≥10 字符以满足 Diagnosis.type_detail 校验
         "tagline": "副标题",
     }
     mock_d4_details = [
@@ -70,8 +70,8 @@ def test_quiz_submit_runs_agent_a(client, auth_headers, db_session):
     # 用 side_effect 按入参 codes 动态生成行，避免漏覆盖任意 code 导致 502。
     def fake_highlights_by_codes(codes):
         return [{
-            "code": c, "name_cn": f"mock-{c}", "severity": "info", "is_positive": False,
-            "report_seed": "种子", "interp_path": "路径", "trigger_condition": "条件",
+            "code": c, "name_cn": f"mock-{c}", "is_positive": False,
+            "report_seed": "种子",
         } for c in codes]
 
     with patch("app.services.supabase_client._fetch_questions_sync", return_value=MOCK_QUESTIONS), \
@@ -142,8 +142,8 @@ def test_quiz_submit_schema_validation_fails_when_d5_guide_missing(
     ]
     def fake_highlights_by_codes(codes):
         return [{
-            "code": c, "name_cn": f"mock-{c}", "severity": "info", "is_positive": False,
-            "report_seed": "种子", "interp_path": "路径", "trigger_condition": "条件",
+            "code": c, "name_cn": f"mock-{c}", "is_positive": False,
+            "report_seed": "种子",
         } for c in codes]
 
     with patch("app.services.supabase_client._fetch_questions_sync", return_value=MOCK_QUESTIONS), \

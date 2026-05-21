@@ -164,46 +164,46 @@ def _compute_diagnosis(answers: list[dict], session_id: str | None = None) -> di
 
     # Layer 1: 维度内交叉验证
     if imagination_reality_split:
-        highlights.append({"code": "add-cv1-behavior-gap", "severity": "moderate",
+        highlights.append({"code": "add-cv1-behavior-gap",
             "finding": "想象情境题（Q04）与真实行为题（Q05）方向相反，存在社会期望偏差。"})
     if cv_d2_gap:
-        highlights.append({"code": "add-cv1-pattern-blind", "severity": "high",
+        highlights.append({"code": "add-cv1-pattern-blind",
             "finding": "对单次越界事件能直接响应，但对持续性贬低选择忍耐，模式识别能力缺口明显。"})
     if cv_d3_res == "low":
-        highlights.append({"code": "add-cv1-pressure-collapse", "severity": "moderate",
+        highlights.append({"code": "add-cv1-pressure-collapse",
             "finding": "日常小摩擦能软启动表达，面对重大分歧时滑入指责，压力下表达带宽显著收窄。"})
 
     # Layer 2: 维度间交叉验证
     if cv_d2d3 == "aggressive_passive":
-        highlights.append({"code": "add-cv2-aggr-passive", "severity": "high",
+        highlights.append({"code": "add-cv2-aggr-passive",
             "finding": "对真正越界事件无响应（边界模糊），却对低门槛小摩擦用攻击性语言开场——外强内弱。"})
     if cv_d1d5 == "anxious_avoidant_disguise":
-        highlights.append({"code": "add-cv2-anxious-disguise", "severity": "moderate",
+        highlights.append({"code": "add-cv2-anxious-disguise",
             "finding": "对对方不联系高度焦虑，但自己同样不主动——表面冷静独立，实为被迫傲娇。"})
     if cv_d2d5 == "high":
-        highlights.append({"code": "add-cv2-self-dissolve", "severity": "high",
+        highlights.append({"code": "add-cv2-self-dissolve",
             "finding": "自我维持度低且表达含蓄，生活半径正向关系收缩，存在被关系吞噬的温水风险。"})
 
     # Layer 3: 全局复合诊断
     if awareness_gap_global:
-        highlights.append({"code": "add-g-self-blame", "severity": "high",
+        highlights.append({"code": "add-g-self-blame",
             "finding": "在依恋、边界、冲突三个截然不同的情境中，均以自我归因作为第一反应，已是人格默认设置。"})
     if pursue_avoid_role == "pursue":
-        highlights.append({"code": "add-g-pa-pursuer", "severity": "moderate",
+        highlights.append({"code": "add-g-pa-pursuer",
             "finding": "在历史冲突中扮演追的角色——对方越冷越追，追的是即时安全感而非真正的答案。"})
     elif pursue_avoid_role == "avoid":
-        highlights.append({"code": "add-g-pa-avoider", "severity": "moderate",
+        highlights.append({"code": "add-g-pa-avoider",
             "finding": "在历史冲突中扮演逃的角色——对方逼近时系统过载，用沉默或出走换缓冲时间。"})
     elif pursue_avoid_role == "aware_breaker":
-        highlights.append({"code": "add-g-pa-aware", "severity": "info", "positive": True,
+        highlights.append({"code": "add-g-pa-aware", "positive": True,
             "finding": "能识别追逃循环正在发生并主动喊停，是少数具备元认知观察力的稀缺特质。"})
     if stable_personality:
-        highlights.append({"code": "add-g-stable", "severity": "info", "positive": True,
+        highlights.append({"code": "add-g-stable", "positive": True,
             "finding": f"D1/D2/D3/D5共24题中{positive_count}题得分≥+1（{round(positive_count / 24 * 100)}%），整体呈现稳定型反应模式。"})
 
     # D4: 爱的语言自我认知盲区
     if love_lang_awareness == "misaligned" and top2:
-        highlights.append({"code": "add-g-love-blind", "severity": "moderate",
+        highlights.append({"code": "add-g-love-blind",
             "finding": f"主观首选爱的语言为 {primary_choice}，但场景题归一化后实际top1为 {top2[0]}，存在自我认知盲区。"})
 
     return {

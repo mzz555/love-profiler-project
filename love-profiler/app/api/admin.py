@@ -106,10 +106,10 @@ TABLE_CONFIG: dict[str, dict] = {
     "highlights": {
         "pk": "code",
         "search_cols": ["code", "name_cn"],
-        "editable_fields": ["name_cn", "severity", "is_positive"],
-        "truncate_cols": ["report_seed", "interp_path", "trigger_condition"],
+        "editable_fields": ["name_cn", "is_positive"],
+        "truncate_cols": ["report_seed"],
         "created_at_col": None,
-        "list_cols": ["code", "layer", "involved_dims", "severity",
+        "list_cols": ["code", "layer", "involved_dims",
                       "is_positive", "name_cn", "sort_order"],
     },
     "base_dimension_meta": {

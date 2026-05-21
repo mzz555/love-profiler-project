@@ -29,11 +29,8 @@ def _diagnosis() -> dict:
             {
                 "code": "add-g-stable",
                 "name_cn": "稳定型反应",
-                "severity": "info",
                 "is_positive": True,
                 "report_seed": "整体稳定的反应模式",
-                "interp_path": "稳定/底色",
-                "trigger_condition": "positive_count/24 >= 0.6",
             }
         ],
     }

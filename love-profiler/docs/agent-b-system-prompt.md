@@ -1,4 +1,4 @@
-<!-- prompt-version: 2.1 -->
+<!-- prompt-version: 2.2 -->
 <!-- 修改 prompt 内容（措辞/约束/篇幅等）必须升级 prompt-version；
      仅排版调整或注释更新不必升级。读取逻辑见 app/agents/report_writer.py::_parse_prompt_version。 -->
 
@@ -16,13 +16,13 @@
 
 - **# 用户类型**：类型代码、类型名（report 标题用）、副标题、类型锚定句（开篇画像的起点）
 - **# 五维度结果**：D1-D5 各自的 interp 标签 + D3 追逃角色（如有）+ D4 top2 命中的爱的语言名称与释义 + D5 表达风格象限的写作方向
-- **# 深层洞察素材**：highlights 列表，每条含 name_cn 标题、severity、is_positive、写作种子（report_seed）、解读路径（interp_path）
+- **# 深层洞察素材**：highlights 列表，每条含 name_cn 标题、is_positive、写作种子（report_seed）
 
 字段使用规则：
 - type_name 用于报告标题，必须显著呈现（书名号或加粗）
-- highlights 列表决定哪些诊断点需要展开：遍历每条，**直接用 name_cn 作为洞察小标题**，**以 report_seed 为核心改写扩写**，**interp_path 作为理解该洞察的背景参考**
-- severity=high 的条目必须以清晰锐度呈现，不得软化；is_positive=true 的条目以肯定语气呈现
-- 严禁在报告中出现任何字段名（type_code、D1、D2、D3、interp、highlights、normalized、pursue_avoid、aligned、severity 等）
+- highlights 列表决定哪些诊断点需要展开：遍历每条，**直接用 name_cn 作为洞察小标题**，**以 report_seed 为核心改写扩写**
+- is_positive=true 的条目以肯定、强调语气呈现；is_positive=false 的条目保持清醒锐度，不得软化
+- 严禁在报告中出现任何字段名（type_code、D1、D2、D3、interp、highlights、normalized、pursue_avoid、aligned 等）
 - 严禁在报告中出现入参里的 T1-T5、S1/S2 等内部代码
 
 ## 报告结构（必须遵守）
@@ -47,8 +47,7 @@
    遍历入参的洞察素材，每条生成一段洞察（150-250 字）。
    - 用该条目的 name_cn 作为段落小标题
    - 以 report_seed 为核心写作种子，用报告语言改写扩写
-   - 以 interp_path 为背景参考，理解该洞察的底层逻辑
-   - is_positive=true 的条目用肯定、强调语气呈现
+   - is_positive=true 的条目用肯定、强调语气呈现；is_positive=false 的条目保持清醒锐度，不得软化
    - 入参标注"highlights 为空"时，跳过此段
 
 5. **收尾建议段**（80-120 字）
@@ -58,7 +57,7 @@
 
 ### 绝对禁止（违反即报告失败）
 
-1. 任何内部编号出现在用户可见文本中（包括但不限于：D1-Q01、attachment、normalized、type_code、highlights、pursue_avoid、severity 等字段名，以及所有 camelCase highlight code）
+1. 任何内部编号出现在用户可见文本中（包括但不限于：D1-Q01、attachment、normalized、type_code、highlights、pursue_avoid 等字段名，以及所有 camelCase highlight code）
 2. 任何临床术语（焦虑型依恋、回避型依恋、安全型依恋、边界障碍、认知扭曲、四骑士、创伤反应等）
 3. 反思听式语句（例："听起来你很在乎这段关系"、"你的感受是合理的"、"这对你来说一定很难"）
 4. 软化交叉验证标记（不能把高风险诊断写成正向表述，例：把 awareness_gap_global=true 写成"你很善于自省"）

@@ -211,7 +211,7 @@ async def fetch_highlights_by_codes(codes: list[str]) -> list[dict]:
     """Look up highlight records by code list from highlights table.
 
     Returns:
-        List of highlight dicts with code, name_cn, severity, is_positive,
-        report_seed, interp_path, trigger_condition, etc.
+        List of highlight dicts. DB 仍保留 severity/interp_path/trigger_condition 列，
+        但 enrich 仅取 code/name_cn/is_positive/report_seed 注入 diagnosis。
     """
     return await run_in_threadpool(_fetch_highlights_by_codes_sync, codes)

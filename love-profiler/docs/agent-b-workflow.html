@@ -414,7 +414,7 @@ pre, .code {
           <tr><td><span class="field">highlights[].code</span></td><td><span class="src calc">scoring engine 规则引擎</span></td><td>跨维度审查触发的高光 code 列表</td></tr>
           <tr><td><span class="field">type_name</span></td><td><span class="src db">base_love_type</span></td><td>WHERE type_code = ? → 报告标题</td></tr>
           <tr><td><span class="field">type_tagline</span></td><td><span class="src db">base_love_type</span></td><td>副标题</td></tr>
-          <tr><td><span class="field">type_anchor</span></td><td><span class="src db">base_love_type.detail</span></td><td><strong>开篇画像锚定句</strong>，prompt 强制要求从此句展开</td></tr>
+          <tr><td><span class="field">type_detail</span></td><td><span class="src db">base_love_type.detail</span></td><td><strong>开篇画像锚定句</strong>，prompt 强制要求从此句展开</td></tr>
           <tr><td><span class="field">D4_details[]</span></td><td><span class="src db">base_D4_type</span></td><td>top2 各自的 name + 一段描述</td></tr>
           <tr><td><span class="field">D5_guide</span></td><td><span class="src db">base_D5_quadrant</span></td><td>9 宫格象限对应的写作方向参考</td></tr>
           <tr><td><span class="field">D5_style_name</span></td><td><span class="src db">base_D5_quadrant</span></td><td>风格名，前端人格卡标签</td></tr>
@@ -455,7 +455,7 @@ docs/agent-b-system-prompt.md
 - 类型代码：MA-CL-H
 - 类型名（用作报告标题）：温柔的守望者
 - 副标题：你的稳定是底气，不是回避
-- 类型锚定句（开篇必须以此展开）：&lt;type_anchor&gt;
+- 类型锚定句（开篇必须以此展开）：&lt;type_detail&gt;
 
 <span class="h"># 五维度结果（D1-D5 全部展开）</span>
 - D1 依恋：interp = moderate_anxious

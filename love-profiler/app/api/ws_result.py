@@ -262,12 +262,11 @@ def _all_labels(diagnosis: dict) -> list:
 
 
 def _highlights_meta(diagnosis: dict) -> list:
-    """从诊断结果提取 highlights 标题/严重度，随 meta 消息下发，无需等 report writer。"""
+    """从诊断结果提取 highlights 标题与正负向，随 meta 消息下发，无需等 report writer。"""
     return [
         {
             "idx":         i + 1,
             "title":       h.get("name_cn", ""),
-            "severity":    h.get("severity", "medium"),
             "is_positive": h.get("is_positive", False),
         }
         for i, h in enumerate(diagnosis.get("highlights", []))

@@ -166,7 +166,7 @@ async def quiz_submit(
 
     diagnosis["type_name"]    = love_type["type_name"]
     diagnosis["type_tagline"] = love_type.get("tagline", "") or ""
-    diagnosis["type_anchor"]  = love_type.get("detail", "") or ""
+    diagnosis["type_detail"]  = love_type.get("detail", "") or ""
     diagnosis["img_path"]     = love_type.get("img_path", "") or ""
     logger.info("[quiz/submit] base_love_type 命中 type_code=%s type_name=%s", type_code, love_type["type_name"])
 
@@ -214,11 +214,8 @@ async def quiz_submit(
             enriched.append({
                 "code":         dbh["code"],
                 "name_cn":      dbh["name_cn"],
-                "severity":     dbh["severity"],
                 "is_positive":  dbh["is_positive"],
                 "report_seed":  dbh["report_seed"],
-                "interp_path":  dbh["interp_path"],
-                "trigger_condition": dbh["trigger_condition"],
             })
         diagnosis["highlights"] = enriched
         logger.info("[quiz/submit] highlights 命中 %d/%d 条", len(enriched), len(codes))

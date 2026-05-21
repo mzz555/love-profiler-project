@@ -17,7 +17,7 @@ def _valid_diagnosis() -> dict:
         "type_code": "MS-CL-H",
         "type_name": "中度安全·清晰边界·健康冲突",
         "type_tagline": "稳定友好的副标题",
-        "type_anchor": "你在亲密关系里通常表现得很稳定。",
+        "type_detail": "你在亲密关系里通常表现得很稳定。",
         "dimensions": {
             "D1": {"interp": "moderate_secure", "raw": 4},
             "D2": {"interp": "clear", "raw": 7},
@@ -52,11 +52,8 @@ def _valid_diagnosis() -> dict:
             {
                 "code": "add-g-stable",
                 "name_cn": "稳定型反应",
-                "severity": "info",
                 "is_positive": True,
                 "report_seed": "整体稳定的反应模式",
-                "interp_path": "稳定/底色",
-                "trigger_condition": "positive_count/24 >= 0.6",
             }
         ],
         "question_set_version": "V2",
@@ -81,11 +78,11 @@ def test_diagnosis_requires_type_name():
         Diagnosis.model_validate(data)
 
 
-def test_diagnosis_requires_type_anchor_min_length():
-    """type_anchor 来自 base_love_type.detail，是开篇画像的"锚"，过短视为 enrich 失败。"""
+def test_diagnosis_requires_type_detail_min_length():
+    """type_detail 来自 base_love_type.detail，是开篇画像的"锚"，过短视为 enrich 失败。"""
     data = _valid_diagnosis()
-    data["type_anchor"] = "短"
-    with pytest.raises(ValidationError, match="type_anchor"):
+    data["type_detail"] = "短"
+    with pytest.raises(ValidationError, match="type_detail"):
         Diagnosis.model_validate(data)
 
 
@@ -125,20 +122,6 @@ def test_highlights_must_have_report_seed():
     data = _valid_diagnosis()
     data["highlights"][0].pop("report_seed")
     with pytest.raises(ValidationError, match="report_seed"):
-        Diagnosis.model_validate(data)
-
-
-def test_highlights_must_have_interp_path():
-    data = _valid_diagnosis()
-    data["highlights"][0].pop("interp_path")
-    with pytest.raises(ValidationError, match="interp_path"):
-        Diagnosis.model_validate(data)
-
-
-def test_highlights_severity_must_be_known():
-    data = _valid_diagnosis()
-    data["highlights"][0]["severity"] = "critical"
-    with pytest.raises(ValidationError, match="severity"):
         Diagnosis.model_validate(data)
 
 

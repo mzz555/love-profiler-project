@@ -51,7 +51,7 @@ def build_user_message(diagnosis: dict) -> str:
     All static knowledge (type-name dictionary, D4 language definitions, D5
     quadrant guides) lives in DB tables (base_love_type / base_D4_type /
     base_D5_quadrant) and is injected by the enrich step in /quiz/submit
-    as `type_anchor`, `D4_details`, `D5_guide`. We then render only the
+    as `type_detail`, `D4_details`, `D5_guide`. We then render only the
     user's slice here, so the model spends its attention on the user's
     actual data instead of rescanning multi-row dictionaries every call.
     """
@@ -60,15 +60,15 @@ def build_user_message(diagnosis: dict) -> str:
     type_code    = diagnosis.get("type_code", "")
     type_name    = diagnosis.get("type_name", "")
     type_tagline = diagnosis.get("type_tagline", "")
-    type_anchor  = diagnosis.get("type_anchor", "")
+    type_detail  = diagnosis.get("type_detail", "")
 
     lines.append("# 用户类型")
     lines.append(f"- 类型代码：{type_code}")
     lines.append(f"- 类型名（用作报告标题）：{type_name}")
     if type_tagline:
         lines.append(f"- 副标题：{type_tagline}")
-    if type_anchor:
-        lines.append(f"- 类型锚定句（开篇画像必须以此为起点展开）：{type_anchor}")
+    if type_detail:
+        lines.append(f"- 类型锚定句（开篇画像必须以此为起点展开）：{type_detail}")
     lines.append("")
 
     dims = diagnosis.get("dimensions", {}) or {}
@@ -115,11 +115,9 @@ def build_user_message(diagnosis: dict) -> str:
     else:
         for i, h in enumerate(highlights, 1):
             lines.append(
-                f"{i}. 标题：{h.get('name_cn', '')} | severity={h.get('severity', '')} "
-                f"| is_positive={h.get('is_positive', False)}"
+                f"{i}. 标题：{h.get('name_cn', '')} | is_positive={h.get('is_positive', False)}"
             )
             lines.append(f"   写作种子：{h.get('report_seed', '')}")
-            lines.append(f"   解读路径：{h.get('interp_path', '')}")
 
     return "\n".join(lines)
 

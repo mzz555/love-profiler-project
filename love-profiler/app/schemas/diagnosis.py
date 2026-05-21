@@ -12,9 +12,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-Severity = Literal["high", "moderate", "info"]
-
-
 class D4Detail(BaseModel):
     """base_D4_type 表富化结果，对应一个爱的语言类型（T1~T5）。"""
 
@@ -26,17 +23,18 @@ class D4Detail(BaseModel):
 
 
 class HighlightEnriched(BaseModel):
-    """highlights 表富化结果，单条诊断高亮。"""
+    """highlights 表富化结果，单条诊断高亮。
+
+    severity / interp_path / trigger_condition 已从 enrich 链路移除（DB 列保留）。
+    LLM 只看 name_cn / is_positive / report_seed。
+    """
 
     model_config = ConfigDict(extra="allow")
 
     code: str = Field(min_length=1)
     name_cn: str = Field(min_length=1)
-    severity: Severity
     is_positive: bool
     report_seed: str = Field(min_length=1)
-    interp_path: str = Field(min_length=1)
-    trigger_condition: str = Field(min_length=1)
 
 
 class SegmentDecode(BaseModel):
@@ -106,7 +104,7 @@ class Diagnosis(BaseModel):
 
     type_code: str = Field(min_length=1)
     type_name: str = Field(min_length=1)
-    type_anchor: str = Field(min_length=10)
+    type_detail: str = Field(min_length=10)
     type_tagline: str = ""
     dimensions: DimensionsBlock
     D4_details: list[D4Detail] = Field(min_length=1)

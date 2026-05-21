@@ -20,7 +20,7 @@ DIAGNOSIS = {
     "type_code":    "S-CL-H",
     "type_name":    "稳重的航标",
     "type_tagline": "你不需要完美，就值得被爱",
-    "type_anchor":  "你的稳不需要被看见。危机出现时，你已经在想怎么解决了。",
+    "type_detail":  "你的稳不需要被看见。危机出现时，你已经在想怎么解决了。",
     "dimensions": {
         "D1": {"interp": "secure"},
         "D2": {"interp": "clear"},
@@ -103,9 +103,9 @@ async def test_run_raises_when_all_attempts_empty():
         await run(DIAGNOSIS)
 
 
-def test_build_user_message_includes_type_anchor():
+def test_build_user_message_includes_type_detail():
     msg = build_user_message(DIAGNOSIS)
-    assert DIAGNOSIS["type_anchor"] in msg
+    assert DIAGNOSIS["type_detail"] in msg
     assert DIAGNOSIS["type_name"] in msg
 
 
@@ -342,18 +342,15 @@ async def test_run_stream_resumed_prepends_completed_sections_to_final_text():
     assert "Suggestion" in text
 
 
-def test_build_user_message_highlights_render_seed_and_path():
+def test_build_user_message_highlights_render_seed():
     diag = {**DIAGNOSIS, "highlights": [
         {
             "code": "add-cv1-pressure-collapse",
             "name_cn": "压力表达崩塌",
-            "severity": "moderate",
             "is_positive": False,
             "report_seed": "在压力下你倾向于沉默而非开口",
-            "interp_path": "由 D3.S1 + D5 共同推得",
         },
     ]}
     msg = build_user_message(diag)
     assert "压力表达崩塌" in msg
     assert "在压力下你倾向于沉默而非开口" in msg
-    assert "由 D3.S1 + D5 共同推得" in msg

@@ -159,8 +159,8 @@ _SAMPLE_DIAGNOSIS = {
     ],
     "D5_style_name": "直爽热情型",
     "highlights": [
-        {"name_cn": "压力崩塌", "severity": "moderate", "is_positive": False},
-        {"name_cn": "稳定锚",   "severity": "info",     "is_positive": True},
+        {"name_cn": "压力崩塌", "is_positive": False},
+        {"name_cn": "稳定锚",   "is_positive": True},
     ],
 }
 
