@@ -48,6 +48,13 @@ def _valid_diagnosis() -> dict:
             {"dimension": "D2", "code": "CL", "label_cn": "清晰边界",     "is_healthy": True},
             {"dimension": "D3", "code": "H",  "label_cn": "健康冲突模式", "is_healthy": True},
         ],
+        "dimension_meta": {
+            "D1": {"code": "D1", "name_cn": "依恋类型", "description": "遭遇关系不确定性时依恋系统的激活模式"},
+            "D2": {"code": "D2", "name_cn": "边界意识", "description": "关系中保持独立自我、识别越界行为的能力"},
+            "D3": {"code": "D3", "name_cn": "冲突处理", "description": "关系摩擦时的表达方式与修复主动性"},
+            "D4": {"code": "D4", "name_cn": "情感需求", "description": "五种爱的语言的相对偏好排序"},
+            "D5": {"code": "D5", "name_cn": "亲密风格", "description": "直接性与分享欲两个独立子面"},
+        },
         "highlights": [
             {
                 "code": "add-g-stable",

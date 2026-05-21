@@ -48,6 +48,16 @@ class SegmentDecode(BaseModel):
     is_healthy: bool
 
 
+class DimensionMetaEntry(BaseModel):
+    """base_dimension_meta 单行，描述一个维度的中文名与定义。"""
+
+    model_config = ConfigDict(extra="allow")
+
+    code: Literal["D1", "D2", "D3", "D4", "D5"]
+    name_cn: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
+
 class D1Block(BaseModel):
     model_config = ConfigDict(extra="allow")
     interp: str = Field(min_length=1)
@@ -111,6 +121,7 @@ class Diagnosis(BaseModel):
     D5_guide: str = ""
     D5_style_name: str = ""
     segment_decode: list[SegmentDecode] = Field(default_factory=list)
+    dimension_meta: dict[str, DimensionMetaEntry] = Field(default_factory=dict)
     highlights: list[HighlightEnriched] = Field(default_factory=list)
     question_set_version: str = ""
 

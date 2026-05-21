@@ -24,6 +24,15 @@ MOCK_QUESTIONS = [
 ]
 
 
+_MOCK_DIM_META = [
+    {"code": "D1", "name_cn": "依恋类型", "description": "遭遇关系不确定性时依恋系统的激活模式"},
+    {"code": "D2", "name_cn": "边界意识", "description": "关系中保持独立自我、识别越界行为的能力"},
+    {"code": "D3", "name_cn": "冲突处理", "description": "关系摩擦时的表达方式与修复主动性"},
+    {"code": "D4", "name_cn": "情感需求", "description": "五种爱的语言的相对偏好排序"},
+    {"code": "D5", "name_cn": "亲密风格", "description": "直接性与分享欲两个独立子面"},
+]
+
+
 def test_quiz_start_returns_questions(client, auth_headers):
     with patch("app.services.supabase_client._fetch_questions_sync",
                return_value=MOCK_QUESTIONS):
@@ -79,6 +88,7 @@ def test_quiz_submit_runs_agent_a(client, auth_headers, db_session):
          patch("app.services.supabase_client._fetch_d4_details_sync", return_value=mock_d4_details), \
          patch("app.services.supabase_client._fetch_d5_guide_sync", return_value=mock_d5_guide), \
          patch("app.services.supabase_client._fetch_segment_decode_sync", return_value=mock_segment_decode), \
+         patch("app.services.supabase_client._fetch_dimension_meta_sync", return_value=_MOCK_DIM_META), \
          patch("app.services.supabase_client._fetch_highlights_by_codes_sync", side_effect=fake_highlights_by_codes):
         resp = client.post(
             "/quiz/submit",
@@ -151,6 +161,7 @@ def test_quiz_submit_schema_validation_fails_when_d5_guide_missing(
          patch("app.services.supabase_client._fetch_d4_details_sync", return_value=mock_d4_details), \
          patch("app.services.supabase_client._fetch_d5_guide_sync", return_value=None), \
          patch("app.services.supabase_client._fetch_segment_decode_sync", return_value=mock_segment_decode), \
+         patch("app.services.supabase_client._fetch_dimension_meta_sync", return_value=_MOCK_DIM_META), \
          patch("app.services.supabase_client._fetch_highlights_by_codes_sync", side_effect=fake_highlights_by_codes):
         resp = client.post(
             "/quiz/submit",

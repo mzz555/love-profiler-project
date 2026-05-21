@@ -33,6 +33,18 @@ DIAGNOSIS = {
         {"code": "T2", "name": "精心时刻", "detail": "专注陪伴，放下手机"},
     ],
     "D5_guide": "不会让对方读不懂，也不会让对方读太透；表达平衡居中。写法示范：「你的表达不会让人困惑，也没有特别暴露。」",
+    "segment_decode": [
+        {"dimension": "D1", "code": "S",  "label_cn": "安全型依恋",   "is_healthy": True},
+        {"dimension": "D2", "code": "CL", "label_cn": "清晰边界",     "is_healthy": True},
+        {"dimension": "D3", "code": "MH", "label_cn": "中度健康冲突", "is_healthy": True},
+    ],
+    "dimension_meta": {
+        "D1": {"code": "D1", "name_cn": "依恋类型", "description": "遭遇关系不确定性时依恋系统的激活模式"},
+        "D2": {"code": "D2", "name_cn": "边界意识", "description": "关系中保持独立自我、识别越界行为的能力"},
+        "D3": {"code": "D3", "name_cn": "冲突处理", "description": "关系摩擦时的表达方式与修复主动性"},
+        "D4": {"code": "D4", "name_cn": "情感需求", "description": "五种爱的语言的相对偏好排序"},
+        "D5": {"code": "D5", "name_cn": "亲密风格", "description": "直接性与分享欲两个独立子面"},
+    },
     "highlights": [],
 }
 
@@ -138,11 +150,12 @@ def test_build_user_message_d5_omits_guide_line_when_missing():
 
 def test_build_user_message_aligned_false_emits_blind_spot_note():
     diag = {**DIAGNOSIS, "dimensions": {**DIAGNOSIS["dimensions"], "D4": {
-        "top2": ["T1", "T2"], "aligned": False, "declared": "T3",
+        "top2": ["T1", "T2"], "aligned": False, "declared": "T2",
     }}}
     msg = build_user_message(diag)
-    assert "aligned=false" in msg
     assert "自我认知盲区" in msg
+    # declared T2 → 中文名「精心时刻」必须出现
+    assert "精心时刻" in msg
 
 
 def test_build_user_message_pursue_avoid_role_emitted():
@@ -150,7 +163,7 @@ def test_build_user_message_pursue_avoid_role_emitted():
         "interp": "mixed", "pursue_avoid": "pursue",
     }}}
     msg = build_user_message(diag)
-    assert "追逃角色 = pursue" in msg
+    assert "追逃角色：pursue" in msg
 
 
 def test_build_user_message_omits_pursue_avoid_when_stable():

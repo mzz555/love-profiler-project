@@ -163,6 +163,26 @@ def _fetch_highlights_by_codes_sync(codes: list[str]) -> list[dict]:
         db.close()
 
 
+def _fetch_dimension_meta_sync() -> list[dict]:
+    """读取 5 个维度的中文名 + description，供 enrich 注入 prompt context。"""
+    db = SessionLocal()
+    try:
+        result = db.execute(
+            text(
+                "SELECT code, name_cn, description "
+                "FROM base_dimension_meta ORDER BY sort_order"
+            )
+        )
+        return [dict(row._mapping) for row in result]
+    finally:
+        db.close()
+
+
+async def fetch_dimension_meta() -> list[dict]:
+    """异步包装；返回 5 行（D1-D5）维度元信息列表。"""
+    return await run_in_threadpool(_fetch_dimension_meta_sync)
+
+
 def _fetch_segment_decode_sync(type_code: str) -> list[dict]:
     """
     解析 type_code（如 'MS-CL-P'）中的三段代码，

@@ -25,6 +25,7 @@ from app.services.supabase_client import (
     fetch_all_love_types,
     fetch_d4_details,
     fetch_d5_guide,
+    fetch_dimension_meta,
     fetch_highlights_by_codes,
     fetch_love_type,
     fetch_questions,
@@ -174,6 +175,11 @@ async def quiz_submit(
     segment_decode = await fetch_segment_decode(type_code)
     diagnosis["segment_decode"] = segment_decode
     logger.info("[quiz/submit] segment_decode 命中 %d 段", len(segment_decode))
+
+    # 查 base_dimension_meta（5 维度中文名 + description），注入给 LLM 上下文
+    dim_meta_rows = await fetch_dimension_meta()
+    diagnosis["dimension_meta"] = {row["code"]: row for row in dim_meta_rows}
+    logger.info("[quiz/submit] dimension_meta 命中 %d 个维度", len(dim_meta_rows))
 
     # 从 base_D4_type 查 top2 爱的语言释义，避免在 system prompt 里硬编码全部 5 类
     d4_block = diagnosis.get("dimensions", {}).get("D4", {}) or {}

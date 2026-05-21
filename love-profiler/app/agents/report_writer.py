@@ -72,38 +72,74 @@ def build_user_message(diagnosis: dict) -> str:
     lines.append("")
 
     dims = diagnosis.get("dimensions", {}) or {}
+    dim_meta = diagnosis.get("dimension_meta", {}) or {}
+    seg_decode = diagnosis.get("segment_decode", []) or []
+    # 用 dimension 作 key 索引 segment_decode，让 D1/D2/D3 行能直接取到中文标签
+    seg_by_dim = {s.get("dimension"): s for s in seg_decode}
+
+    def _meta_line(code: str) -> str:
+        m = dim_meta.get(code, {}) or {}
+        name = m.get("name_cn", "")
+        desc = m.get("description", "")
+        if name and desc:
+            return f"- {code} {name}（{desc}）"
+        return f"- {code}"
+
+    def _seg_line(code: str) -> str:
+        seg = seg_by_dim.get(code, {}) or {}
+        label = seg.get("label_cn", "")
+        if not label:
+            return ""
+        healthy = "健康端" if seg.get("is_healthy") else "问题端"
+        return f"    · 段落标签：{label}（{healthy}）"
+
     lines.append("# 五维度结果（D1-D5 全部展开）")
 
-    d1 = dims.get("D1", {}) or {}
-    lines.append(f"- D1 依恋：interp = {d1.get('interp', '')}")
+    # D1/D2/D3：去 interp 英文标签，用 label_cn 中文 + description
+    lines.append(_meta_line("D1"))
+    if (line := _seg_line("D1")):
+        lines.append(line)
 
-    d2 = dims.get("D2", {}) or {}
-    lines.append(f"- D2 边界：interp = {d2.get('interp', '')}")
+    lines.append(_meta_line("D2"))
+    if (line := _seg_line("D2")):
+        lines.append(line)
 
+    lines.append(_meta_line("D3"))
+    if (line := _seg_line("D3")):
+        lines.append(line)
     d3 = dims.get("D3", {}) or {}
     pa = d3.get("pursue_avoid", "")
-    pa_note = f"，追逃角色 = {pa}（须在该段融入追/逃视角）" if pa and pa != "stable" else ""
-    lines.append(f"- D3 冲突：interp = {d3.get('interp', '')}{pa_note}")
+    if pa and pa != "stable":
+        lines.append(f"    · 追逃角色：{pa}（须在该段融入追/逃视角）")
 
+    # D4：把 T1/T2 代码替换成中文类型名，避免非中文进 prompt
     d4 = dims.get("D4", {}) or {}
     top2     = d4.get("top2", []) or []
     aligned  = d4.get("aligned", True)
     declared = d4.get("declared", "")
     d4_details = diagnosis.get("D4_details", []) or []
-    lines.append(f"- D4 爱的语言：top2 = {top2}")
+    d4_name_by_code = {d.get("code", ""): d.get("name", "") for d in d4_details}
+    top2_names = [d4_name_by_code.get(c, c) for c in top2]
+    declared_name = d4_name_by_code.get(declared, declared)
+
+    lines.append(_meta_line("D4"))
+    lines.append(f"    · top2 偏好：{top2_names}")
     for d in d4_details:
-        lines.append(f"    · {d.get('code', '')} {d.get('name', '')}：{d.get('detail', '')}")
-    if not aligned and declared:
+        lines.append(f"    · {d.get('name', '')}：{d.get('detail', '')}")
+    if not aligned and declared_name and top2_names:
         lines.append(
-            f"  注意 aligned=false：用户主动选择的是 {declared}，但行为得分指向 top2 第一项；"
+            f"    · 注意自我认知盲区：用户主动选择的是「{declared_name}」，但行为得分指向「{top2_names[0]}」；"
             "必须在 D4 段后追加「自我认知盲区」子段"
         )
 
+    # D5：加 description 保持一致；style/quadrant 已是中文
     d5 = dims.get("D5", {}) or {}
     style    = d5.get("style", "")
     quadrant = d5.get("quadrant", "")
     guide    = diagnosis.get("D5_guide", "")
-    lines.append(f"- D5 表达风格：{style}（{quadrant}）")
+    lines.append(_meta_line("D5"))
+    if style or quadrant:
+        lines.append(f"    · 风格象限：{style}（{quadrant}）")
     if guide:
         lines.append(f"    · 该象限写作方向：{guide}")
     lines.append("")
