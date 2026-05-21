@@ -33,11 +33,13 @@ REQUIRED_SECTIONS = [
 MIN_SECTION_CHARS: dict[str, int] = {
     "Title":       4,
     "Opening":     80,
-    "Attachment":  100,
-    "Boundary":    100,
-    "Conflict":    100,
-    "Language":    80,
-    "Style":       80,
+    "Attachment":  80,
+    "Boundary":    80,
+    "Conflict":    80,
+    # Language/Style 是 D4/D5 辅助维度，prompt 目标 80-120/80-100 字，
+    # 质量门留 40 字弹性 ⇒ 阈值降到 40。参见 [[feedback-quality-gate-prompt-pair]]
+    "Language":    40,
+    "Style":       40,
     "Highlight":   100,
     "Suggestion":  60,
 }
