@@ -818,11 +818,142 @@ Page({
     } catch(e) { console.error('[d4-bloom] THROW', e.message, e); }
   },
 
-  // ── 图表4：D5 表达风格象限点图（Step 4 占位，下一步实现）─────────────
+  // ── 图表4：D5 表达风格象限点图（9 宫格 + 用户定位点）─────────────────
+  // X = 直接性 [-6, +6]，Y = 分享欲 [-6, +6]
+  // 9 宫格按 base_D5_quadrant 9 类划分，用户点高亮，其它格淡色文字
   _drawD5Quadrant(q) {
-    if (!q) return;
-    // 占位：暂时仅打印；下一步会画 9 宫格 + 点
-    console.log('[d5-quadrant] data', q);
+    if (!q || typeof q.s1_raw !== 'number' || typeof q.s2_raw !== 'number') {
+      console.warn('[d5-quadrant] missing s1/s2_raw', q);
+      return;
+    }
+    const ctx = tt.createCanvasContext('d5-quadrant', this);
+    try {
+      const W = 640, H = 640;
+      const padding = 60;
+      const plotW = W - padding * 2, plotH = H - padding * 2;
+      const cx = padding + plotW / 2, cy = padding + plotH / 2;
+      // 9 宫格：每格 plotW/3 宽；坐标系范围 -6 到 +6
+      const stepX = plotW / 3, stepY = plotH / 3;
+
+      const PRIMARY = '#4FAFAF';
+      const PRIMARY_DARK = '#3A8C8C';
+      const PRIMARY_LIGHT = 'rgba(79,175,175,0.18)';
+      const GRID = 'rgba(180,170,160,0.30)';
+      const AXIS = 'rgba(140,130,120,0.55)';
+      const CELL_LABEL = 'rgba(110,100,90,0.75)';
+      const CELL_LABEL_ACTIVE = '#3A3A4A';
+      const PALE_BG = 'rgba(248,245,241,0.55)';
+
+      // 把分数（-6 ~ +6）映射到画布坐标
+      const toX = (s) => padding + (s + 6) / 12 * plotW;
+      const toY = (s) => padding + (1 - (s + 6) / 12) * plotH;   // s2 越大越向上（屏幕坐标 y 向下，所以翻转）
+
+      // 9 类风格名（按 X×Y 排列：X 从低到高 = 含蓄→中→直接；Y 从低到高 = 低分享→中→高分享）
+      const STYLE_GRID = [
+        // 第一行（Y 高 = 高分享）
+        ['含蓄分享型', '中直高分享型', '直爽热情型'],
+        // 第二行（Y 中 = 中分享）
+        ['含蓄中分享型', '平衡内敛型', '高直中分享型'],
+        // 第三行（Y 低 = 低分享）
+        ['含蓄收敛型', '中直低分享型', '清爽利落型'],
+      ];
+
+      // 用户所在格的 col/row
+      const userCol = q.s1_raw > 3 ? 2 : q.s1_raw < -3 ? 0 : 1;
+      const userRow = q.s2_raw > 3 ? 0 : q.s2_raw < -3 ? 2 : 1;
+
+      // 背景柔光
+      ctx.setFillStyle(PALE_BG);
+      ctx.fillRect(padding - 8, padding - 8, plotW + 16, plotH + 16);
+
+      // 用户所在格高亮底色
+      ctx.setFillStyle(PRIMARY_LIGHT);
+      ctx.fillRect(padding + userCol * stepX, padding + userRow * stepY, stepX, stepY);
+
+      // 网格线
+      ctx.setStrokeStyle(GRID); ctx.setLineWidth(1);
+      for (let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(padding + i * stepX, padding);
+        ctx.lineTo(padding + i * stepX, padding + plotH);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(padding, padding + i * stepY);
+        ctx.lineTo(padding + plotW, padding + i * stepY);
+        ctx.stroke();
+      }
+
+      // 外框
+      ctx.setStrokeStyle(AXIS); ctx.setLineWidth(2);
+      ctx.strokeRect(padding, padding, plotW, plotH);
+
+      // 中轴十字（s=0）
+      ctx.setStrokeStyle('rgba(140,130,120,0.40)');
+      ctx.setLineWidth(1);
+      ctx.beginPath(); ctx.moveTo(toX(0), padding); ctx.lineTo(toX(0), padding + plotH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(padding, toY(0)); ctx.lineTo(padding + plotW, toY(0)); ctx.stroke();
+
+      // 9 格风格名标签（用户所在格用深色，其他用淡色）
+      ctx.setTextAlign('center');
+      STYLE_GRID.forEach((row, r) => {
+        row.forEach((name, c) => {
+          const isUserCell = (r === userRow && c === userCol);
+          const tx = padding + c * stepX + stepX / 2;
+          const ty = padding + r * stepY + stepY / 2;
+          ctx.setFontSize(isUserCell ? 18 : 15);
+          ctx.setFillStyle(isUserCell ? CELL_LABEL_ACTIVE : CELL_LABEL);
+          ctx.fillText(name, tx, ty);
+        });
+      });
+
+      // 坐标轴标签
+      ctx.setFontSize(16); ctx.setFillStyle(AXIS);
+      // X 轴（左 = 含蓄，右 = 直接）
+      ctx.setTextAlign('left');
+      ctx.fillText('含蓄', padding, padding + plotH + 28);
+      ctx.setTextAlign('right');
+      ctx.fillText('直接', padding + plotW, padding + plotH + 28);
+      ctx.setTextAlign('center');
+      ctx.fillText('← 直接性 →', cx, padding + plotH + 50);
+      // Y 轴（上 = 高分享，下 = 低分享）
+      ctx.save();
+      ctx.translate(padding - 30, cy);
+      ctx.rotate(-Math.PI / 2);
+      ctx.setTextAlign('center');
+      ctx.fillText('← 分享欲 →', 0, 0);
+      ctx.restore();
+      ctx.setTextAlign('left');
+      ctx.fillText('低分享', padding - 50, padding + plotH);
+      ctx.fillText('高分享', padding - 50, padding + 12);
+
+      // 用户定位点
+      const px = toX(q.s1_raw), py = toY(q.s2_raw);
+      // 外层光晕
+      ctx.beginPath(); ctx.arc(px, py, 22, 0, Math.PI * 2);
+      ctx.setFillStyle('rgba(79,175,175,0.20)'); ctx.fill();
+      // 主点
+      ctx.beginPath(); ctx.arc(px, py, 14, 0, Math.PI * 2);
+      ctx.setFillStyle(PRIMARY_DARK); ctx.fill();
+      // 白心
+      ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.setFillStyle('#FFFFFF'); ctx.fill();
+
+      // 用户风格名（点旁边或顶部）
+      if (q.style_name) {
+        ctx.setTextAlign('center');
+        ctx.setFontSize(22); ctx.setFillStyle(PRIMARY_DARK);
+        ctx.fillText('你的风格：' + q.style_name, cx, padding - 16);
+      }
+
+      ctx.draw(false, () => {
+        tt.canvasToTempFilePath({
+          canvasId: 'd5-quadrant',
+          destWidth: W, destHeight: H,
+          success: res => { console.log('[d5-quadrant] img ok'); this.setData({ chartImgD5Quadrant: res.tempFilePath }); },
+          fail: err => console.error('[d5-quadrant] toImg fail', err),
+        }, this);
+      });
+    } catch(e) { console.error('[d5-quadrant] THROW', e.message, e); }
   },
 
   restart() {
