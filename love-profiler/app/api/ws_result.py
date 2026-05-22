@@ -3,7 +3,7 @@ WebSocket result endpoint — streams report writer report generation token by t
 GET /ws/result?token=<jwt>
 
 Protocol (server → client JSON messages):
-  {"type": "meta",          "personality_type": "...", "type_name": "...", "dim_chart": {...}}
+  {"type": "meta",          "personality_type": "...", "type_name": "...", "type_detail": "...", "dim_chart": {...}}
   {"type": "section_start", "section": "Title"}            — new section begins
   {"type": "section_chunk", "section": "Title", "text": "..."} — text tokens
   {"type": "section_end",   "section": "Title"}            — section complete
@@ -368,6 +368,7 @@ async def _stream_cached(websocket: WebSocket, assessment: Assessment) -> None:
         "personality_type": ptype,
         "type_name": type_name,
         "type_tagline": diagnosis.get("type_tagline", ""),
+        "type_detail": diagnosis.get("type_detail", ""),
         "img_path": diagnosis.get("img_path", ""),
         "dim_chart": _dim_chart(diagnosis),
         "highlights_meta": _highlights_meta(diagnosis),
@@ -444,12 +445,15 @@ async def _stream_agent_b(
     type_name  = diagnosis.get("type_name", "")
     type_tagline = diagnosis.get("type_tagline", "")
 
+    type_detail = diagnosis.get("type_detail", "")
+
     # Send type metadata immediately — user sees their result while LLM writes
     await _send(websocket, {
         "type": "meta",
         "personality_type": ptype,
         "type_name": type_name,
         "type_tagline": type_tagline,
+        "type_detail": type_detail,
         "img_path": diagnosis.get("img_path", ""),
         "dim_chart": _dim_chart(diagnosis),
         "highlights_meta": _highlights_meta(diagnosis),

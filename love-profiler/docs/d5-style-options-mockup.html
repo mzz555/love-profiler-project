@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>D5 表达风格图 · 4 方案对比 mockup</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #FAF6EE; /* cream */
+    color: #3A3A4A;
+    margin: 0;
+    padding: 32px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 6px;
+    color: #2C5F5F;
+  }
+  .sub {
+    color: #7A746A;
+    font-size: 14px;
+    margin-bottom: 28px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    max-width: 1200px;
+  }
+  .card {
+    background: #FFFCF6;
+    border: 1px solid #E8DDC8;
+    border-radius: 16px;
+    padding: 20px 22px 24px;
+    box-shadow: 0 2px 6px rgba(180, 160, 120, 0.08);
+  }
+  .card h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    color: #2C5F5F;
+  }
+  .card .tag {
+    display: inline-block;
+    font-size: 12px;
+    background: #4FAFAF;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .card .tag.alt { background: #B89A6A; }
+  .card .meta {
+    color: #7A746A;
+    font-size: 13px;
+    margin: 4px 0 14px;
+    line-height: 1.6;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: transparent;
+  }
+  .pros {
+    font-size: 13px;
+    margin-top: 14px;
+    line-height: 1.7;
+  }
+  .pros .ok { color: #2D8C5A; }
+  .pros .no { color: #B85C3D; }
+  .legend {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 13px;
+    color: #5A6A6A;
+  }
+</style>
+</head>
+<body>
+
+<h1>D5 表达风格图 · 4 方案对比</h1>
+<div class="sub">
+  统一示例数据：<b>直接性 s1 = +6（强直接）</b>，<b>分享欲 s2 = -2（略含蓄）</b>
+  ｜ 主色 <span style="color:#4FAFAF">#4FAFAF</span>
+</div>
+
+<div class="grid">
+
+  <!-- 方案 A · 罗盘指针图 -->
+  <div class="card">
+    <h2>方案 A · 罗盘指针图 <span class="tag">推荐</span></h2>
+    <div class="meta">圆形画像 + 指针：角度=风格方向，长度=风格强度。视觉跟健康度雷达 / 五瓣花同源。</div>
+    <canvas id="cv-compass" width="520" height="520"></canvas>
+    <div class="legend">你的风格 · 直率开朗型 · 强度中高</div>
+    <div class="pros">
+      <span class="ok">✓</span> 跟健康度雷达 / 五瓣花同为圆形，三张图视觉统一<br>
+      <span class="ok">✓</span> 角度+长度同时编码"方向+强度"，叙事感强<br>
+      <span class="no">✗</span> 9 个细分风格名压缩到 4 个象限名
+    </div>
+  </div>
+
+  <!-- 方案 B · 双轴散点图 -->
+  <div class="card">
+    <h2>方案 B · 双轴散点图</h2>
+    <div class="meta">保留 2D 连续坐标，去掉 9 宫格的"硬分类"感。落点位置精确反映数值。</div>
+    <canvas id="cv-scatter" width="520" height="520"></canvas>
+    <div class="legend">你的坐标 · (+6, -2) · 偏直接、略含蓄</div>
+    <div class="pros">
+      <span class="ok">✓</span> 连续值精确呈现，无强制归类<br>
+      <span class="ok">✓</span> 结构简单清爽<br>
+      <span class="no">✗</span> 没有风格名锚定，要靠文字解释<br>
+      <span class="no">✗</span> 矩形跟其他两张圆形图视觉不统一
+    </div>
+  </div>
+
+  <!-- 方案 C · 双柱对比 -->
+  <div class="card">
+    <h2>方案 C · 双柱对比条 <span class="tag alt">最简</span></h2>
+    <div class="meta">两根条分别表示直接性 / 分享欲，从中点向左右延伸。最直观但最朴素。</div>
+    <canvas id="cv-bar" width="520" height="520"></canvas>
+    <div class="legend">直接性 +6（满）｜分享欲 -2（略含蓄）</div>
+    <div class="pros">
+      <span class="ok">✓</span> 数值最直观，零门槛理解<br>
+      <span class="ok">✓</span> 实现最简单<br>
+      <span class="no">✗</span> 失去 2D 关系，两根独立条<br>
+      <span class="no">✗</span> 太朴素，跟其他图档次不匹配
+    </div>
+  </div>
+
+  <!-- 方案 D · 当前 9 宫格 -->
+  <div class="card">
+    <h2>方案 D · 当前 9 宫格（对照）</h2>
+    <div class="meta">现状：3×3 网格 + 用户所在格高亮，9 个固定风格名。连续值被强制归到 9 格之一。</div>
+    <canvas id="cv-grid" width="520" height="520"></canvas>
+    <div class="legend">你的格子 · 高直中分享型（×低分享 高亮）</div>
+    <div class="pros">
+      <span class="ok">✓</span> 9 个细分风格名提供语义锚<br>
+      <span class="no">✗</span> 连续 12 阶被压缩到 3×3 = 9 格（粒度粗）<br>
+      <span class="no">✗</span> 矩形 + 文字密集，跟其他图视觉差异大<br>
+      <span class="no">✗</span> 一个高亮格 + 8 个灰文字，信息密度低
+    </div>
+  </div>
+
+</div>
+
+<script>
+const S1 = 6;    // 直接性 (+6)
+const S2 = -2;   // 分享欲 (-2)
+
+const TEAL       = '#4FAFAF';
+const TEAL_DARK  = '#3A8C8C';
+const TEAL_SOFT  = 'rgba(79,175,175,0.18)';
+const TEAL_GLOW  = 'rgba(79,175,175,0.30)';
+const CREAM      = '#FAF6EE';
+const INK        = '#3A3A4A';
+const MUTED      = 'rgba(120,110,100,0.55)';
+const GRID_CLR   = 'rgba(180,170,160,0.30)';
+const AXIS_CLR   = 'rgba(140,130,120,0.55)';
+
+/* ────────────────────────────────────────────────
+   方案 A · 罗盘指针图
+   ──────────────────────────────────────────────── */
+(function drawCompass() {
+  const cv = document.getElementById('cv-compass');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const cx = W / 2, cy = H / 2;
+  const R = 200;
+
+  // 背景柔光底
+  const g = ctx.createRadialGradient(cx, cy, 20, cx, cy, R);
+  g.addColorStop(0, 'rgba(79,175,175,0.10)');
+  g.addColorStop(1, 'rgba(79,175,175,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+
+  // 三道同心圆
+  [R, R * 0.66, R * 0.33].forEach((r, i) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = i === 0 ? AXIS_CLR : GRID_CLR;
+    ctx.lineWidth = i === 0 ? 2 : 1;
+    ctx.stroke();
+  });
+
+  // 十字轴
+  ctx.strokeStyle = 'rgba(140,130,120,0.40)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+
+  // 四象限弧形色块（淡）
+  const quadColors = ['rgba(79,175,175,0.10)', 'rgba(255,180,80,0.10)',
+                      'rgba(180,140,210,0.10)', 'rgba(95,200,180,0.10)'];
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, i * Math.PI / 2 - Math.PI / 2, (i + 1) * Math.PI / 2 - Math.PI / 2);
+    ctx.closePath();
+    ctx.fillStyle = quadColors[i];
+    ctx.fill();
+  }
+
+  // 四个方位标签
+  ctx.fillStyle = INK;
+  ctx.font = '600 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('分享', cx, cy - R - 14);
+  ctx.fillText('含蓄', cx, cy + R + 26);
+  ctx.textAlign = 'right'; ctx.fillText('含蓄', cx - R - 8, cy + 6);
+  ctx.textAlign = 'left';  ctx.fillText('直接', cx + R + 8, cy + 6);
+
+  // 四象限风格名（外圈）
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = 'rgba(110,100,90,0.85)';
+  ctx.textAlign = 'center';
+  // 右上 (+直接 +分享) → 直率开朗
+  ctx.fillText('直率开朗型', cx + R * 0.6, cy - R * 0.6);
+  // 左上 (含蓄 +分享) → 温和倾诉
+  ctx.fillText('温和倾诉型', cx - R * 0.6, cy - R * 0.6);
+  // 左下 (含蓄 含蓄) → 内敛收敛
+  ctx.fillText('内敛收敛型', cx - R * 0.6, cy + R * 0.6);
+  // 右下 (+直接 含蓄) → 干脆利落
+  ctx.fillText('干脆利落型', cx + R * 0.6, cy + R * 0.6);
+
+  // 指针：角度 atan2(分享, 直接) ；长度=向量模 / max
+  const mag = Math.sqrt(S1 * S1 + S2 * S2);
+  const maxMag = Math.sqrt(72); // sqrt(6^2+6^2)
+  const len = (mag / maxMag) * R * 0.85;
+  const angle = Math.atan2(-S2, S1); // 屏幕坐标 y 向下，要翻转
+
+  const px = cx + Math.cos(angle) * len;
+  const py = cy + Math.sin(angle) * len;
+
+  // 指针光晕
+  const gp = ctx.createRadialGradient(cx, cy, 2, px, py, 30);
+  gp.addColorStop(0, TEAL_GLOW);
+  gp.addColorStop(1, 'rgba(79,175,175,0)');
+  ctx.strokeStyle = gp;
+  ctx.lineWidth = 22;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(px, py);
+  ctx.stroke();
+
+  // 指针主干
+  ctx.strokeStyle = TEAL_DARK;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(px, py);
+  ctx.stroke();
+
+  // 指针端点
+  ctx.beginPath(); ctx.arc(px, py, 12, 0, Math.PI * 2);
+  ctx.fillStyle = TEAL_DARK; ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+
+  // 中心点
+  ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+  ctx.fillStyle = INK; ctx.fill();
+
+  // 中心强度环
+  ctx.font = '600 14px sans-serif';
+  ctx.fillStyle = TEAL_DARK;
+  ctx.textAlign = 'center';
+  ctx.fillText('强度 ' + Math.round(mag / maxMag * 100) + '%', cx, cy + 32);
+})();
+
+/* ────────────────────────────────────────────────
+   方案 B · 双轴散点图
+   ──────────────────────────────────────────────── */
+(function drawScatter() {
+  const cv = document.getElementById('cv-scatter');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const pad = 60;
+  const plotW = W - pad * 2, plotH = H - pad * 2;
+  const cx = pad + plotW / 2, cy = pad + plotH / 2;
+
+  const toX = s => pad + (s + 6) / 12 * plotW;
+  const toY = s => pad + (1 - (s + 6) / 12) * plotH;
+
+  // 底色
+  ctx.fillStyle = 'rgba(248,245,241,0.55)';
+  ctx.fillRect(pad - 8, pad - 8, plotW + 16, plotH + 16);
+
+  // 细网格（每 2 单位一条）
+  ctx.strokeStyle = GRID_CLR; ctx.lineWidth = 1;
+  for (let v = -6; v <= 6; v += 2) {
+    if (v === 0) continue;
+    ctx.beginPath(); ctx.moveTo(toX(v), pad); ctx.lineTo(toX(v), pad + plotH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad, toY(v)); ctx.lineTo(pad + plotW, toY(v)); ctx.stroke();
+  }
+
+  // 外框
+  ctx.strokeStyle = AXIS_CLR; ctx.lineWidth = 2;
+  ctx.strokeRect(pad, pad, plotW, plotH);
+
+  // 中轴十字（粗）
+  ctx.strokeStyle = 'rgba(140,130,120,0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(toX(0), pad); ctx.lineTo(toX(0), pad + plotH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad, toY(0)); ctx.lineTo(pad + plotW, toY(0)); ctx.stroke();
+
+  // 轴刻度（-6, 0, +6）
+  ctx.fillStyle = MUTED; ctx.font = '13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('-6', toX(-6), pad + plotH + 22);
+  ctx.fillText('0',  toX(0),  pad + plotH + 22);
+  ctx.fillText('+6', toX(6),  pad + plotH + 22);
+  ctx.textAlign = 'right';
+  ctx.fillText('+6', pad - 10, toY(6) + 5);
+  ctx.fillText('0',  pad - 10, toY(0) + 5);
+  ctx.fillText('-6', pad - 10, toY(-6) + 5);
+
+  // 轴标签
+  ctx.fillStyle = INK; ctx.font = '600 15px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('← 含蓄    直接性    直接 →', cx, pad + plotH + 46);
+  ctx.save();
+  ctx.translate(pad - 38, cy);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('← 低分享    分享欲    高分享 →', 0, 0);
+  ctx.restore();
+
+  // 落点
+  const px = toX(S1), py = toY(S2);
+  // 外光晕
+  ctx.beginPath(); ctx.arc(px, py, 30, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(79,175,175,0.15)'; ctx.fill();
+  // 中圈
+  ctx.beginPath(); ctx.arc(px, py, 18, 0, Math.PI * 2);
+  ctx.fillStyle = TEAL_SOFT; ctx.fill();
+  // 主点
+  ctx.beginPath(); ctx.arc(px, py, 11, 0, Math.PI * 2);
+  ctx.fillStyle = TEAL_DARK; ctx.fill();
+  // 白心
+  ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+
+  // 标注坐标
+  ctx.font = '600 14px sans-serif';
+  ctx.fillStyle = TEAL_DARK;
+  ctx.textAlign = 'left';
+  ctx.fillText('(+6, -2)', px + 18, py - 14);
+})();
+
+/* ────────────────────────────────────────────────
+   方案 C · 双柱对比条
+   ──────────────────────────────────────────────── */
+(function drawBar() {
+  const cv = document.getElementById('cv-bar');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const pad = 60;
+  const barH = 50;
+  const trackY1 = 160, trackY2 = 320;
+  const trackW = W - pad * 2;
+  const mid = pad + trackW / 2;
+  const unit = trackW / 12;  // -6 ~ +6
+
+  // 标题
+  ctx.fillStyle = INK; ctx.font = '600 18px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('直接性', pad, trackY1 - 24);
+  ctx.fillText('分享欲', pad, trackY2 - 24);
+
+  // ── 直接性 条 ──
+  // 轨道底
+  ctx.fillStyle = 'rgba(180,170,160,0.20)';
+  ctx.fillRect(pad, trackY1, trackW, barH);
+  // 中线
+  ctx.strokeStyle = 'rgba(140,130,120,0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(mid, trackY1 - 8); ctx.lineTo(mid, trackY1 + barH + 8); ctx.stroke();
+
+  // 数值条（从 0 向右 +6）
+  const dirEnd = mid + S1 * unit;
+  ctx.fillStyle = TEAL;
+  ctx.fillRect(Math.min(mid, dirEnd), trackY1, Math.abs(dirEnd - mid), barH);
+  // 数值标签
+  ctx.fillStyle = '#fff'; ctx.font = '600 22px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('+' + S1, mid + (dirEnd - mid) / 2, trackY1 + barH / 2 + 8);
+  // 端点标签
+  ctx.fillStyle = MUTED; ctx.font = '13px sans-serif';
+  ctx.textAlign = 'left'; ctx.fillText('含蓄 -6', pad, trackY1 + barH + 22);
+  ctx.textAlign = 'center'; ctx.fillText('0', mid, trackY1 + barH + 22);
+  ctx.textAlign = 'right'; ctx.fillText('直接 +6', pad + trackW, trackY1 + barH + 22);
+
+  // ── 分享欲 条 ──
+  ctx.fillStyle = 'rgba(180,170,160,0.20)';
+  ctx.fillRect(pad, trackY2, trackW, barH);
+  ctx.strokeStyle = 'rgba(140,130,120,0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(mid, trackY2 - 8); ctx.lineTo(mid, trackY2 + barH + 8); ctx.stroke();
+
+  // 数值条（从 0 向左 -2）
+  const shareEnd = mid + S2 * unit;
+  ctx.fillStyle = '#B89A6A'; // 暖金对比
+  ctx.fillRect(Math.min(mid, shareEnd), trackY2, Math.abs(shareEnd - mid), barH);
+  ctx.fillStyle = '#fff'; ctx.font = '600 22px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(S2.toString(), mid + (shareEnd - mid) / 2, trackY2 + barH / 2 + 8);
+  ctx.fillStyle = MUTED; ctx.font = '13px sans-serif';
+  ctx.textAlign = 'left'; ctx.fillText('含蓄 -6', pad, trackY2 + barH + 22);
+  ctx.textAlign = 'center'; ctx.fillText('0', mid, trackY2 + barH + 22);
+  ctx.textAlign = 'right'; ctx.fillText('分享 +6', pad + trackW, trackY2 + barH + 22);
+
+  // 底部综合判断
+  ctx.fillStyle = TEAL_DARK; ctx.font = '600 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('综合 · 高直略含蓄型', cv.width / 2, 440);
+})();
+
+/* ────────────────────────────────────────────────
+   方案 D · 当前 9 宫格（对照，复刻 report.js 实现）
+   ──────────────────────────────────────────────── */
+(function drawGrid() {
+  const cv = document.getElementById('cv-grid');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const pad = 60;
+  const plotW = W - pad * 2, plotH = H - pad * 2;
+  const cx = pad + plotW / 2, cy = pad + plotH / 2;
+  const stepX = plotW / 3, stepY = plotH / 3;
+
+  const toX = s => pad + (s + 6) / 12 * plotW;
+  const toY = s => pad + (1 - (s + 6) / 12) * plotH;
+
+  const STYLE_GRID = [
+    ['含蓄分享型', '中直高分享型', '直爽热情型'],
+    ['含蓄中分享型', '平衡内敛型', '高直中分享型'],
+    ['含蓄收敛型', '中直低分享型', '清爽利落型'],
+  ];
+  const userCol = S1 > 3 ? 2 : S1 < -3 ? 0 : 1;
+  const userRow = S2 > 3 ? 0 : S2 < -3 ? 2 : 1;
+
+  // 背景
+  ctx.fillStyle = 'rgba(248,245,241,0.55)';
+  ctx.fillRect(pad - 8, pad - 8, plotW + 16, plotH + 16);
+
+  // 高亮格
+  ctx.fillStyle = TEAL_SOFT;
+  ctx.fillRect(pad + userCol * stepX, pad + userRow * stepY, stepX, stepY);
+
+  // 网格线
+  ctx.strokeStyle = GRID_CLR; ctx.lineWidth = 1;
+  for (let i = 1; i < 3; i++) {
+    ctx.beginPath(); ctx.moveTo(pad + i * stepX, pad); ctx.lineTo(pad + i * stepX, pad + plotH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad, pad + i * stepY); ctx.lineTo(pad + plotW, pad + i * stepY); ctx.stroke();
+  }
+  // 外框
+  ctx.strokeStyle = AXIS_CLR; ctx.lineWidth = 2;
+  ctx.strokeRect(pad, pad, plotW, plotH);
+
+  // 9 格风格名
+  ctx.textAlign = 'center';
+  STYLE_GRID.forEach((row, r) => {
+    row.forEach((name, c) => {
+      const isUser = (r === userRow && c === userCol);
+      const tx = pad + c * stepX + stepX / 2;
+      const ty = pad + r * stepY + stepY / 2;
+      ctx.font = isUser ? '600 16px sans-serif' : '13px sans-serif';
+      ctx.fillStyle = isUser ? '#3A3A4A' : 'rgba(110,100,90,0.75)';
+      ctx.fillText(name, tx, ty);
+    });
+  });
+
+  // 轴标签
+  ctx.font = '13px sans-serif'; ctx.fillStyle = MUTED;
+  ctx.textAlign = 'left'; ctx.fillText('含蓄', pad, pad + plotH + 22);
+  ctx.textAlign = 'right'; ctx.fillText('直接', pad + plotW, pad + plotH + 22);
+  ctx.textAlign = 'center'; ctx.fillText('← 直接性 →', cx, pad + plotH + 42);
+  ctx.textAlign = 'left';
+  ctx.fillText('高分享', pad - 50, pad + 12);
+  ctx.fillText('低分享', pad - 50, pad + plotH);
+
+  // 用户点
+  const px = toX(S1), py = toY(S2);
+  ctx.beginPath(); ctx.arc(px, py, 18, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(79,175,175,0.20)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, 11, 0, Math.PI * 2);
+  ctx.fillStyle = TEAL_DARK; ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+})();
+</script>
+
+</body>
+</html>

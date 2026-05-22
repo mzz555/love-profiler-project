@@ -62,31 +62,44 @@
       <text class="celebration-star s12">✨</text>
     </view>
 
-    <!-- 头部：人格卡片（仿图片样式） -->
+    <!-- 头部：人格卡片（截图布局：上部 文字+头像 横排，底部 detail 描述段横跨整个宽度） -->
     <view class="str-hero-card">
-      <view class="str-hero-left">
-        <view class="str-code-badge">
-          <text class="str-code-text">{{ personalityType }}</text>
-        </view>
-        <text class="str-hero-name">{{ streamingTypeName }}</text>
-        <view tt:if="{{streamingTypeTagline}}" class="str-tagline-badge">
-          <text class="str-tagline-text">{{ streamingTypeTagline }}</text>
-        </view>
-        <!-- D1/D2/D3 段落解码标签：安全型依恋 · 清晰边界 · 问题冲突模式 -->
-        <view tt:if="{{segmentDecode.length}}" class="str-segments">
-          <view tt:for="{{segmentDecode}}" tt:key="code"
-                class="str-seg-pill {{item.is_neutral ? 'seg-neutral' : (item.is_healthy ? 'seg-healthy' : 'seg-problem')}}">
-            <text class="str-seg-text">{{item.label_cn}}</text>
+      <!-- 上部：左文字 + 右头像（顶部对齐） -->
+      <view class="str-hero-top">
+        <view class="str-hero-left">
+          <!-- 引导小字 -->
+          <text class="str-prelude-text">你是：</text>
+
+          <!-- 主标题：type_name 大字 -->
+          <text class="str-hero-name">{{ streamingTypeName }}</text>
+
+          <!-- 副标题行：code 小标 + chips（D1/D2 段落解码前 2 条） -->
+          <view class="str-subtitle-row">
+            <text tt:if="{{personalityType}}" class="str-subtitle-code">{{ personalityType }}</text>
+            <view tt:if="{{segmentDecode.length}}" class="str-segments">
+              <view tt:for="{{segmentDecode}}" tt:key="code"
+                    tt:if="{{index < 2}}"
+                    class="str-seg-pill {{item.is_neutral ? 'seg-neutral' : (item.is_healthy ? 'seg-healthy' : 'seg-problem')}}">
+                <text class="str-seg-text">{{item.label_cn}}</text>
+              </view>
+            </view>
           </view>
         </view>
-        <view class="str-status-mini">
-          <view tt:if="{{!streamingDone}}" class="str-blink-dot" />
-          <text class="str-status-mini-text">{{ !streamingDone ? '正在解读中…' : '✓ 解读完成' }}</text>
+        <view class="str-hero-right">
+          <image tt:if="{{heroImageUrl}}" class="str-hero-char {{heroImageReady ? 'show' : ''}}" src="{{heroImageUrl}}" mode="aspectFit" />
+          <view tt:else class="str-hero-char-placeholder" />
         </view>
       </view>
-      <view class="str-hero-right">
-        <image tt:if="{{heroImageUrl}}" class="str-hero-char {{heroImageReady ? 'show' : ''}}" src="{{heroImageUrl}}" mode="aspectFit" />
-        <view tt:else class="str-hero-char-placeholder" />
+
+      <!-- 底部：detail 描述段（横跨整个卡片宽度） -->
+      <view tt:if="{{streamingTypeDetail}}" class="str-detail-block">
+        <text class="str-detail-text">{{ streamingTypeDetail }}</text>
+      </view>
+
+      <!-- 状态提示（卡片底部） -->
+      <view class="str-status-mini">
+        <view tt:if="{{!streamingDone}}" class="str-blink-dot" />
+        <text class="str-status-mini-text">{{ !streamingDone ? '正在解读中…' : '✓ 解读完成' }}</text>
       </view>
     </view>
 
