@@ -158,8 +158,9 @@ async def _chat_completion_once(
                 raise TransientLLMError(f"API error {http_status_code}") from exc
             raise LLMError(f"API error {http_status_code}") from exc
         except httpx.HTTPError as exc:
-            # ConnectError / ReadTimeout / NetworkError 等抖动类
-            error_message = f"Network error: {exc}"
+            # ConnectError / ReadTimeout / RemoteProtocolError 等抖动类
+            # 用 type 名 + repr 而不是 str，避免某些异常 __str__ 为空时尾巴空白看不出根因
+            error_message = f"Network error ({type(exc).__name__}): {exc!r}"
             raise TransientLLMError(error_message) from exc
 
         try:
@@ -364,4 +365,6 @@ async def stream_chat_completion(
                 if content:
                     yield content
     except httpx.HTTPError as exc:
-        raise TransientLLMError(f"Network error: {exc}") from exc
+        # stream 模式下豆包侧/中间网关常抛 RemoteProtocolError 且 __str__ 为空
+        # 用 type 名 + repr 保住根因，便于排查"5xxx ms 后被对端关闭"这类抖动
+        raise TransientLLMError(f"Network error ({type(exc).__name__}): {exc!r}") from exc
