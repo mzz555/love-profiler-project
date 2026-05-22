@@ -39,11 +39,15 @@ _NORMATIVE_PATTERNS = ("你需要", "你应该", "要学会", "必须")
 MIN_SECTION_CHARS: dict[str, int] = {
     "Title":       4,
     "Opening":     80,
-    "Attachment":  80,
-    "Boundary":    80,
-    "Conflict":    80,
+    # D1/D2/D3 prompt 目标 120-180 字，质量门 100（弹性 20 字），
+    # 比之前的 80（弹性 40 字）更严，逼 LLM 把段写到 120+ 才稳过。
+    # 历史：80 阈值时 LLM 经常写到 110 字就停，逼近下限不饱满。
+    # 参见 [[feedback-quality-gate-prompt-pair]]
+    "Attachment":  100,
+    "Boundary":    100,
+    "Conflict":    100,
     # Language/Style 是 D4/D5 辅助维度，prompt 目标 80-120/80-100 字，
-    # 质量门留 40 字弹性 ⇒ 阈值降到 40。参见 [[feedback-quality-gate-prompt-pair]]
+    # 质量门留 40 字弹性 ⇒ 阈值 40。参见 [[feedback-quality-gate-prompt-pair]]
     "Language":    40,
     "Style":       40,
     "Highlight":   100,

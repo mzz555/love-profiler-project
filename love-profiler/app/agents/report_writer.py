@@ -137,7 +137,9 @@ def build_user_message(diagnosis: dict) -> str:
     declared_name = d4_name_by_code.get(declared) or _D4_FALLBACK_NAMES.get(declared, declared)
 
     lines.append(_meta_line("D4"))
-    lines.append(f"    · top2 偏好：{top2_names}")
+    # 用中文顿号拼接而非 Python list 字面量 ['x','y']，避免给 LLM 灌方括号/引号
+    # （Python repr 形式会让 LLM 误以为占位符语法是允许的输出形式）
+    lines.append(f"    · top2 偏好：{'、'.join(top2_names)}")
     for d in d4_details:
         lines.append(f"    · {d.get('name', '')}：{d.get('detail', '')}")
     if not aligned and declared_name and top2_names:
