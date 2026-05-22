@@ -29,7 +29,7 @@ def test_module_constants_resolved_at_import():
     assert REPORT_VERSION >= 1
 
 
-def test_current_prompt_version_is_2_3():
-    """守门测试：当前 docs/agent-b-system-prompt.md 的版本应为 2.3；
+def test_current_prompt_version_is_2_4():
+    """守门测试：当前 docs/agent-b-system-prompt.md 的版本应为 2.4；
     改 prompt 时同步更新此处和文件头。"""
-    assert PROMPT_VERSION == "2.3"
+    assert PROMPT_VERSION == "2.4"

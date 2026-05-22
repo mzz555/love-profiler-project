@@ -40,6 +40,18 @@ PROMPT_VERSION: str = _parse_prompt_version(_PROMPT_RAW)
 # 报告 Section 结构版本号；与 prompt-version 解耦，仅在 Section 拆分/重命名时升级
 REPORT_VERSION: int = 1
 
+# T1-T5 中文名兜底映射（D4 自我认知盲区场景：declared 不在 top2 时，
+# diagnosis.D4_details 只含 top2 两条，查不到 declared 的中文名，
+# 会把 "T1" 这种内部代码原样塞进 prompt → LLM 把方括号占位符原样输出）。
+# 这里的静态映射与 base_D4_type 表一致，但用于盲区兜底翻译。
+_D4_FALLBACK_NAMES = {
+    "T1": "言语肯定",
+    "T2": "精心时刻",
+    "T3": "用心小惊喜",
+    "T4": "服务行动",
+    "T5": "身体接触",
+}
+
 
 class ReportWriterError(Exception):
     """Raised when the report writer fails to return meaningful text."""
@@ -119,8 +131,10 @@ def build_user_message(diagnosis: dict) -> str:
     declared = d4.get("declared", "")
     d4_details = diagnosis.get("D4_details", []) or []
     d4_name_by_code = {d.get("code", ""): d.get("name", "") for d in d4_details}
-    top2_names = [d4_name_by_code.get(c, c) for c in top2]
-    declared_name = d4_name_by_code.get(declared, declared)
+    # 优先用 DB 注入的 D4_details（含 detail 描述），缺失时落静态映射兜底。
+    # 关键：declared 在盲区场景下永远不在 top2，DB 详情不会含它 ⇒ 必走兜底。
+    top2_names = [d4_name_by_code.get(c) or _D4_FALLBACK_NAMES.get(c, c) for c in top2]
+    declared_name = d4_name_by_code.get(declared) or _D4_FALLBACK_NAMES.get(declared, declared)
 
     lines.append(_meta_line("D4"))
     lines.append(f"    · top2 偏好：{top2_names}")

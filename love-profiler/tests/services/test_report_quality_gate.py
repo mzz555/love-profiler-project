@@ -164,3 +164,31 @@ def test_check_report_no_warnings_when_seed_referenced():
     text = _full_report(d)
     warnings = check_report(text, d)
     assert not any(w.kind == "seed_not_referenced" for w in warnings)
+
+
+def test_check_report_warns_on_normative_tone():
+    """规训词巡检：报告里出现"你需要/必须/要学会/应该"必触发软警告。
+
+    历史案例：highlights 段写"你需要学会在压力下控制自己的表达方式"
+    一句话同时踩两个禁词。
+    """
+    d = _diagnosis()
+    bad_hl = (
+        d["highlights"][0]["report_seed"][:4] + "扩写"
+        + "压力一来你需要学会先深呼吸再说话" + ("展" * 80)
+    )
+    text = _full_report(d, highlight_body=bad_hl)
+    warnings = check_report(text, d)
+    normative = [w for w in warnings if w.kind == "normative_tone"]
+    assert normative, "应产生 normative_tone 警告"
+    # 命中的具体规训词应出现在 detail 里
+    assert "你需要" in normative[0].detail
+    assert "要学会" in normative[0].detail
+
+
+def test_check_report_no_normative_warning_when_clean():
+    """干净的报告不应触发 normative_tone 警告。"""
+    d = _diagnosis()
+    text = _full_report(d)
+    warnings = check_report(text, d)
+    assert not any(w.kind == "normative_tone" for w in warnings)

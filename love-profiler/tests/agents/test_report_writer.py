@@ -158,6 +158,30 @@ def test_build_user_message_aligned_false_emits_blind_spot_note():
     assert "精心时刻" in msg
 
 
+def test_build_user_message_declared_outside_top2_uses_fallback_name():
+    """盲区典型场景：declared ∉ top2，D4_details 不含 declared 详情，
+    必须靠 _D4_FALLBACK_NAMES 兜底，绝不能把内部代码 T1 塞进 prompt。
+
+    历史 bug：兜底缺失时 LLM 收到「用户主动选择的是「T1」」，
+    导致它把 prompt 模板里的 [用户主观选择的类型中文名] 占位符原样输出。
+    """
+    diag = {**DIAGNOSIS, "dimensions": {**DIAGNOSIS["dimensions"], "D4": {
+        "top2": ["T4", "T5"], "aligned": False, "declared": "T1",
+    }}, "D4_details": [
+        {"code": "T4", "name": "服务行动", "detail": "希望对方用实际行动..."},
+        {"code": "T5", "name": "身体接触", "detail": "希望通过拥抱..."},
+    ]}
+    msg = build_user_message(diag)
+    assert "自我认知盲区" in msg
+    # declared T1 → 静态兜底翻译为「言语肯定」
+    assert "言语肯定" in msg
+    # top2[0] T4 → DB 注入翻译为「服务行动」
+    assert "服务行动" in msg
+    # 绝不能出现裸 T1 / T4 这种内部代码（盲区句子里）
+    assert "「T1」" not in msg
+    assert "「T4」" not in msg
+
+
 def test_build_user_message_pursue_avoid_role_emitted():
     diag = {**DIAGNOSIS, "dimensions": {**DIAGNOSIS["dimensions"], "D3": {
         "interp": "mixed", "pursue_avoid": "pursue",

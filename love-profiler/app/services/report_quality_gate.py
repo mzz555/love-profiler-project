@@ -30,6 +30,12 @@ REQUIRED_SECTIONS = [
 
 # Highlight 段是可选必备：当 diagnosis.highlights 非空时必须存在，否则可省略
 
+# 规训词清单 — 与 docs/agent-b-system-prompt.md 第 7 条"规训语气"禁令对齐。
+# 命中触发软警告（不 raise），用于监控 prompt 遵守度，长期趋势可判断是否需要加强 prompt 措辞。
+# 历史案例：LLM 在 highlights 段写"你需要学会在压力下控制自己的表达方式"，一句话同时
+# 踩了"你需要"+"学会"两个禁词。
+_NORMATIVE_PATTERNS = ("你需要", "你应该", "要学会", "必须")
+
 MIN_SECTION_CHARS: dict[str, int] = {
     "Title":       4,
     "Opening":     80,
@@ -146,6 +152,15 @@ def check_report(text: str, diagnosis: dict) -> list[QualityWarning]:
             warnings.append(QualityWarning(
                 "seed_not_referenced", "Highlight",
                 detail=f"未引用：{missing}",
+            ))
+
+    # 规训语气巡检（全报告范围内）—— prompt 已明令禁止，命中说明 LLM 没遵守。
+    for sec_name, body in sections.items():
+        hits = [w for w in _NORMATIVE_PATTERNS if w in body]
+        if hits:
+            warnings.append(QualityWarning(
+                "normative_tone", sec_name,
+                detail=f"命中规训词：{hits}",
             ))
 
     return warnings
