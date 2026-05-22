@@ -13,11 +13,17 @@ Phase C.1：run_stream 支持 resumed_sections — 上次中断时已落库的 s
 非空时在 user message 末尾追加"接续生成"指令，要求 LLM 跳过已完成段。
 """
 
+import asyncio
 import logging
 import pathlib
 import re
 
-from app.services.llm_client import chat_completion, stream_chat_completion
+from app.services.llm_client import (
+    LLMError,
+    TransientLLMError,
+    chat_completion,
+    stream_chat_completion,
+)
 from app.services.report_quality_gate import QualityGateError, check_report
 
 logger = logging.getLogger(__name__)
@@ -39,6 +45,15 @@ def _parse_prompt_version(raw: str) -> str:
 PROMPT_VERSION: str = _parse_prompt_version(_PROMPT_RAW)
 # 报告 Section 结构版本号；与 prompt-version 解耦，仅在 Section 拆分/重命名时升级
 REPORT_VERSION: int = 1
+
+# run_stream 流式韧性参数：
+# - stream attempts：原调用 + 1 次重试 = 2（间隔 1s）
+# - 仍失败且未 yield 任何 chunk → 降级到非流式 chat_completion（自带 3 次内置重试）
+# - 降级路径模拟流式输出：每 8 字一段、间隔 40ms，前端体验上像稍慢的流式
+_MAX_STREAM_ATTEMPTS = 2
+_STREAM_RETRY_DELAY_SECONDS = 1.0
+_FALLBACK_CHUNK_SIZE = 8
+_FALLBACK_CHUNK_DELAY_SECONDS = 0.04
 
 # T1-T5 中文名兜底映射（D4 自我认知盲区场景：declared 不在 top2 时，
 # diagnosis.D4_details 只含 top2 两条，查不到 declared 的中文名，
@@ -248,14 +263,73 @@ async def run_stream(
     all_text = ""
     usage_sink: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0}
 
-    async for chunk in stream_chat_completion(
-        system_prompt=REPORT_WRITER_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_msg}],
-        temperature=0.6,
-        usage_sink=usage_sink,
-    ):
-        all_text += chunk
-        yield chunk
+    # ── 流式韧性：重试 1 次 + 降级到非流式（chat_completion 自带 3 次内置重试）─
+    # 中途已 yield chunk 后失败：不能重试也不能降级（前端已收到部分文本，补不回去）。
+    chunks_yielded = 0
+    last_stream_exc: TransientLLMError | None = None
+    for attempt in range(_MAX_STREAM_ATTEMPTS):
+        try:
+            async for chunk in stream_chat_completion(
+                system_prompt=REPORT_WRITER_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_msg}],
+                temperature=0.6,
+                usage_sink=usage_sink,
+            ):
+                chunks_yielded += 1
+                all_text += chunk
+                yield chunk
+            last_stream_exc = None
+            break
+        except TransientLLMError as exc:
+            last_stream_exc = exc
+            if chunks_yielded > 0:
+                logger.error(
+                    "[report_writer/stream] session=%s 中途失败 attempt=%d 已 yield %d 字符 (%d chunks)，无法重试/降级：%s",
+                    sid_short, attempt, len(all_text), chunks_yielded, exc,
+                )
+                raise
+            if attempt + 1 < _MAX_STREAM_ATTEMPTS:
+                logger.warning(
+                    "[report_writer/stream] session=%s attempt=%d 流式失败，%.1fs 后重试：%s",
+                    sid_short, attempt, _STREAM_RETRY_DELAY_SECONDS, exc,
+                )
+                await asyncio.sleep(_STREAM_RETRY_DELAY_SECONDS)
+            # 否则跳出循环，外面走降级
+
+    if last_stream_exc is not None:
+        # 所有 stream attempts 都挂了且没 yield 任何 chunk → 降级到非流式
+        logger.warning(
+            "[report_writer/stream] session=%s stream 重试 %d 次全部失败，降级到非流式 chat_completion：%s",
+            sid_short, _MAX_STREAM_ATTEMPTS, last_stream_exc,
+        )
+        try:
+            raw = await chat_completion(
+                system_prompt=REPORT_WRITER_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_msg}],
+                temperature=0.6,
+                agent="agent_b",
+                session_id=session_id,
+                usage_sink=usage_sink,
+            )
+        except (TransientLLMError, LLMError) as exc2:
+            logger.error(
+                "[report_writer/stream] session=%s 降级 chat_completion 也失败：%s",
+                sid_short, exc2,
+            )
+            raise
+        if not raw.strip():
+            raise ReportWriterError("fallback chat_completion empty") from last_stream_exc
+        # 模拟流式输出：按固定切片 + 短 sleep，前端体验上像稍慢的流式
+        for i in range(0, len(raw), _FALLBACK_CHUNK_SIZE):
+            piece = raw[i:i + _FALLBACK_CHUNK_SIZE]
+            all_text += piece
+            yield piece
+            await asyncio.sleep(_FALLBACK_CHUNK_DELAY_SECONDS)
+        logger.info(
+            "[report_writer/stream] session=%s 降级完成 chars=%d tokens=%d+%d",
+            sid_short, len(raw),
+            usage_sink["prompt_tokens"], usage_sink["completion_tokens"],
+        )
 
     if not all_text.strip():
         raise ReportWriterError("run_stream: empty response")

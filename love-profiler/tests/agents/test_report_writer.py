@@ -148,6 +148,143 @@ def test_build_user_message_d5_omits_guide_line_when_missing():
     assert "该象限写作方向" not in msg
 
 
+# ── stream 韧性：重试 + 降级 测试 ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_run_stream_retries_then_falls_back_to_non_stream(monkeypatch, caplog):
+    """stream 重试 1 次仍失败 + 未 yield 任何 chunk → 降级到 chat_completion 成功。
+
+    验证：
+    1) stream 被调用 2 次（原 + 1 次重试）
+    2) chat_completion fallback 被调用 1 次
+    3) 完整文本通过 yield 传给客户端
+    4) 日志里能看到「降级」关键字
+    """
+    import logging
+    from app.agents import report_writer
+    from app.services.llm_client import TransientLLMError
+
+    stream_attempts: list[int] = []
+
+    async def fake_stream_fail(**kwargs):
+        stream_attempts.append(len(stream_attempts))
+        raise TransientLLMError("Network error (RemoteProtocolError): mock disconnect")
+        yield  # makes this an async generator; unreachable
+
+    chat_calls: list[dict] = []
+
+    async def fake_chat(**kwargs):
+        chat_calls.append(kwargs)
+        usage_sink = kwargs.get("usage_sink")
+        if usage_sink is not None:
+            usage_sink["prompt_tokens"] = 800
+            usage_sink["completion_tokens"] = 500
+        return REPORT_TEXT
+
+    # 跳过真实 sleep，避免测试等待 1s 重试间隔
+    async def fake_sleep(_s):
+        return None
+
+    monkeypatch.setattr(report_writer, "stream_chat_completion", fake_stream_fail)
+    monkeypatch.setattr(report_writer, "chat_completion", fake_chat)
+    monkeypatch.setattr(report_writer.asyncio, "sleep", fake_sleep)
+
+    chunks: list[str] = []
+    final = None
+    with caplog.at_level(logging.WARNING, logger="app.agents.report_writer"):
+        async for item in report_writer.run_stream(DIAGNOSIS):
+            if isinstance(item, str):
+                chunks.append(item)
+            else:
+                final = item
+
+    assert len(stream_attempts) == 2, "stream 应被原调用 + 重试共调 2 次"
+    assert len(chat_calls) == 1, "fallback chat_completion 应被调 1 次"
+    text = "".join(chunks)
+    assert text.strip() == REPORT_TEXT.strip(), "完整 REPORT_TEXT 应通过分块 yield 传给客户端"
+    assert final is not None and final["report_text"].strip() == REPORT_TEXT.strip()
+    # 日志可观测
+    log_text = "\n".join(r.message for r in caplog.records)
+    assert "降级" in log_text
+
+
+@pytest.mark.asyncio
+async def test_run_stream_mid_failure_does_not_fallback(monkeypatch, caplog):
+    """stream 中途已 yield 部分 chunk 后失败 → raise，不重试也不降级（前端已收到部分文本，补不回）。"""
+    import logging
+    from app.agents import report_writer
+    from app.services.llm_client import TransientLLMError
+
+    chat_calls: list[dict] = []
+
+    async def fake_stream_mid_fail(**kwargs):
+        yield "前半段已经发出去 "
+        raise TransientLLMError("Network error (ReadError): mock mid-stream")
+
+    async def fake_chat(**kwargs):
+        chat_calls.append(kwargs)
+        return REPORT_TEXT
+
+    async def fake_sleep(_s):
+        return None
+
+    monkeypatch.setattr(report_writer, "stream_chat_completion", fake_stream_mid_fail)
+    monkeypatch.setattr(report_writer, "chat_completion", fake_chat)
+    monkeypatch.setattr(report_writer.asyncio, "sleep", fake_sleep)
+
+    chunks: list[str] = []
+    with caplog.at_level(logging.ERROR, logger="app.agents.report_writer"):
+        with pytest.raises(TransientLLMError):
+            async for item in report_writer.run_stream(DIAGNOSIS):
+                if isinstance(item, str):
+                    chunks.append(item)
+
+    assert chunks == ["前半段已经发出去 "], "中途失败前已 yield 的 chunk 应保留"
+    assert len(chat_calls) == 0, "中途失败不应触发 fallback"
+    # 日志包含"中途失败"或"无法重试/降级"关键字
+    log_text = "\n".join(r.message for r in caplog.records)
+    assert "中途失败" in log_text or "无法" in log_text
+
+
+@pytest.mark.asyncio
+async def test_run_stream_succeeds_first_try_no_retry_no_fallback(monkeypatch):
+    """正常路径：stream 第一次就成功，不触发重试也不调 fallback。"""
+    from app.agents import report_writer
+
+    stream_calls: list[int] = []
+    chat_calls: list[dict] = []
+
+    async def fake_stream_ok(**kwargs):
+        stream_calls.append(1)
+        usage_sink = kwargs.get("usage_sink")
+        if usage_sink is not None:
+            usage_sink["prompt_tokens"] = 800
+            usage_sink["completion_tokens"] = 500
+        for piece in (REPORT_TEXT[i:i+50] for i in range(0, len(REPORT_TEXT), 50)):
+            yield piece
+
+    async def fake_chat(**kwargs):
+        chat_calls.append(kwargs)
+        return REPORT_TEXT
+
+    monkeypatch.setattr(report_writer, "stream_chat_completion", fake_stream_ok)
+    monkeypatch.setattr(report_writer, "chat_completion", fake_chat)
+
+    chunks: list[str] = []
+    final = None
+    async for item in report_writer.run_stream(DIAGNOSIS):
+        if isinstance(item, str):
+            chunks.append(item)
+        else:
+            final = item
+
+    assert len(stream_calls) == 1
+    assert len(chat_calls) == 0, "成功路径不应触发 fallback"
+    assert "".join(chunks).strip() == REPORT_TEXT.strip()
+    assert final is not None
+
+
 def test_build_user_message_aligned_false_emits_blind_spot_note():
     diag = {**DIAGNOSIS, "dimensions": {**DIAGNOSIS["dimensions"], "D4": {
         "top2": ["T1", "T2"], "aligned": False, "declared": "T2",
