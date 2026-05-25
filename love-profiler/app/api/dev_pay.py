@@ -6,9 +6,10 @@ POST /dev/pay-success?out_trade_no=xxx  →  { status: "paid" }
 """
 
 import logging
-import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.config import settings
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 @router.post("/pay-success")
 def dev_pay_success(out_trade_no: str, db: Session = Depends(get_db)) -> dict:
     """将指定订单直接置为已支付（DEV_MODE 专用）。"""
-    if os.environ.get("DEV_MODE", "").lower() != "true":
+    if not settings.dev_mode:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
     order = db.query(Order).filter(Order.out_trade_no == out_trade_no).first()

@@ -15,8 +15,9 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import date as _date_cls
+
+from app.config import settings
 
 from sqlalchemy.orm import Session
 
@@ -37,21 +38,11 @@ class QuotaExceededError(Exception):
 
 
 def _dev_mode() -> bool:
-    return os.environ.get("DEV_MODE", "").lower() == "true"
+    return settings.dev_mode
 
 
 def _limit() -> int:
-    raw = os.environ.get("USER_DAILY_TOKEN_QUOTA", "")
-    if not raw:
-        return _DEFAULT_DAILY_LIMIT
-    try:
-        return int(raw)
-    except ValueError:
-        logger.warning(
-            "[token_quota] 环境变量 USER_DAILY_TOKEN_QUOTA 非法值 %r，回退默认 %d",
-            raw, _DEFAULT_DAILY_LIMIT,
-        )
-        return _DEFAULT_DAILY_LIMIT
+    return settings.user_daily_token_quota
 
 
 def add_usage(

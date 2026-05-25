@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 
@@ -18,6 +17,7 @@ logger = logging.getLogger(__name__)
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.config import settings
 from app.limiter import limiter
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -69,8 +69,8 @@ async def create_order(
 
     out_trade_no = f"LP{uuid.uuid4().hex[:20].upper()}"
 
-    app_id = os.environ["DOUYIN_APP_ID"]
-    app_secret = os.environ["DOUYIN_APP_SECRET"]
+    app_id = settings.douyin_app_id
+    app_secret = settings.douyin_app_secret
 
     payload = {
         "app_id": app_id,
@@ -114,9 +114,9 @@ async def payment_callback(request: Request, db: Session = Depends(get_db)):
     body_bytes = await request.body()
 
     # Verify HMAC signature from ByteDance (fail-closed: 缺 token 直接拒绝)
-    token = os.environ.get("DOUYIN_PAY_TOKEN", "")
+    token = settings.douyin_pay_token
     if not token:
-        if os.environ.get("DEV_MODE", "").lower() == "true":
+        if settings.dev_mode:
             logger.warning("[/pay/callback] DEV_MODE: 跳过验签")
         else:
             logger.error("[/pay/callback] DOUYIN_PAY_TOKEN 未配置，拒绝回调（fail-closed）")

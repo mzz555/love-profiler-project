@@ -2,11 +2,11 @@
 JWT auth middleware — validates Bearer tokens on protected routes.
 """
 
-import os
-
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.config import settings
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -15,10 +15,9 @@ TOKEN_EXPIRE_HOURS = 72
 
 
 def _jwt_secret() -> str:
-    secret = os.environ.get("JWT_SECRET", "")
-    if not secret:
+    if not settings.jwt_secret:
         raise RuntimeError("JWT_SECRET environment variable is not set")
-    return secret
+    return settings.jwt_secret
 
 
 def create_access_token(user_id: int) -> str:

@@ -17,12 +17,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import pathlib
 import re
 import time
 from typing import Any
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.assessment import Assessment
 from app.models.report_quality_audit import ReportQualityAudit
@@ -48,13 +48,11 @@ _pending_audit_tasks: set[asyncio.Task] = set()
 
 
 def is_enabled() -> bool:
-    return os.environ.get("JUDGE_ENABLED", "").lower() == "true"
+    return settings.judge_enabled
 
 
 def _judge_model() -> str:
-    """优先 JUDGE_MODEL；缺省回退到 the report writer 同模型，保证 prod 默认可用。"""
-    override = os.environ.get("JUDGE_MODEL", "").strip()
-    return override or os.environ.get("DOUBAO_MODEL", "")
+    return settings.judge_model or settings.doubao_model
 
 
 def build_judge_user_message(diagnosis: dict, report_text: str) -> str:

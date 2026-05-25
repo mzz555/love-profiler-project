@@ -3,13 +3,12 @@ Auth API — exchange Douyin code2session result for a JWT.
 POST /auth/login  { code: str }  →  { token: str }
 """
 
-import os
-
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.limiter import limiter
 from app.middleware.auth import create_access_token
@@ -34,8 +33,8 @@ async def _code2session(code: str) -> str:
     Raises:
         HTTPException 502: If the Douyin API call fails or returns an error.
     """
-    app_id = os.environ["DOUYIN_APP_ID"]
-    app_secret = os.environ["DOUYIN_APP_SECRET"]
+    app_id = settings.douyin_app_id
+    app_secret = settings.douyin_app_secret
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:

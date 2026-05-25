@@ -41,6 +41,7 @@ from app.services.admin_metrics import (
 )
 from app.api.admin_config import TABLE_CONFIG
 from app.api.admin_helpers import get_row, query_table, update_row
+from app.config import settings
 from app.limiter import limiter
 
 
@@ -56,9 +57,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # ---------------------------------------------------------------------------
 
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
-    if os.environ.get("DEV_MODE", "").lower() == "true":
+    if settings.dev_mode:
         return
-    expected = os.environ.get("ADMIN_TOKEN", "")
+    expected = settings.admin_token
     if expected and x_admin_token == expected:
         return
     raise HTTPException(status_code=404)

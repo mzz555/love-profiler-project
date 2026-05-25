@@ -16,6 +16,8 @@ import os
 import time
 from collections.abc import AsyncIterator
 
+from app.config import settings
+
 import httpx
 from starlette.concurrency import run_in_threadpool
 
@@ -123,8 +125,8 @@ async def _chat_completion_once(
     可重试错误（5xx / 网络 / 协议异常）抛 TransientLLMError；
     不可重试错误（4xx）抛基类 LLMError。
     """
-    api_key = os.environ["DOUBAO_API_KEY"]
-    model = os.environ["DOUBAO_MODEL"]
+    api_key = settings.doubao_api_key
+    model = settings.doubao_model
 
     payload = {
         "model": model,
@@ -216,7 +218,7 @@ async def _chat_completion_once(
         _background_log_tasks.add(db_task)
         db_task.add_done_callback(_background_log_tasks.discard)
 
-        log_path = os.environ.get("AI_LOG_PATH", "")
+        log_path = settings.ai_log_path
         if log_path:
             try:
                 log_ai_call(
@@ -311,8 +313,8 @@ async def stream_chat_completion(
     Raises:
         LLMError: On HTTP errors or network failures.
     """
-    api_key = os.environ["DOUBAO_API_KEY"]
-    model = os.environ["DOUBAO_MODEL"]
+    api_key = settings.doubao_api_key
+    model = settings.doubao_model
 
     payload = {
         "model": model,

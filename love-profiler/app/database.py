@@ -2,14 +2,14 @@
 Database — SQLAlchemy engine, declarative base, and session factory.
 """
 
-import os
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./love_profiler.db")
+from app.config import settings
 
-_is_dev = os.environ.get("DEV_MODE", "").lower() == "true"
+DATABASE_URL = settings.database_url
+
+_is_dev = settings.dev_mode
 if DATABASE_URL.startswith("sqlite") and not _is_dev:
     raise RuntimeError(
         "生产环境禁止使用 sqlite。请设置 DATABASE_URL 为 PostgreSQL 连接串，"

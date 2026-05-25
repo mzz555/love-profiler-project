@@ -239,9 +239,8 @@ async def _stream_cached(websocket: WebSocket, assessment: Assessment) -> None:
 
 
 def _resume_enabled() -> bool:
-    """Phase C.1 接续生成总开关；默认开。豆包效果不好时可设 false 临时回退。"""
-    import os
-    return os.environ.get("RESUME_ENABLED", "true").lower() != "false"
+    from app.config import settings as _s
+    return _s.resume_enabled
 
 
 def _load_partial_sections(rec: Assessment) -> dict[str, str]:

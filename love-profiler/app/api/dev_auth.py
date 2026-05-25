@@ -6,9 +6,10 @@ POST /auth/dev-login  →  { token: str }
 """
 
 import logging
-import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 from pydantic import BaseModel
@@ -32,7 +33,7 @@ class DevLoginResponse(BaseModel):
 @router.post("/dev-login", response_model=DevLoginResponse)
 def dev_login(db: Session = Depends(get_db)) -> DevLoginResponse:
     """开发专用登录，返回固定测试用户的 JWT，无需抖音凭据。"""
-    if os.environ.get("DEV_MODE", "").lower() != "true":
+    if not settings.dev_mode:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Not found",
