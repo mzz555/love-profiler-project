@@ -39,16 +39,18 @@ Page({
       this._loadPortraits();
       return;
     }
-    // 1) 先试 /auth/dev-login (本地 DEV_MODE 后端的快路径，省 code2session 调用)
-    try {
-      const res = await app.request({ url: '/auth/dev-login' });
-      app.setToken(res.token);
-      console.log('[login] dev-login OK');
-      this.setData({ loginReady: true });
-      this._loadPortraits();
-      return;
-    } catch (e) {
-      console.log('[login] dev-login 不可用，走真实 OAuth', e && e.statusCode);
+    // 1) DEV 环境先试 /auth/dev-login，生产环境直接跳过避免无谓 401
+    if (app.isDev) {
+      try {
+        const res = await app.request({ url: '/auth/dev-login' });
+        app.setToken(res.token);
+        console.log('[login] dev-login OK');
+        this.setData({ loginReady: true });
+        this._loadPortraits();
+        return;
+      } catch (e) {
+        console.log('[login] dev-login 不可用，走真实 OAuth', e && e.statusCode);
+      }
     }
     // 2) Fallback: tt.login 拿 code → POST /auth/login (真机/生产路径)
     try {

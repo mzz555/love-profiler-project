@@ -106,7 +106,7 @@ def dim_chart(diagnosis: dict) -> dict:
     d123 = [
         {"key": k, "name": _names[k],
          "raw": dims.get(k, {}).get("raw", 0),
-         "interp": dims.get(k, {}).get("interp", "mixed")}
+         "interp": dims.get(k, {}).get("interp", "moderate_secure")}
         for k in ("D1", "D2", "D3")
     ]
     d4_norm = dims.get("D4", {}).get("normalized", {t: 0.0 for t in ("T1", "T2", "T3", "T4", "T5")})

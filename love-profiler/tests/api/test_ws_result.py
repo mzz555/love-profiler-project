@@ -180,9 +180,9 @@ def test_dim_chart_returns_full_structure():
 
 def test_dim_chart_empty_diagnosis_fills_defaults():
     chart = _dim_chart({})
-    # D1-D3 默认 raw=0 interp=mixed
+    # D1-D3 默认 raw=0 interp=moderate_secure
     for row in chart["d123"]:
-        assert row["raw"] == 0 and row["interp"] == "mixed"
+        assert row["raw"] == 0 and row["interp"] == "moderate_secure"
     # D4 5 类全 0.0
     assert chart["d4"] == {"T1": 0.0, "T2": 0.0, "T3": 0.0, "T4": 0.0, "T5": 0.0}
     # D5 默认中段

@@ -48,14 +48,14 @@ def test_d1_all_negative_yields_anxious():
 
 
 def test_d1_mixed_threshold():
-    """raw_total in [-2,2] → mixed"""
+    """raw_total=0 → moderate_secure (≥0 归健康侧)"""
     answers = _all_positive()
-    # 3*(-2) + 3*(+2) = 0 → mixed
+    # 3*(-2) + 3*(+2) = 0 → moderate_secure
     for a in answers:
         if a["question_id"] in ("D1-Q01", "D1-Q02", "D1-Q03"):
             a["score_value"] = -2
     d = _compute_diagnosis(answers)
-    assert d["dimensions"]["D1"]["interp"] == "mixed"
+    assert d["dimensions"]["D1"]["interp"] == "moderate_secure"
 
 
 def test_d2_all_positive_yields_clear():
@@ -425,7 +425,7 @@ def test_diagnosis_is_deterministic():
 def test_small_l_example():
     """Match the 小L example from the scoring rules doc."""
     scores = {
-        # D1: -1 + -2 + -1 + 2 + -1 + 1 = -2 → mixed (M)
+        # D1: -1 + -2 + -1 + 2 + -1 + 1 = -2 → moderate_anxious (MA)
         "D1-Q01": -1, "D1-Q02": -2, "D1-Q03": -1, "D1-Q04": 2, "D1-Q05": -1, "D1-Q06": 1,
         # D2: 2 + 1 + 2 + 2 + -1 + 1 = 7 → clear (CL)
         "D2-Q01": 2, "D2-Q02": 1, "D2-Q03": 2, "D2-Q04": 2, "D2-Q05": -1, "D2-Q06": 1,
@@ -457,7 +457,7 @@ def test_small_l_example():
 
     d = _compute_diagnosis(answers)
 
-    assert d["dimensions"]["D1"]["interp"] == "mixed"
+    assert d["dimensions"]["D1"]["interp"] == "moderate_anxious"
     assert d["dimensions"]["D2"]["interp"] == "clear"
     assert d["dimensions"]["D3"]["interp"] == "moderate_healthy"
     assert d["dimensions"]["D3"]["pursue_avoid"] == "pursue"
@@ -467,8 +467,8 @@ def test_small_l_example():
     assert norm["T2"] == pytest.approx(0.25, abs=0.01)
     assert d["dimensions"]["D4"]["top2"][0] == "T1"
 
-    # _D1_ABBR 把 mixed→MS、moderate_healthy→H（4×2×2 共 16 种 type_code）
-    assert d["type_code"] == "MS-CL-H"
+    # D1 raw=-2 < 0 → MA; D2 clear → CL; D3 moderate_healthy → H
+    assert d["type_code"] == "MA-CL-H"
 
     highlights = {h["code"] for h in d["highlights"]}
     # D1-Q04=2 vs D1-Q05=-1 → opposite directions → behavior-gap

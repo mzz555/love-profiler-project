@@ -13,6 +13,7 @@ from app.config import settings
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.middleware.auth import get_current_user_id
 from app.models.order import Order
 
 router = APIRouter(prefix="/dev", tags=["dev"])
@@ -20,7 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/pay-success")
-def dev_pay_success(out_trade_no: str, db: Session = Depends(get_db)) -> dict:
+def dev_pay_success(
+    out_trade_no: str,
+    _user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> dict:
     """将指定订单直接置为已支付（DEV_MODE 专用）。"""
     if not settings.dev_mode:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")

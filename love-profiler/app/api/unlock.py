@@ -102,7 +102,7 @@ async def unlock_via_ad(
     unlock_record = Order(
         user_id=user_id,
         assessment_id=body.assessment_id,
-        out_trade_no=f"AD-{user_id}-{body.assessment_id}",
+        out_trade_no=f"AD-{user_id}-{body.assessment_id}-{__import__('uuid').uuid4().hex[:8]}",
         amount=0,
         status="paid",
     )

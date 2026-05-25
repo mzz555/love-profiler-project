@@ -90,6 +90,7 @@ Page({
 
   async _pollResult() {
     if (this._reportReady) return;
+    this._pollCount = (this._pollCount || 0) + 1;
 
     try {
       const res = await app.request({
@@ -104,7 +105,8 @@ Page({
       console.log('[loading] /result error, will retry', e);
     }
 
-    this._pollTimer = setTimeout(() => this._pollResult(), 1000);
+    var delay = Math.min(2500 * Math.pow(1.5, this._pollCount - 1), 10000);
+    this._pollTimer = setTimeout(() => this._pollResult(), delay);
   },
 
   /* ── Navigate to full report ──────────────────── */

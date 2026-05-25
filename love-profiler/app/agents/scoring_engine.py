@@ -20,35 +20,34 @@ def _intensity_interp(raw: int, dim: str) -> str:
     _mlo = {"D1": "moderate_anxious", "D2": "moderate_blurred","D3": "moderate_problematic"}
     _lo  = {"D1": "anxious",          "D2": "blurred",         "D3": "problematic"}
     if raw >= 6:  return _hi[dim]
-    if raw >= 3:  return _mhi[dim]
-    if raw >= -3: return "mixed"
+    if raw >= 0:  return _mhi[dim]
     if raw >= -6: return _mlo[dim]
     return _lo[dim]
 
 
 _D1_ABBR: dict[str, str] = {
-    "secure": "S", "moderate_secure": "MS", "mixed": "MS",
+    "secure": "S", "moderate_secure": "MS",
     "moderate_anxious": "MA", "anxious": "A",
 }
 _D2_ABBR: dict[str, str] = {
-    "clear": "CL", "moderate_clear": "CL", "mixed": "CL",
+    "clear": "CL", "moderate_clear": "CL",
     "moderate_blurred": "BL", "blurred": "BL",
 }
 _D3_ABBR: dict[str, str] = {
-    "healthy": "H", "moderate_healthy": "H", "mixed": "H",
+    "healthy": "H", "moderate_healthy": "H",
     "moderate_problematic": "P", "problematic": "P",
 }
 _D1_ZH: dict[str, str] = {
     "secure": "安全型依恋", "moderate_secure": "中度安全依恋",
-    "mixed": "混合型依恋", "moderate_anxious": "中度焦虑依恋", "anxious": "焦虑型依恋",
+    "moderate_anxious": "中度焦虑依恋", "anxious": "焦虑型依恋",
 }
 _D2_ZH: dict[str, str] = {
     "clear": "清晰边界", "moderate_clear": "中度清晰边界",
-    "mixed": "混合边界", "moderate_blurred": "中度模糊边界", "blurred": "模糊边界",
+    "moderate_blurred": "中度模糊边界", "blurred": "模糊边界",
 }
 _D3_ZH: dict[str, str] = {
     "healthy": "健康冲突", "moderate_healthy": "中度健康冲突",
-    "mixed": "混合冲突", "moderate_problematic": "中度问题冲突", "problematic": "问题冲突",
+    "moderate_problematic": "中度问题冲突", "problematic": "问题冲突",
 }
 
 _D5_CORNERS: dict[tuple[str, str], str] = {

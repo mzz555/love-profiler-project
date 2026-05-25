@@ -105,7 +105,7 @@ def test_unlock_creates_paid_order_first_time(client, db_session, user_id):
     o = orders[0]
     assert o.amount == 0
     assert o.status == "paid"
-    assert o.out_trade_no == f"AD-{user_id}-{a.id}"
+    assert o.out_trade_no.startswith(f"AD-{user_id}-{a.id}-")
 
 
 def test_unlock_is_idempotent_when_order_exists(client, db_session, user_id):

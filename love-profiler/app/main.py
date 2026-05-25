@@ -62,6 +62,16 @@ async def lifespan(app: FastAPI):
     create_tables()
     logger.info("数据库就绪，服务启动完成")
     yield
+    from app.services.llm_client import _background_log_tasks, _client as _llm_http_client
+    if _background_log_tasks:
+        import asyncio
+        current_loop = asyncio.get_event_loop()
+        pending = [t for t in _background_log_tasks if not t.done() and t.get_loop() is current_loop]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+    if not os.environ.get("_TESTING"):
+        await _llm_http_client.aclose()
+    logger.info("后台日志任务已完成，httpx 客户端已关闭")
 
 
 app = FastAPI(title="Love Profiler API", version="0.1.0", lifespan=lifespan)

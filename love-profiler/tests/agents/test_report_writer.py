@@ -321,7 +321,7 @@ def test_build_user_message_declared_outside_top2_uses_fallback_name():
 
 def test_build_user_message_pursue_avoid_role_emitted():
     diag = {**DIAGNOSIS, "dimensions": {**DIAGNOSIS["dimensions"], "D3": {
-        "interp": "mixed", "pursue_avoid": "pursue",
+        "interp": "moderate_healthy", "pursue_avoid": "pursue",
     }}}
     msg = build_user_message(diag)
     assert "追逃角色：pursue" in msg

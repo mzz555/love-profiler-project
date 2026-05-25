@@ -103,11 +103,11 @@ def _make_pending_order(db_session, user_id: int = 1,
     return o.id
 
 
-def test_dev_pay_marks_order_paid(client, db_session, monkeypatch, dev_pay_or_skip):
+def test_dev_pay_marks_order_paid(client, db_session, monkeypatch, dev_pay_or_skip, auth_headers):
     monkeypatch.setenv("DEV_MODE", "true")
     order_id = _make_pending_order(db_session, out_trade_no="trade-pay-ok")
 
-    resp = client.post("/dev/pay-success?out_trade_no=trade-pay-ok")
+    resp = client.post("/dev/pay-success?out_trade_no=trade-pay-ok", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "paid"
@@ -120,13 +120,13 @@ def test_dev_pay_marks_order_paid(client, db_session, monkeypatch, dev_pay_or_sk
     assert o.status == "paid"
 
 
-def test_dev_pay_returns_404_when_order_missing(client, monkeypatch, dev_pay_or_skip):
+def test_dev_pay_returns_404_when_order_missing(client, monkeypatch, dev_pay_or_skip, auth_headers):
     monkeypatch.setenv("DEV_MODE", "true")
-    resp = client.post("/dev/pay-success?out_trade_no=nonexistent-trade")
+    resp = client.post("/dev/pay-success?out_trade_no=nonexistent-trade", headers=auth_headers)
     assert resp.status_code == 404
 
 
-def test_dev_pay_returns_404_when_dev_mode_off(client, monkeypatch, dev_pay_or_skip):
+def test_dev_pay_returns_404_when_dev_mode_off(client, monkeypatch, dev_pay_or_skip, auth_headers):
     monkeypatch.setenv("DEV_MODE", "false")
-    resp = client.post("/dev/pay-success?out_trade_no=any")
+    resp = client.post("/dev/pay-success?out_trade_no=any", headers=auth_headers)
     assert resp.status_code == 404
