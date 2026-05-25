@@ -3,8 +3,40 @@ Shared pytest fixtures for the love-profiler test suite.
 """
 
 import os
+import subprocess
+import sys
 
 import pytest
+
+
+def _kill_stale_pytest():
+    """Kill pytest processes older than current PID to prevent accumulation."""
+    if sys.platform != "win32":
+        return
+    try:
+        current_pid = os.getpid()
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq python.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.strip().splitlines():
+            parts = line.strip('"').split('","')
+            if len(parts) >= 2:
+                pid = int(parts[1])
+                if pid != current_pid:
+                    try:
+                        subprocess.run(
+                            ["taskkill", "/PID", str(pid), "/F"],
+                            capture_output=True, timeout=3,
+                        )
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
+if os.environ.get("KILL_STALE_PYTEST") == "1":
+    _kill_stale_pytest()
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

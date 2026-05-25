@@ -231,7 +231,8 @@ def _add_assessment(db, *, user_id: int, status: str = "complete",
                     personality_type: str | None = "S-CL-H",
                     session_id: str | None = None,
                     created_at: datetime | None = None):
-    sid = session_id or f"sess_{user_id}_{status}_{datetime.now(timezone.utc).timestamp()}"
+    import uuid as _uuid
+    sid = session_id or f"sess_{user_id}_{status}_{_uuid.uuid4().hex[:8]}"
     a = Assessment(
         user_id=user_id, session_id=sid, status=status,
         personality_type=personality_type, mode="chat",
