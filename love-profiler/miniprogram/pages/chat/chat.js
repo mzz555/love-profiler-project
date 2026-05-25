@@ -5,6 +5,7 @@ Page({
     starting: true,
     isComplete: false,
     sending: false,
+    isDev: app.isDev,
 
     questionNum: 0,
     totalQuestions: 30,
@@ -170,6 +171,7 @@ Page({
   },
 
   randomPick() {
+    if (!getApp().isDev) return;
     if (this.data.isComplete || this.data.sending || !this._questions.length) return;
     for (let i = this._currentIdx; i < this._questions.length; i++) {
       const q = this._questions[i];

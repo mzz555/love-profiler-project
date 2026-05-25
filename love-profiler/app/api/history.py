@@ -1,10 +1,10 @@
 """
-History API — return the authenticated user's completed assessments.
-GET /history  →  list[HistoryItem]
+History API -- return the authenticated user's completed assessments.
+GET /history  ->  list[HistoryItem]
 """
 
+import json
 import logging
-import re
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
@@ -20,11 +20,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/history", tags=["history"])
 
 
-def _extract_type_name(report_text: str | None) -> str:
-    if not report_text:
-        return ""
-    m = re.search(r'你是[「『“”](.+?)[」』“”]', report_text)
-    return m.group(1) if m else ""
+def _extract_type_name(assessment: "Assessment") -> str:
+    if assessment.diagnosis_json:
+        try:
+            diag = json.loads(assessment.diagnosis_json)
+            name = diag.get("type_name", "")
+            if name:
+                return name
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return ""
 
 
 class HistoryItem(BaseModel):
@@ -51,13 +56,13 @@ async def get_history(
         .limit(20)
         .all()
     )
-    logger.info("[/history] user_id=%s 查询历史 count=%d", user_id, len(assessments))
+    logger.info("[/history] user_id=%s count=%d", user_id, len(assessments))
     return [
         HistoryItem(
             id=a.id,
             session_id=a.session_id,
-            personality_type=a.personality_type or "未知",
-            type_name=_extract_type_name(a.report_text),
+            personality_type=a.personality_type or "",
+            type_name=_extract_type_name(a),
             summary=a.summary or (
                 a.report_text.split("。")[0] + "。"
                 if a.report_text and "。" in a.report_text

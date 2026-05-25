@@ -181,14 +181,14 @@ async def quiz_submit(
     diagnosis["dimension_meta"] = {row["code"]: row for row in dim_meta_rows}
     logger.info("[quiz/submit] dimension_meta 命中 %d 个维度", len(dim_meta_rows))
 
-    # 从 base_D4_type 查 top2 爱的语言释义，避免在 system prompt 里硬编码全部 5 类
+    # 从 base_D4_type 查全部 5 类爱的语言（花瓣图需要全量中文名）
+    _ALL_D4_CODES = ["T1", "T2", "T3", "T4", "T5"]
     d4_block = diagnosis.get("dimensions", {}).get("D4", {}) or {}
     d4_top2 = d4_block.get("top2") or []
-    if d4_top2:
-        d4_rows = await fetch_d4_details(d4_top2)
-        d4_map = {r["code"]: r for r in d4_rows}
-        diagnosis["D4_details"] = [d4_map[c] for c in d4_top2 if c in d4_map]
-        logger.info("[quiz/submit] base_D4_type 命中 %d/%d", len(diagnosis["D4_details"]), len(d4_top2))
+    d4_rows = await fetch_d4_details(_ALL_D4_CODES)
+    d4_map = {r["code"]: r for r in d4_rows}
+    diagnosis["D4_details"] = [d4_map[c] for c in _ALL_D4_CODES if c in d4_map]
+    logger.info("[quiz/submit] base_D4_type 命中 %d/%d", len(diagnosis["D4_details"]), len(_ALL_D4_CODES))
 
     # 从 base_D5_quadrant 查 9 宫格写作方向，agent_b 不再硬编码字典
     d5_block = diagnosis.get("dimensions", {}).get("D5", {}) or {}

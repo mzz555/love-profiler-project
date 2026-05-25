@@ -27,16 +27,21 @@ Page({
       tt.showToast({ title: '广告加载失败，请稍后再试', icon: 'none' });
       this.setData({ watching: false });
     });
-    ad.onClose(async ({ isEnded }) => {
-      if (!isEnded) {
+    ad.onClose(async (res) => {
+      if (!res.isEnded) {
         tt.showToast({ title: '请看完广告再解锁哦', icon: 'none' });
         this.setData({ watching: false });
         return;
       }
+      const transId = (res && res.transId) || ('client-' + Date.now());
       try {
         await app.request({
           url: '/unlock/ad',
-          data: { assessment_id: app.globalData.assessmentId, ad_token: 'ad-complete' },
+          data: {
+            assessment_id: app.globalData.assessmentId,
+            ad_token: transId,
+            signature: this._signToken(transId),
+          },
         });
         tt.navigateTo({ url: '/pages/report/report' });
       } catch (_) {
@@ -48,12 +53,18 @@ Page({
     this._ad = ad;
   },
 
+  _signToken(token) {
+    // TODO: 长期应改为服务端到服务端回调，不依赖客户端签名
+    // 当前用简单 hash 占位，后端 DEV_MODE 时跳过验签
+    return 'client-sig-' + token.slice(0, 8);
+  },
+
   async devUnlock() {
     if (!app.isDev) return;
     try {
       await app.request({
         url: '/unlock/ad',
-        data: { assessment_id: app.globalData.assessmentId, ad_token: 'dev-bypass' },
+        data: { assessment_id: app.globalData.assessmentId, ad_token: 'dev-bypass', signature: '' },
       });
       tt.navigateTo({ url: '/pages/report/report' });
     } catch (_) {

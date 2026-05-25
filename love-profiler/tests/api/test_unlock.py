@@ -30,35 +30,42 @@ def _headers(user_id: int) -> dict:
 # _verify_ad_token 单测
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_verify_ad_token_no_secret_passes(monkeypatch):
-    """开发模式（未配置 DOUYIN_AD_SECRET）应直接放行。"""
+def test_verify_ad_token_dev_mode_passes(monkeypatch):
+    """DEV_MODE=true 时无论密钥和签名如何都放行。"""
+    monkeypatch.setenv("DEV_MODE", "true")
     monkeypatch.delenv("DOUYIN_AD_SECRET", raising=False)
-    assert _verify_ad_token("any-token") is True
+    assert _verify_ad_token("any-token", "") is True
 
 
-def test_verify_ad_token_with_secret_rejects_arbitrary_token(monkeypatch):
-    """当前占位实现：要求 ad_token == HMAC(secret, ad_token)，几乎不可满足。"""
+def test_verify_ad_token_no_secret_rejects_in_prod(monkeypatch):
+    """生产环境（非 DEV_MODE）缺密钥 → fail-closed 拒绝。"""
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.delenv("DOUYIN_AD_SECRET", raising=False)
+    assert _verify_ad_token("any-token", "any-sig") is False
+
+
+def test_verify_ad_token_empty_signature_rejects(monkeypatch):
+    """有密钥但签名为空 → 拒绝。"""
+    monkeypatch.setenv("DEV_MODE", "false")
     monkeypatch.setenv("DOUYIN_AD_SECRET", "test-secret")
-    assert _verify_ad_token("random-token") is False
+    assert _verify_ad_token("token", "") is False
 
 
-def test_verify_ad_token_with_secret_accepts_fixed_point_token(monkeypatch):
-    """构造一个满足 ad_token == HMAC(secret, ad_token) 的 token，确认能通过校验。
+def test_verify_ad_token_wrong_signature_rejects(monkeypatch):
+    """有密钥、签名不匹配 → 拒绝。"""
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.setenv("DOUYIN_AD_SECRET", "test-secret")
+    assert _verify_ad_token("token", "wrong-sig") is False
 
-    这种 fixed-point 在实际抖音回调里几乎不可能出现——本测试只为覆盖
-    校验成功分支，并证明 _verify_ad_token 的 HMAC 计算路径正确。
-    """
+
+def test_verify_ad_token_correct_signature_passes(monkeypatch):
+    """有密钥、签名正确 → 通过。"""
     secret = "test-secret"
+    token = "my-trans-id"
+    monkeypatch.setenv("DEV_MODE", "false")
     monkeypatch.setenv("DOUYIN_AD_SECRET", secret)
-    # 任意 token 都不会等于自己的 HMAC，但可以反过来：
-    # 把 "字符串 X" 作为 ad_token 喂进去后，期望值就是 HMAC(secret, X)。
-    # 由于 compare_digest 比的是 expected == ad_token，
-    # 我们直接构造 ad_token = HMAC(secret, ad_token_seed) 的一个迭代——
-    # 现实里这条分支基本走不到，所以这里只断言不会抛异常并返回 bool。
-    msg = "seed"
-    fake_token = hmac.new(secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
-    # fake_token 不等于 HMAC(secret, fake_token)，所以期望 False
-    assert _verify_ad_token(fake_token) is False
+    correct_sig = hmac.new(secret.encode(), token.encode(), hashlib.sha256).hexdigest()
+    assert _verify_ad_token(token, correct_sig) is True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,13 +146,14 @@ def test_unlock_returns_404_when_assessment_not_found(client, user_id):
 def test_unlock_returns_400_when_ad_token_verification_fails(
     client, db_session, user_id, monkeypatch,
 ):
-    """配置了 DOUYIN_AD_SECRET 时，任意 ad_token 都会被占位实现拒绝。"""
+    """配置了 DOUYIN_AD_SECRET 且非 DEV_MODE 时，错误签名被拒绝。"""
+    monkeypatch.setenv("DEV_MODE", "false")
     monkeypatch.setenv("DOUYIN_AD_SECRET", "prod-secret")
     a = _make_assessment(db_session, user_id)
 
     resp = client.post(
         "/unlock/ad",
-        json={"assessment_id": a.id, "ad_token": "anything"},
+        json={"assessment_id": a.id, "ad_token": "anything", "signature": "wrong"},
         headers=_headers(user_id),
     )
     assert resp.status_code == 400

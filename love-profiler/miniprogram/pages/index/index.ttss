@@ -250,6 +250,13 @@
   flex-direction: column;
   padding: 24rpx 20rpx 22rpx;
   border-radius: 22rpx;
+  /* 描边：accent 浅彩跟父卡 #F8F6F3 暖白色调接近，
+     22rpx 圆角会融在父卡内看不出四角，加一道浅暖灰描边让圆角露出来 */
+  border: 1rpx solid rgba(180,170,160,0.22);
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
+  /* 兜底：万一内部子元素布局意外，至少裁切发生在圆角内部不会突破描边 */
+  overflow: hidden;
+  box-sizing: border-box;
   /* 整组切批时整体淡入 */
   animation: batchFadeIn 0.45s ease-out both;
   /* background 由 inline style 提供 */
@@ -329,35 +336,45 @@
   line-height: 1.4;
 }
 
-/* 横排 4 个怪兽 */
+/* 横排 4 个画像（每个独立成卡片）
+   ⚠️ 不用 flex:1 + gap：抖音 ttss 的 gap 扣减偶发不准，会让 item 算宽超出父级，第 4 张被裁。
+   改为固定百分比 width + space-between，4×23% = 92%，剩 8% 由 space-between 等分给 3 个间隙。 */
 .portraits-row {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: space-between;
 }
 
+/* portrait-item 本身就是一张白色画像卡 */
 .portrait-item {
-  width: 22%;
+  width: 23%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  background: #FFFFFF;
+  border: 1rpx solid rgba(180,170,160,0.22);
+  border-radius: 20rpx;
+  padding: 16rpx 6rpx 14rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.05);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .portrait-img-wrap {
-  width: 116rpx;
-  height: 116rpx;
-  border-radius: 20rpx;
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 18rpx;
   border: 1.5rpx solid;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 10rpx;
   /* background / border-color 由 inline style 提供 */
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06);
+  /* 投影已上移到 .portrait-item 外卡，wrap 不再单独阴影避免双层叠 */
 }
 .portrait-img {
-  width: 96rpx;
-  height: 96rpx;
+  width: 80rpx;
+  height: 80rpx;
 }
 
 .portrait-name {

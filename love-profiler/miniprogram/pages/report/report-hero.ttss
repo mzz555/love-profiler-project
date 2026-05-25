@@ -1,0 +1,360 @@
+/* ── 人格卡片（报告开头）───────────────────── */
+.str-hero-card {
+  width: 100%; background: #ffffff;
+  border-radius: 40rpx; overflow: hidden;
+  border: 1.5rpx solid rgba(150,140,130,0.35);
+  display: flex; flex-direction: column;
+  gap: 20rpx;
+  padding: 24rpx 24rpx 20rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 8rpx 28rpx rgba(0,0,0,0.10);
+  animation: slideUp 0.45s cubic-bezier(0.22,1,0.36,1) both;
+}
+/* ── 上部：文字 + 头像 横排（顶部对齐） ── */
+.str-hero-top {
+  display: flex; align-items: flex-start;
+  gap: 20rpx; width: 100%;
+}
+.str-hero-left {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 14rpx;
+}
+/* ── 引导小字：你是：── */
+.str-prelude-text {
+  display: block; font-size: 24rpx;
+  color: #8B8FA8; letter-spacing: 1rpx;
+  margin-bottom: -4rpx;
+}
+/* ── 主标题大字：type_name（如「高敏感的清醒者」） ── */
+.str-hero-name {
+  display: block; font-size: 54rpx; font-weight: 800;
+  color: #1C1C2E; letter-spacing: 1rpx; line-height: 1.18;
+  margin: 4rpx 0 6rpx;
+}
+/* ── 副标题行：code 小胶囊 + chips 同行 ── */
+.str-subtitle-row {
+  display: flex; flex-wrap: wrap;
+  align-items: center; gap: 12rpx;
+  margin-top: 2rpx;
+}
+.str-subtitle-code {
+  display: inline-block;
+  background: rgba(79,175,175,0.10);
+  border: 1.5rpx solid rgba(79,175,175,0.28);
+  border-radius: 100rpx; padding: 6rpx 22rpx;
+  font-size: 22rpx; color: #4FAFAF;
+  font-weight: 700; letter-spacing: 2rpx;
+}
+/* ── 底部 detail 描述段（横跨整个卡片宽度，无独立色块，自然融入） ── */
+.str-detail-block {
+  width: 100%;
+}
+.str-detail-text {
+  display: block; font-size: 26rpx;
+  color: #4A4D5E; line-height: 1.7;
+  letter-spacing: 0.3rpx;
+}
+/* ── D1/D2/D3 段落解码标签 ──────────────────── */
+.str-segments {
+  display: flex; flex-wrap: wrap; gap: 10rpx;
+}
+.str-seg-pill {
+  padding: 8rpx 26rpx; border-radius: 100rpx;
+  display: flex; align-items: center;
+}
+.str-seg-text {
+  font-size: 23rpx; font-weight: 600; letter-spacing: 0.5rpx;
+}
+/* 健康端：绿色调 */
+.seg-healthy {
+  background: rgba(47, 184, 126, 0.12);
+  border: 1rpx solid rgba(47, 184, 126, 0.30);
+}
+.seg-healthy .str-seg-text { color: #1E9B6B; }
+/* 问题端：暖橙色调，不用红色避免过度负面 */
+.seg-problem {
+  background: rgba(224, 130, 80, 0.10);
+  border: 1rpx solid rgba(224, 130, 80, 0.28);
+}
+.seg-problem .str-seg-text { color: #C0622A; }
+/* 中性端（D4/D5 风格偏好）：蓝紫色调，不评价好坏 */
+.seg-neutral {
+  background: rgba(100, 130, 220, 0.10);
+  border: 1rpx solid rgba(100, 130, 220, 0.28);
+}
+.seg-neutral .str-seg-text { color: #5568C8; }
+
+.str-status-mini {
+  display: flex; align-items: center; gap: 10rpx;
+}
+.str-status-mini-text {
+  font-size: 22rpx; color: #AAAABB; letter-spacing: 1rpx;
+}
+/* ── 角色立绘小卡（白底 + 主题色描边，跟首页 portrait-item / chart-card 视觉统一）
+   border 由 ttml inline style 完整注入（border: 3rpx solid {{typeTheme.primary}}）；
+   下面 border 是 fallback 值，万一 inline 未注入仍有浅暖灰描边可见。 ── */
+.str-hero-right {
+  width: 220rpx; flex-shrink: 0;
+  box-sizing: border-box;
+  background: #FFFFFF;
+  border: 3rpx solid rgba(180,170,160,0.22);
+  border-radius: 32rpx;
+  padding: 12rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0,0,0,0.04);
+  display: flex; align-items: center; justify-content: center;
+}
+.str-hero-char {
+  width: 196rpx; height: 250rpx;
+  opacity: 0;
+  /* drop-shadow 已移除：立绘在米色小卡内，外层 box-shadow 已接管投影，避免双层叠 */
+  transition: opacity 0.7s ease-out 0.15s;
+}
+.str-hero-char.show { opacity: 1; }
+.str-hero-char-placeholder { width: 196rpx; height: 250rpx; }
+
+/* ── Loading State ─ Phase 3 清新玻璃化升级 ─────── */
+.loading-wrap {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100vh; gap: 0; position: relative;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(79,175,175,0.10) 0%, transparent 55%),
+    radial-gradient(circle at 50% 70%, rgba(125,206,206,0.06) 0%, transparent 60%),
+    #F5F0EB;
+  overflow: hidden;
+}
+
+/* 心跳 + 多层环的舞台容器（取代纯居中） */
+.loading-pulse-stage {
+  position: relative;
+  width: 360rpx; height: 360rpx;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 56rpx;
+}
+
+/* 4 层错峰扩散环（不同尺寸/延迟/速度） */
+.loading-pulse-ring {
+  position: absolute; left: 50%; top: 50%;
+  border-radius: 50%;
+  border: 2rpx solid rgba(79,175,175,0.35);
+  transform: translate(-50%, -50%) scale(0.6);
+  animation: pulse-expand 2.6s ease-out infinite;
+}
+.loading-pulse-ring.r1 {
+  width: 140rpx; height: 140rpx;
+  border-color: rgba(79,175,175,0.42);
+  animation-delay: 0s;
+}
+.loading-pulse-ring.r2 {
+  width: 180rpx; height: 180rpx;
+  border-color: rgba(98,194,194,0.34);
+  animation-delay: 0.5s;
+}
+.loading-pulse-ring.r3 {
+  width: 220rpx; height: 220rpx;
+  border-color: rgba(125,206,206,0.26);
+  animation-delay: 1.0s;
+}
+.loading-pulse-ring.r4 {
+  width: 260rpx; height: 260rpx;
+  border-color: rgba(142,216,216,0.18);
+  animation-delay: 1.5s;
+}
+@keyframes pulse-expand {
+  0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+}
+
+/* frosted-glass 静态外环（最外层） */
+.loading-glass-ring {
+  position: absolute; left: 50%; top: 50%;
+  width: 320rpx; height: 320rpx;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.45);
+  border: 1.5rpx solid rgba(255,255,255,0.8);
+  transform: translate(-50%, -50%);
+  box-shadow:
+    inset 0 0 30rpx rgba(255,255,255,0.5),
+    0 0 60rpx rgba(79,175,175,0.18),
+    0 8rpx 32rpx rgba(0,0,0,0.06);
+  animation: glass-breathe 3s ease-in-out infinite;
+}
+@keyframes glass-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.85; }
+  50%      { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+}
+
+/* 中心心跳 emoji + 薄荷光晕 */
+.loading-heart {
+  position: relative;
+  font-size: 88rpx;
+  animation: heart-beat 1.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 16rpx rgba(79,175,175,0.50)) drop-shadow(0 4rpx 12rpx rgba(232,112,140,0.30));
+  z-index: 3;
+}
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  15%      { transform: scale(1.18); }
+  30%      { transform: scale(1); }
+  45%      { transform: scale(1.12); }
+  60%      { transform: scale(1); }
+}
+
+/* 飘动粒子（6 颗薄荷青绿小球） */
+.loading-particle {
+  position: absolute;
+  width: 10rpx; height: 10rpx; border-radius: 50%;
+  background: rgba(79,175,175,0.55);
+  box-shadow: 0 0 12rpx rgba(79,175,175,0.5);
+  animation: particle-float 4s ease-in-out infinite;
+  opacity: 0;
+}
+.loading-particle.p1 { left: 8%;   top: 80%; animation-delay: 0s;   }
+.loading-particle.p2 { left: 88%;  top: 75%; animation-delay: 0.7s; width: 8rpx; height: 8rpx; }
+.loading-particle.p3 { left: 22%;  top: 12%; animation-delay: 1.4s; }
+.loading-particle.p4 { left: 75%;  top: 18%; animation-delay: 2.1s; width: 12rpx; height: 12rpx; }
+.loading-particle.p5 { left: 50%;  top: 90%; animation-delay: 2.8s; }
+.loading-particle.p6 { left: 92%;  top: 50%; animation-delay: 0.3s; width: 8rpx; height: 8rpx; }
+@keyframes particle-float {
+  0%   { transform: translateY(0) scale(0); opacity: 0; }
+  20%  { opacity: 0.85; }
+  60%  { opacity: 0.4; }
+  100% { transform: translateY(-180rpx) scale(1.4); opacity: 0; }
+}
+
+/* 标题 — 薄荷青绿渐变文字 + 发光 */
+.loading-title {
+  font-size: 36rpx; font-weight: 700;
+  letter-spacing: 3rpx;
+  margin-bottom: 16rpx;
+  background: linear-gradient(120deg, #4FAFAF 0%, #62C2C2 50%, #4FAFAF 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: title-shimmer 3s linear infinite;
+}
+@keyframes title-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.loading-sub {
+  font-size: 26rpx; color: #7A7A8A; letter-spacing: 2rpx;
+  animation: sub-fade 2.4s ease-in-out infinite;
+}
+@keyframes sub-fade {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* ══════════════════════════════════════════════
+   Phase 5 · 心动级互动 micro-celebration
+   ══════════════════════════════════════════════ */
+
+/* 全屏星花喷射舞台 */
+.celebration-stage {
+  position: fixed; top: 50%; left: 50%;
+  width: 0; height: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.celebration-star {
+  position: absolute;
+  font-size: 36rpx;
+  left: 0; top: 0;
+  opacity: 0;
+  transform-origin: 0 0;
+  animation: celebration-burst 2.2s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* 12 颗星 — 不同方向/距离/延迟/颜色 */
+.celebration-star.s1  { color: #4FAFAF; --tx:-280rpx; --ty:-360rpx; animation-delay: 0.00s; }
+.celebration-star.s2  { color: #F48FB1; --tx: 240rpx; --ty:-340rpx; animation-delay: 0.05s; font-size: 32rpx; }
+.celebration-star.s3  { color: #FFB74D; --tx:-360rpx; --ty:-180rpx; animation-delay: 0.10s; }
+.celebration-star.s4  { color: #7B9EFF; --tx: 340rpx; --ty:-220rpx; animation-delay: 0.15s; font-size: 40rpx; }
+.celebration-star.s5  { color: #CE93D8; --tx:-200rpx; --ty: 280rpx; animation-delay: 0.08s; }
+.celebration-star.s6  { color: #5CAF82; --tx: 320rpx; --ty: 240rpx; animation-delay: 0.20s; font-size: 38rpx; }
+.celebration-star.s7  { color: #FF7B6E; --tx:-380rpx; --ty:  60rpx; animation-delay: 0.12s; }
+.celebration-star.s8  { color: #62C2C2; --tx: 380rpx; --ty:  40rpx; animation-delay: 0.25s; font-size: 34rpx; }
+.celebration-star.s9  { color: #F48FB1; --tx: -60rpx; --ty:-420rpx; animation-delay: 0.18s; }
+.celebration-star.s10 { color: #FFB74D; --tx:  80rpx; --ty: 380rpx; animation-delay: 0.22s; font-size: 30rpx; }
+.celebration-star.s11 { color: #4FAFAF; --tx:-160rpx; --ty:-260rpx; animation-delay: 0.30s; }
+.celebration-star.s12 { color: #CE93D8; --tx: 180rpx; --ty:-380rpx; animation-delay: 0.35s; font-size: 32rpx; }
+
+@keyframes celebration-burst {
+  0%   { opacity: 0;    transform: translate(0, 0)              scale(0.3) rotate(0deg);   }
+  15%  { opacity: 1;    transform: translate(calc(var(--tx) * 0.2), calc(var(--ty) * 0.2)) scale(1.3) rotate(90deg);  }
+  60%  { opacity: 1;    transform: translate(calc(var(--tx) * 0.9), calc(var(--ty) * 0.9)) scale(1)   rotate(220deg); }
+  100% { opacity: 0;    transform: translate(var(--tx),    var(--ty))    scale(0.6) rotate(360deg); }
+}
+
+/* 已读完提示 — 浮现于报告底部 */
+.read-done-tip {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  gap: 18rpx;
+  margin-top: 56rpx;
+  padding: 0 16rpx;
+  animation: read-done-emerge 0.8s cubic-bezier(0.22,1,0.36,1) both;
+  animation-delay: 0.3s;
+}
+.read-done-line {
+  flex: 1; height: 2rpx; max-width: 120rpx;
+  background: linear-gradient(90deg, transparent, rgba(79,175,175,0.45), transparent);
+  background-size: 200% 100%;
+  animation: divider-shimmer 4s ease-in-out infinite;
+}
+.read-done-badge {
+  display: flex; align-items: center; gap: 12rpx;
+  padding: 14rpx 30rpx;
+  background: linear-gradient(135deg, rgba(79,175,175,0.10) 0%, rgba(133,196,160,0.06) 100%);
+  border: 1.5rpx solid rgba(79,175,175,0.32);
+  border-radius: 100rpx;
+  box-shadow:
+    0 6rpx 22rpx rgba(79,175,175,0.18),
+    inset 0 1rpx 0 rgba(255,255,255,0.9);
+  animation: badge-float 4.5s ease-in-out infinite;
+}
+.read-done-icon {
+  font-size: 26rpx; color: #4FAFAF; font-weight: 800;
+  width: 38rpx; height: 38rpx; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(79,175,175,0.18);
+  box-shadow: 0 2rpx 8rpx rgba(79,175,175,0.20);
+}
+.read-done-text {
+  font-size: 24rpx; font-weight: 700;
+  color: #4FAFAF; letter-spacing: 3rpx;
+}
+@keyframes read-done-emerge {
+  0%   { opacity: 0; transform: translateY(20rpx) scale(0.92); }
+  60%  { opacity: 1; transform: translateY(-3rpx) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* ── Streaming 顶部扫光条（AI 正在写作的视觉指示）── */
+.stream-scan-wave {
+  position: fixed; left: 0; top: 0; right: 0;
+  height: 4rpx;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(79,175,175,0.0) 20%,
+    rgba(79,175,175,0.85) 45%,
+    rgba(125,206,206,1.0) 50%,
+    rgba(79,175,175,0.85) 55%,
+    rgba(79,175,175,0.0) 80%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  z-index: 100;
+  animation: scan-sweep 1.8s linear infinite;
+  box-shadow: 0 2rpx 8rpx rgba(79,175,175,0.45);
+}
+@keyframes scan-sweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+

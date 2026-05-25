@@ -1,0 +1,574 @@
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 监控</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+     background:#0f1117;color:#e2e8f0;font-size:14px}
+/* header */
+.hdr{padding:16px 24px;border-bottom:1px solid #1e2535;display:flex;
+     align-items:center;gap:12px}
+.hdr h1{font-size:17px;font-weight:600;color:#f1f5f9}
+.hdr .sub{color:#64748b;font-size:12px}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.btn{background:#1e40af;color:#fff;border:none;padding:5px 14px;
+     border-radius:6px;cursor:pointer;font-size:13px}
+.btn:hover{background:#1d4ed8}
+.auto-lbl{color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:5px}
+.spin{width:16px;height:16px;border:2px solid #334155;border-top-color:#3b82f6;
+      border-radius:50%;animation:sp .8s linear infinite;display:none}
+.spin.on{display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* tabs */
+.tabs{display:flex;gap:0;padding:0 24px;border-bottom:1px solid #1e2535}
+.tab-btn{padding:10px 18px;cursor:pointer;color:#64748b;font-size:13px;
+         border:none;background:none;border-bottom:2px solid transparent;
+         transition:color .15s}
+.tab-btn.active{color:#3b82f6;border-bottom-color:#3b82f6}
+.tab-btn:hover{color:#94a3b8}
+.tab-pane{display:none}.tab-pane.active{display:block}
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;
+       padding:16px 24px}
+.sc{background:#161b27;border:1px solid #1e2535;border-radius:9px;
+    padding:13px 15px}
+.sc .lbl{color:#64748b;font-size:11px;text-transform:uppercase;
+         letter-spacing:.05em;margin-bottom:5px}
+.sc .val{font-size:22px;font-weight:700;color:#f1f5f9}
+.sc.err .val{color:#f87171}.sc.ok .val{color:#4ade80}
+/* filters */
+.flt{padding:0 24px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.flt select,.flt input{background:#161b27;border:1px solid #1e2535;
+  color:#e2e8f0;padding:5px 9px;border-radius:6px;font-size:13px;outline:none}
+.flt select:focus,.flt input:focus{border-color:#3b82f6}
+.flt label{color:#64748b;font-size:12px}
+/* table */
+.tbl-wrap{overflow-x:auto;padding:0 24px 40px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead tr{border-bottom:1px solid #1e2535}
+th{text-align:left;padding:7px 11px;color:#64748b;font-weight:500;
+   font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+td{padding:8px 11px;border-bottom:1px solid #131929;vertical-align:middle}
+tr.data-row{cursor:pointer}
+tr.data-row:hover td{background:#161b27}
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;
+       font-size:11px;font-weight:600}
+.badge.success{background:#14532d;color:#4ade80}
+.badge.error{background:#450a0a;color:#f87171}
+.rc{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;
+    background:#1e293b;color:#94a3b8}
+.rc.r1{background:#422006;color:#fb923c}
+.rc.r2{background:#450a0a;color:#f87171}
+.mono{font-family:"SF Mono","Fira Code",monospace;font-size:12px}
+.dim{color:#64748b}
+.err-cell{color:#f87171;font-size:12px;max-width:220px;
+          overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{display:inline-block;height:3px;background:#1e40af;border-radius:2px;
+     margin-left:5px;vertical-align:middle;opacity:.7}
+.empty{text-align:center;padding:40px;color:#475569}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;
+         display:flex;align-items:flex-start;justify-content:center;
+         overflow-y:auto;padding:40px 20px}
+.modal{background:#161b27;border:1px solid #1e2535;border-radius:12px;
+       width:100%;max-width:900px;padding:0}
+.modal-hdr{padding:16px 20px;border-bottom:1px solid #1e2535;
+           display:flex;align-items:center;gap:10px}
+.modal-hdr h3{font-size:15px;font-weight:600}
+.modal-close{margin-left:auto;background:none;border:none;color:#64748b;
+             font-size:20px;cursor:pointer;line-height:1}
+.modal-body{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.modal-full{grid-column:1/-1}
+.panel{background:#0f1117;border:1px solid #1e2535;border-radius:8px;
+       padding:14px}
+.panel h4{font-size:11px;color:#64748b;text-transform:uppercase;
+          letter-spacing:.05em;margin-bottom:10px}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:4px 8px;font-size:12px}
+.kv .k{color:#64748b}
+.kv .v{color:#e2e8f0;word-break:break-all}
+pre.code{background:#0f1117;border:1px solid #1e2535;border-radius:6px;
+         padding:12px;font-size:11px;font-family:"SF Mono","Fira Code",monospace;
+         overflow-x:auto;white-space:pre-wrap;word-break:break-all;
+         max-height:360px;overflow-y:auto;color:#a5f3fc}
+.loading-txt{color:#64748b;font-size:13px;text-align:center;padding:20px}
+/* console tab */
+.console-bar{padding:12px 24px;display:flex;gap:8px;align-items:center}
+.console-bar input{flex:1;background:#161b27;border:1px solid #1e2535;
+  color:#e2e8f0;padding:6px 10px;border-radius:6px;font-size:13px;outline:none}
+.console-bar input:focus{border-color:#3b82f6}
+.log-box{margin:0 24px 40px;background:#0a0d14;border:1px solid #1e2535;
+         border-radius:8px;overflow:auto;height:620px;padding:12px 14px;
+         font-family:"SF Mono","Fira Code",monospace;font-size:12px;
+         line-height:1.6}
+.ll{white-space:pre-wrap;word-break:break-all}
+.ll.info{color:#94a3b8}
+.ll.warn{color:#fbbf24}
+.ll.error{color:#f87171}
+.ll.debug{color:#475569}
+.ll.hi{background:#1e3a5f}
+.last-upd{color:#475569;font-size:12px;margin-left:auto}
+/* metrics tab — trend bar chart */
+.trend-box{background:#0a0d14;border:1px solid #1e2535;border-radius:8px;
+           padding:14px;display:flex;align-items:flex-end;gap:2px;
+           min-height:160px}
+.trend-col{flex:1;display:flex;flex-direction:column;align-items:center;
+           justify-content:flex-end;gap:2px;min-width:0;cursor:default}
+.trend-bar{width:100%;background:linear-gradient(180deg,#3b82f6,#1e40af);
+           border-radius:2px 2px 0 0;min-height:1px;transition:opacity .15s}
+.trend-bar.err{background:linear-gradient(180deg,#f87171,#7f1d1d)}
+.trend-col:hover .trend-bar{opacity:.7}
+.trend-col .lbl{color:#475569;font-size:9px;margin-top:4px;
+                white-space:nowrap;font-family:"SF Mono",monospace}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div><h1>AI 监控</h1><div class="sub">love-profiler · ai_call_logs</div></div>
+  <div id="spin" class="spin"></div>
+  <div class="hdr-right">
+    <label class="auto-lbl"><input type="checkbox" id="autoR" checked> 自动刷新 30s</label>
+    <button class="btn" onclick="refreshAll()">立即刷新</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('calls',this)">📊 AI 调用</button>
+  <button class="tab-btn" onclick="switchTab('metrics',this)">📈 指标</button>
+  <button class="tab-btn" onclick="switchTab('console',this)">🖥 控制台日志</button>
+</div>
+
+<!-- ── Tab: AI Calls ─────────────────────────────────── -->
+<div id="tab-calls" class="tab-pane active">
+  <div class="stats">
+    <div class="sc"><div class="lbl">今日调用</div><div class="val" id="s-tot">—</div></div>
+    <div class="sc ok"><div class="lbl">成功</div><div class="val" id="s-ok">—</div></div>
+    <div class="sc err"><div class="lbl">失败</div><div class="val" id="s-err">—</div></div>
+    <div class="sc"><div class="lbl">平均耗时</div><div class="val" id="s-dur">—</div><div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">今日 Token</div><div class="val" id="s-tok">—</div></div>
+  </div>
+  <div class="flt">
+    <label>Agent</label>
+    <select id="fa" onchange="loadCalls()">
+      <option value="">全部</option>
+      <option value="agent_a">agent_a</option>
+      <option value="agent_b">agent_b</option>
+    </select>
+    <label>状态</label>
+    <select id="fs" onchange="loadCalls()">
+      <option value="">全部</option>
+      <option value="success">success</option>
+      <option value="error">error</option>
+    </select>
+    <label>条数</label>
+    <select id="fl" onchange="loadCalls()">
+      <option value="50">50</option>
+      <option value="100" selected>100</option>
+      <option value="200">200</option>
+    </select>
+    <span id="lu1" class="last-upd"></span>
+  </div>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th>时间</th><th>Agent</th><th>模型</th><th>Session</th><th>状态</th>
+      <th>耗时</th><th>Prompt→Comp</th><th>重试</th>
+      <th>System字符</th><th>响应字符</th><th>错误</th>
+    </tr></thead>
+    <tbody id="tbody"><tr><td colspan="11" class="empty">加载中…</td></tr></tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ── Tab: Metrics (Phase D.1) ──────────────────────── -->
+<div id="tab-metrics" class="tab-pane">
+  <div class="flt" style="padding-top:16px">
+    <label>窗口</label>
+    <select id="mw" onchange="loadMetrics()">
+      <option value="6">最近 6h</option>
+      <option value="24" selected>最近 24h</option>
+      <option value="72">最近 3 天</option>
+      <option value="168">最近 7 天</option>
+    </select>
+    <label>Top N 用户</label>
+    <select id="mtn" onchange="loadMetrics()">
+      <option value="5">5</option>
+      <option value="10" selected>10</option>
+      <option value="20">20</option>
+    </select>
+    <span id="lu3" class="last-upd"></span>
+  </div>
+
+  <!-- 延迟分位数卡片 -->
+  <div class="stats" style="grid-template-columns:repeat(6,1fr)">
+    <div class="sc"><div class="lbl">P50</div><div class="val" id="md-p50">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">P95</div><div class="val" id="md-p95">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">P99</div><div class="val" id="md-p99">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">Max</div><div class="val" id="md-max">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">Avg</div><div class="val" id="md-avg">—</div>
+      <div style="color:#64748b;font-size:11px">ms</div></div>
+    <div class="sc"><div class="lbl">成功样本</div><div class="val" id="md-cnt">—</div></div>
+  </div>
+
+  <!-- 调用趋势：bar chart -->
+  <div style="padding:0 24px 8px">
+    <h4 style="color:#64748b;font-size:11px;text-transform:uppercase;
+               letter-spacing:.05em;margin-bottom:8px">调用趋势</h4>
+    <div class="trend-box" id="trend"></div>
+  </div>
+
+  <!-- by_agent 表格 + top_users 表格 并排 -->
+  <div style="padding:0 24px 30px;display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px">
+    <div class="panel">
+      <h4>按 Agent 错误率</h4>
+      <table style="width:100%;font-size:12px;margin-top:6px">
+        <thead><tr>
+          <th>Agent</th><th>总数</th><th>成功</th><th>失败</th><th>错误率</th>
+        </tr></thead>
+        <tbody id="agent-tbody"><tr><td colspan="5" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h4>今日 Token 消耗 Top 用户</h4>
+      <table style="width:100%;font-size:12px;margin-top:6px">
+        <thead><tr>
+          <th>用户</th><th>Prompt</th><th>Comp</th><th>Total</th>
+        </tr></thead>
+        <tbody id="topu-tbody"><tr><td colspan="4" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Tab: Console ──────────────────────────────────── -->
+<div id="tab-console" class="tab-pane">
+  <div class="console-bar">
+    <input id="search" placeholder="关键词过滤（支持正则）" oninput="filterConsole()">
+    <label class="auto-lbl" style="white-space:nowrap">
+      <input type="checkbox" id="autoScroll" checked> 滚动到底
+    </label>
+    <label>行数</label>
+    <select id="cl" onchange="loadConsole()">
+      <option value="200">200</option>
+      <option value="500" selected>500</option>
+      <option value="1000">1000</option>
+    </select>
+    <span id="lu2" class="last-upd"></span>
+  </div>
+  <div class="log-box" id="logbox"></div>
+</div>
+
+<!-- ── Detail Modal ──────────────────────────────────── -->
+<div id="overlay" class="overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hdr">
+      <h3 id="m-title">调用详情</h3>
+      <span id="m-badge"></span>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="m-body">
+      <div class="loading-txt">加载中…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── utils ──────────────────────────────────────────────
+let _rawLines = [];
+
+function fmtNum(n){
+  if(n>=10000) return (n/1000).toFixed(1)+'k';
+  return (n||0).toLocaleString();
+}
+function fmtTs(iso){
+  const d=new Date(iso);
+  const p=n=>String(n).padStart(2,'0');
+  return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function fmt(ms){
+  if(ms<1000) return ms+' ms';
+  return (ms/1000).toFixed(2)+' s';
+}
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function prettyJson(v){
+  if(typeof v==='string') return esc(v);
+  try{ return esc(JSON.stringify(v,null,2)); }catch(e){ return esc(String(v)); }
+}
+
+// ── tabs ───────────────────────────────────────────────
+function switchTab(name, btn){
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+  if(name==='console') loadConsole();
+  if(name==='metrics') loadMetrics();
+}
+
+// ── spinner ────────────────────────────────────────────
+let _loading=0;
+function startLoad(){ _loading++; document.getElementById('spin').classList.add('on'); }
+function endLoad(){ if(--_loading<=0){ _loading=0; document.getElementById('spin').classList.remove('on'); } }
+
+// ── AI Calls tab ───────────────────────────────────────
+async function loadCalls(){
+  const agent=document.getElementById('fa').value;
+  const status=document.getElementById('fs').value;
+  const limit=document.getElementById('fl').value;
+  startLoad();
+  try{
+    const p=new URLSearchParams({limit});
+    if(agent) p.set('agent',agent);
+    if(status) p.set('status',status);
+    const r=await fetch('/admin/logs/api?'+p);
+    const data=await r.json();
+    renderStats(data.stats);
+    renderTable(data.rows);
+    document.getElementById('lu1').textContent='更新于 '+new Date().toLocaleTimeString();
+  }finally{ endLoad(); }
+}
+
+function renderStats(s){
+  document.getElementById('s-tot').textContent=fmtNum(s.total);
+  document.getElementById('s-ok').textContent=fmtNum(s.success);
+  document.getElementById('s-err').textContent=fmtNum(s.error);
+  document.getElementById('s-dur').textContent=s.avg_duration_ms?Math.round(s.avg_duration_ms):'—';
+  document.getElementById('s-tok').textContent=fmtNum(s.total_tokens);
+}
+
+function renderTable(rows){
+  const tb=document.getElementById('tbody');
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="11" class="empty">暂无数据</td></tr>'; return; }
+  const maxDur=Math.max(...rows.map(r=>r.duration_ms),1);
+  tb.innerHTML=rows.map(r=>{
+    const badge=`<span class="badge ${r.status}">${r.status}</span>`;
+    const rc=r.retry_index;
+    const retry=`<span class="rc${rc>0?' r'+rc:''}">#${rc}</span>`;
+    const err=r.error_message
+      ?`<span class="err-cell" title="${esc(r.error_message)}">${esc(r.error_message)}</span>`
+      :'<span class="dim">—</span>';
+    const sess=r.session_id
+      ?`<span class="mono dim" title="${r.session_id}">${r.session_id.slice(0,8)}</span>`
+      :'<span class="dim">—</span>';
+    const w=Math.min(50,Math.round(r.duration_ms/maxDur*50));
+    const model=r.model?r.model.split('/').pop():'—';
+    return `<tr class="data-row" onclick="openDetail(${r.id})">
+      <td class="mono dim">${fmtTs(r.ts)}</td>
+      <td><b>${esc(r.agent)}</b></td>
+      <td class="mono dim" title="${esc(r.model||'')}">${esc(model)}</td>
+      <td>${sess}</td>
+      <td>${badge}</td>
+      <td>${fmt(r.duration_ms)}<span class="bar" style="width:${w}px"></span></td>
+      <td class="dim">${fmtNum(r.prompt_tokens)} → ${fmtNum(r.completion_tokens)}</td>
+      <td>${retry}</td>
+      <td class="dim">${fmtNum(r.system_prompt_len)}</td>
+      <td class="dim">${fmtNum(r.response_len)}</td>
+      <td>${err}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Detail Modal ───────────────────────────────────────
+async function openDetail(id){
+  const ov=document.getElementById('overlay');
+  const mb=document.getElementById('m-body');
+  ov.style.display='flex';
+  mb.innerHTML='<div class="loading-txt">加载中…</div>';
+  startLoad();
+  try{
+    const r=await fetch(`/admin/logs/api/${id}`);
+    const d=await r.json();
+    document.getElementById('m-title').textContent=
+      `#${d.id} · ${d.agent} · ${d.ts?fmtTs(d.ts):''}`;
+    document.getElementById('m-badge').innerHTML=
+      `<span class="badge ${d.status}">${d.status}</span>`;
+
+    mb.innerHTML=`
+      <div class="panel">
+        <h4>基本信息</h4>
+        <div class="kv">
+          <span class="k">Agent</span><span class="v">${esc(d.agent)}</span>
+          <span class="k">Session</span><span class="v mono">${esc(d.session_id||'—')}</span>
+          <span class="k">Model</span><span class="v">${esc(d.model)}</span>
+          <span class="k">Temperature</span><span class="v">${d.temperature}</span>
+          <span class="k">Retry</span><span class="v">#${d.retry_index}</span>
+          <span class="k">耗时</span><span class="v">${fmt(d.duration_ms)}</span>
+          <span class="k">HTTP状态</span><span class="v">${d.http_status_code||'—'}</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>Token 消耗</h4>
+        <div class="kv">
+          <span class="k">Prompt</span><span class="v">${fmtNum(d.prompt_tokens)}</span>
+          <span class="k">Completion</span><span class="v">${fmtNum(d.completion_tokens)}</span>
+          <span class="k">Total</span><span class="v"><b>${fmtNum(d.total_tokens)}</b></span>
+          <span class="k">System Prompt</span><span class="v">${fmtNum(d.system_prompt_len)} 字符</span>
+          <span class="k">响应长度</span><span class="v">${fmtNum(d.response_len)} 字符</span>
+        </div>
+        ${d.error_message?`<div style="margin-top:10px;color:#f87171;font-size:12px">错误: ${esc(d.error_message)}</div>`:''}
+      </div>
+      <div class="panel modal-full">
+        <h4>请求 Messages（发送给 API 的用户消息）</h4>
+        <pre class="code">${prettyJson(d.messages)}</pre>
+      </div>
+      <div class="panel modal-full">
+        <h4>响应 Response（LLM 返回内容${d.response_len>2000?' — 仅显示前2000字':''}）</h4>
+        <pre class="code">${prettyJson(d.response)}</pre>
+      </div>
+    `;
+  }finally{ endLoad(); }
+}
+
+function closeModal(e){
+  if(!e||e.target===document.getElementById('overlay'))
+    document.getElementById('overlay').style.display='none';
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+
+// ── Console tab ────────────────────────────────────────
+const LEVEL_RE=/\[(ERROR|WARNING|WARN|INFO|DEBUG)\]/i;
+
+function colorLine(raw){
+  const m=raw.match(LEVEL_RE);
+  if(!m) return `<div class="ll info">${esc(raw)}</div>`;
+  const lv=m[1].toUpperCase();
+  const cls=lv==='ERROR'?'error':lv==='WARNING'||lv==='WARN'?'warn':lv==='DEBUG'?'debug':'info';
+  return `<div class="ll ${cls}">${esc(raw)}</div>`;
+}
+
+function filterConsole(){
+  const q=document.getElementById('search').value.trim();
+  const box=document.getElementById('logbox');
+  let lines=_rawLines;
+  if(q){
+    try{
+      const re=new RegExp(q,'i');
+      lines=lines.filter(l=>re.test(l));
+    }catch(e){
+      lines=lines.filter(l=>l.toLowerCase().includes(q.toLowerCase()));
+    }
+  }
+  box.innerHTML=lines.map(colorLine).join('');
+  if(document.getElementById('autoScroll').checked)
+    box.scrollTop=box.scrollHeight;
+}
+
+async function loadConsole(){
+  const lines=document.getElementById('cl').value;
+  startLoad();
+  try{
+    const r=await fetch(`/admin/console?lines=${lines}`);
+    const d=await r.json();
+    _rawLines=d.lines||[];
+    filterConsole();
+    document.getElementById('lu2').textContent='更新于 '+new Date().toLocaleTimeString();
+  }finally{ endLoad(); }
+}
+
+// ── Metrics tab (Phase D.1) ────────────────────────────
+async function loadMetrics(){
+  const hours=document.getElementById('mw').value;
+  const topN=document.getElementById('mtn').value;
+  startLoad();
+  try{
+    const r=await fetch(`/admin/api/metrics/llm?hours=${hours}&top_n=${topN}`);
+    if(!r.ok){
+      document.getElementById('md-cnt').textContent='—';
+      return;
+    }
+    const d=await r.json();
+    renderMetricsDuration(d.duration);
+    renderTrend(d.hourly_trend);
+    renderAgentBreakdown(d.by_agent);
+    renderTopUsers(d.top_users);
+    document.getElementById('lu3').textContent='更新于 '+new Date().toLocaleTimeString();
+  }finally{ endLoad(); }
+}
+
+function renderMetricsDuration(d){
+  document.getElementById('md-p50').textContent=d.p50||'—';
+  document.getElementById('md-p95').textContent=d.p95||'—';
+  document.getElementById('md-p99').textContent=d.p99||'—';
+  document.getElementById('md-max').textContent=d.max||'—';
+  document.getElementById('md-avg').textContent=d.avg||'—';
+  document.getElementById('md-cnt').textContent=fmtNum(d.count||0);
+}
+
+function renderTrend(buckets){
+  const box=document.getElementById('trend');
+  if(!buckets||!buckets.length){ box.innerHTML='<div class="empty">无数据</div>'; return; }
+  const max=Math.max(...buckets.map(b=>b.total),1);
+  // 容器内总高度 = 140 px（min-height 160 - padding）；最高柱 = 100% 高度
+  box.innerHTML=buckets.map(b=>{
+    const h=Math.round(b.total/max*140);
+    const errH=b.total?Math.round((b.error/b.total)*h):0;
+    const successH=h-errH;
+    const hr=b.hour.slice(11,13);
+    const title=`${b.hour}\n总数 ${b.total} · 成功 ${b.success} · 失败 ${b.error} · ${fmtNum(b.total_tokens)} tokens`;
+    return `<div class="trend-col" title="${esc(title)}">
+      <div class="trend-bar err" style="height:${errH}px"></div>
+      <div class="trend-bar" style="height:${successH}px"></div>
+      <div class="lbl">${hr}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAgentBreakdown(rows){
+  const tb=document.getElementById('agent-tbody');
+  if(!rows||!rows.length){ tb.innerHTML='<tr><td colspan="5" class="empty">无数据</td></tr>'; return; }
+  tb.innerHTML=rows.map(r=>{
+    const rate=(r.error_rate*100).toFixed(1)+'%';
+    const cls=r.error_rate>=0.1?'err':(r.error_rate>0?'':'ok');
+    return `<tr>
+      <td><b>${esc(r.agent)}</b></td>
+      <td class="mono">${fmtNum(r.total)}</td>
+      <td class="mono" style="color:#4ade80">${fmtNum(r.success)}</td>
+      <td class="mono" style="color:#f87171">${fmtNum(r.error)}</td>
+      <td><span class="badge ${cls==='err'?'error':(cls==='ok'?'success':'')}">${rate}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderTopUsers(rows){
+  const tb=document.getElementById('topu-tbody');
+  if(!rows||!rows.length){ tb.innerHTML='<tr><td colspan="4" class="empty">今日尚无消耗</td></tr>'; return; }
+  tb.innerHTML=rows.map(r=>{
+    const label=r.openid_masked?`<span class="mono">${esc(r.openid_masked)}</span>`
+                              :`<span class="dim">#${r.user_id}</span>`;
+    return `<tr>
+      <td>${label}</td>
+      <td class="mono">${fmtNum(r.prompt_tokens)}</td>
+      <td class="mono">${fmtNum(r.completion_tokens)}</td>
+      <td class="mono"><b>${fmtNum(r.total_tokens)}</b></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── auto refresh ───────────────────────────────────────
+function refreshAll(){
+  const tab=document.querySelector('.tab-pane.active');
+  if(!tab) return;
+  if(tab.id==='tab-calls') loadCalls();
+  else if(tab.id==='tab-metrics') loadMetrics();
+  else loadConsole();
+}
+
+let _timer=null;
+document.getElementById('autoR').addEventListener('change',function(){
+  if(this.checked){ _timer=setInterval(refreshAll,30000); }
+  else{ clearInterval(_timer); _timer=null; }
+});
+
+loadCalls();
+_timer=setInterval(refreshAll,30000);
+</script>
+</body>
+</html>

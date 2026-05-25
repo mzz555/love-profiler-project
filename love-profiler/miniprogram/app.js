@@ -3,11 +3,16 @@
 // 修改 BASE_URL 为生产域名后上线
 // =====================================================================
 
-// 真机调试时 localhost 指手机自己，必须用开发机的局域网 IP
-// 192.168.3.179 = 当前 WiFi 网卡 IP，手机与电脑须在同一 WiFi
-// 后端启动须绑 0.0.0.0: uvicorn app.main:app --host 0.0.0.0 --port 8000
-const BASE_URL = 'http://192.168.3.179:8000';
-const IS_DEV = BASE_URL.includes('localhost') || /^http:\/\/(127\.|172\.|192\.168\.|10\.)/.test(BASE_URL);
+// ── 环境配置 ──────────────────────────────────────────────
+// 上线前必须把 PROD_URL 改为真实生产域名（HTTPS）
+// 本地开发时改 DEV_URL 为开发机局域网 IP
+const DEV_URL  = 'http://192.168.3.179:8000';
+const PROD_URL = 'https://your-production-domain.com';
+
+// __wxConfig.envVersion: 'develop' | 'trial' | 'release' (抖音/微信通用)
+const ENV_VERSION = (typeof __wxConfig !== 'undefined' && __wxConfig.envVersion) || 'develop';
+const BASE_URL = (ENV_VERSION === 'release') ? PROD_URL : DEV_URL;
+const IS_DEV = ENV_VERSION !== 'release';
 
 App({
   isDev: IS_DEV,
@@ -54,17 +59,18 @@ App({
     tt.removeStorageSync('assessmentId');
   },
 
-  /**
-   * 创建 WebSocket 连接，自动附加 token 到 query string。
-   * @returns {SocketTask}
-   */
-  connectSocket({ path }) {
-    const wsBase = BASE_URL.replace(/^http/, 'ws');
-    const token = this.globalData.token;
-    const url = token
-      ? `${wsBase}${path}?token=${encodeURIComponent(token)}`
-      : `${wsBase}${path}`;
-    return tt.connectSocket({ url });
+  connectSocket({ path, ticket }) {
+    var wsBase = BASE_URL.replace(/^http/, 'ws');
+    var url;
+    if (ticket) {
+      url = wsBase + path + '?ticket=' + encodeURIComponent(ticket);
+    } else {
+      var token = this.globalData.token;
+      url = token
+        ? wsBase + path + '?token=' + encodeURIComponent(token)
+        : wsBase + path;
+    }
+    return tt.connectSocket({ url: url });
   },
 
   /**

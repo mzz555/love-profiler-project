@@ -85,7 +85,7 @@
             </view>
           </view>
         </view>
-        <view class="str-hero-right">
+        <view class="str-hero-right" style="border: 3rpx solid {{typeTheme.primary}};">
           <image tt:if="{{heroImageUrl}}" class="str-hero-char {{heroImageReady ? 'show' : ''}}" src="{{heroImageUrl}}" mode="aspectFit" />
           <view tt:else class="str-hero-char-placeholder" />
         </view>
@@ -103,6 +103,16 @@
       </view>
     </view>
 
+
+    <!-- 数据概览分区标题（hero-card 与图表区之间的视觉断点） -->
+    <view tt:if="{{dimChartReady}}" class="rpt-dims-divider">
+      <view class="rpt-dims-div-line" />
+      <view class="rpt-dims-div-badge">
+        <text class="rpt-dims-div-icon">📊</text>
+        <text class="rpt-dims-div-label">数据概览</text>
+      </view>
+      <view class="rpt-dims-div-line" />
+    </view>
 
     <!-- ── 三图表（始终跟随 dimChartReady，不依赖 section 文字）── -->
     <view tt:if="{{dimChartReady}}" class="rpt-charts-block">
@@ -170,6 +180,16 @@
     </view>
 
     <!-- ── 分段流式报告（新格式）── -->
+
+    <!-- 文字解读分区标题（图表区与正文段之间的视觉断点） -->
+    <view tt:if="{{sec.Opening}}" class="rpt-dims-divider">
+      <view class="rpt-dims-div-line" />
+      <view class="rpt-dims-div-badge">
+        <text class="rpt-dims-div-icon">✦</text>
+        <text class="rpt-dims-div-label">文字解读</text>
+      </view>
+      <view class="rpt-dims-div-line" />
+    </view>
 
     <view tt:if="{{sec.Opening}}" class="rpt-sec-card rpt-opening">
       <view class="rpt-sec-header">
@@ -277,15 +297,17 @@
       </view>
     </view>
 
-    <view tt:if="{{sec.Suggestion}}" class="rpt-sec-card rpt-suggestion">
-      <view class="rpt-sec-header">
-        <view class="rpt-sec-icon-wrap rpt-iw-suggestion"><text class="rpt-sec-icon">🌱</text></view>
-        <view class="rpt-sec-hd-col">
-          <text class="rpt-sec-num">SUGGESTION</text>
-          <text class="rpt-sec-label">给你的建议</text>
-        </view>
+    <!-- Suggestion 段：首席心理顾问引言卡片样式 -->
+    <view tt:if="{{sec.Suggestion}}" class="rpt-quote-card">
+      <text class="rpt-quote-mark">"</text>
+      <view class="rpt-quote-body">
+        <text class="rpt-quote-text">{{sec.Suggestion}}<text tt:if="{{!streamingDone && curSec==='Suggestion'}}" class="rpt-cursor">▋</text></text>
       </view>
-      <text class="rpt-sec-body">{{sec.Suggestion}}<text tt:if="{{!streamingDone && curSec==='Suggestion'}}" class="rpt-cursor">▋</text></text>
+      <view class="rpt-quote-footer">
+        <view class="rpt-quote-line" />
+        <text class="rpt-quote-author">关系观察手记</text>
+        <view class="rpt-quote-line" />
+      </view>
     </view>
 
     <!-- 旧格式兜底（portrait_chunk） -->

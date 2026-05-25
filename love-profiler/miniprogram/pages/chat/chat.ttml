@@ -22,7 +22,7 @@
           <view class="progress-fill" style="width: {{(questionNum / totalQuestions) * 100}}%" />
         </view>
       </view>
-      <view tt:if="{{!isComplete}}" class="nav-btn" bindtap="randomPick">
+      <view tt:if="{{isDev && !isComplete}}" class="nav-btn" bindtap="randomPick">
         <text class="nav-random-icon">🎲</text>
       </view>
       <view tt:if="{{!isComplete}}" class="nav-btn" bindtap="closeQuiz">

@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Set required env vars before importing app modules
+os.environ.setdefault("DEV_MODE", "true")
 os.environ.setdefault("DOUBAO_API_KEY", "test-key")
 os.environ.setdefault("DOUBAO_MODEL", "doubao-test")
 os.environ.setdefault("DOUYIN_APP_ID", "test-appid")

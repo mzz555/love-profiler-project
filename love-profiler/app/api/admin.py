@@ -1,22 +1,29 @@
 """
-Admin dashboard — AI call log monitor.
+Admin dashboard — data browsing, AI call log monitor, metrics.
 
 Endpoints:
-  GET /admin/logs              HTML dashboard (2 tabs: AI调用 + 控制台)
-  GET /admin/logs/api          JSON: stats + call log rows
-  GET /admin/logs/api/{id}     JSON: full detail for one row (messages + response)
-  GET /admin/console           JSON: last N lines from logs/app.log
+  GET /admin                     Redirect to SPA
+  GET /admin/api/overview        Business table stats
+  GET /admin/api/audits          Report quality audit list
+  GET /admin/api/metrics/*       LLM / business / quality metrics
+  GET /admin/api/{table}         Paginated table list
+  GET /admin/api/{table}/{id}    Single row detail
+  PUT /admin/api/{table}/{id}    Update editable fields
+  GET /admin/logs                HTML dashboard (AI call monitor)
+  GET /admin/logs/api            JSON: stats + call log rows
+  GET /admin/logs/api/{id}       JSON: full detail for one row
+  GET /admin/console             JSON: last N lines from logs/app.log
 
 Access: requires DEV_MODE=true OR ADMIN_TOKEN env var.
 """
 
 import json
 import os
-import re
+import pathlib
 from collections import deque
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import case, desc, func, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -32,279 +39,16 @@ from app.services.admin_metrics import (
     compute_llm_metrics,
     compute_quality_score_distribution,
 )
-
-
-_SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+from app.api.admin_config import TABLE_CONFIG
+from app.api.admin_helpers import get_row, query_table, update_row
+from app.limiter import limiter
 
 
 def _utc_today_start() -> datetime:
-    """返回 UTC 今天 00:00:00。"""
     return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
+
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-# ---------------------------------------------------------------------------
-# Table configuration
-# ---------------------------------------------------------------------------
-
-TABLE_CONFIG: dict[str, dict] = {
-    "users": {
-        "pk": "id",
-        "search_cols": ["openid"],
-        "editable_fields": [],
-        "truncate_cols": [],
-        "created_at_col": "created_at",
-        "list_cols": ["id", "openid", "created_at"],
-    },
-    "assessments": {
-        "pk": "id",
-        "search_cols": ["personality_type", "status", "session_id"],
-        "editable_fields": ["status"],
-        "truncate_cols": ["signals", "diagnosis_json", "report_text",
-                          "answers_json", "report_json", "dimension_scores", "summary"],
-        "created_at_col": "created_at",
-        "list_cols": ["id", "user_id", "session_id", "personality_type",
-                      "status", "mode", "created_at"],
-    },
-    "orders": {
-        "pk": "id",
-        "search_cols": ["out_trade_no", "status"],
-        "editable_fields": [],
-        "truncate_cols": [],
-        "created_at_col": "created_at",
-        "list_cols": ["id", "user_id", "assessment_id", "out_trade_no",
-                      "amount", "status", "created_at"],
-    },
-    "ai_call_logs": {
-        "pk": "id",
-        "search_cols": ["agent", "status", "session_id"],
-        "editable_fields": [],
-        "truncate_cols": ["messages_json", "response_preview"],
-        "created_at_col": "ts",
-        "list_cols": ["id", "ts", "agent", "session_id", "model",
-                      "status", "duration_ms", "total_tokens", "retry_index"],
-    },
-    "report_quality_audit": {
-        "pk": "id",
-        "search_cols": ["judge_model", "prompt_version"],
-        "editable_fields": [],
-        "truncate_cols": ["raw_output", "summary"],
-        "created_at_col": "created_at",
-        "list_cols": ["id", "created_at", "assessment_id", "judge_model",
-                      "prompt_version", "overall_score",
-                      "coherence_score", "readability_score", "factual_score",
-                      "duration_ms"],
-    },
-    "base_love_type": {
-        "pk": "id",
-        "search_cols": ["type_code", "type_name"],
-        "editable_fields": ["type_name", "tagline"],
-        "truncate_cols": [],
-        "created_at_col": None,
-        "list_cols": ["id", "type_code", "type_name", "tagline"],
-    },
-    "highlights": {
-        "pk": "code",
-        "search_cols": ["code", "name_cn"],
-        "editable_fields": ["name_cn", "is_positive"],
-        "truncate_cols": ["report_seed"],
-        "created_at_col": None,
-        "list_cols": ["code", "layer", "involved_dims",
-                      "is_positive", "name_cn", "sort_order"],
-    },
-    "base_dimension_meta": {
-        "pk": "code",
-        "search_cols": ["code", "name_cn"],
-        "editable_fields": ["name_cn", "description", "radar_label"],
-        "truncate_cols": [],
-        "created_at_col": None,
-        "list_cols": ["code", "name_cn", "description", "score_model",
-                      "radar_label", "sort_order"],
-    },
-    "base_segment_decode": {
-        "pk": "id",
-        "search_cols": ["dimension", "code", "label_cn"],
-        "editable_fields": ["label_cn", "description", "score_range"],
-        "truncate_cols": [],
-        "created_at_col": None,
-        "list_cols": ["id", "dimension", "code", "label_cn",
-                      "score_range", "is_healthy"],
-    },
-    "base_D4_type": {
-        "pk": "id",
-        "search_cols": ["love_languages_code", "love_languages_name"],
-        "editable_fields": ["love_languages_name", "love_languages_detail"],
-        "truncate_cols": ["love_languages_detail"],
-        "created_at_col": None,
-        "list_cols": ["id", "love_languages_code", "love_languages_name"],
-    },
-    "base_D5_quadrant": {
-        "pk": "quadrant",
-        "search_cols": ["quadrant", "style_name"],
-        "editable_fields": ["style_name", "description", "guide"],
-        "truncate_cols": ["guide", "description"],
-        "created_at_col": None,
-        "list_cols": ["quadrant", "style_name", "sort_order"],
-    },
-    "questions": {
-        "pk": "question_id",
-        "search_cols": ["dimension", "signal_code", "stem"],
-        "editable_fields": [],
-        "truncate_cols": ["stem", "notes"],
-        "created_at_col": None,
-        "list_cols": ["question_id", "dimension", "signal_code",
-                      "signal_name", "question_type", "sort_order"],
-    },
-}
-
-
-def _validate_config() -> None:
-    """启动时校验 TABLE_CONFIG 的所有表名/列名仅含安全字符——_query_table 等用 f-string
-    拼标识符进 SQL，靠这个不变量挡 SQL 注入。任何不安全标识符直接进程崩溃。"""
-    for table, cfg in TABLE_CONFIG.items():
-        if not _SAFE_IDENT.match(table):
-            raise RuntimeError(f"TABLE_CONFIG 表名不安全: {table!r}")
-        idents = [cfg["pk"]] + list(cfg.get("search_cols", [])) \
-                 + list(cfg.get("editable_fields", [])) \
-                 + list(cfg.get("list_cols", []))
-        if cfg.get("created_at_col"):
-            idents.append(cfg["created_at_col"])
-        for ident in idents:
-            if not _SAFE_IDENT.match(ident):
-                raise RuntimeError(f"TABLE_CONFIG[{table!r}] 列名不安全: {ident!r}")
-
-
-_validate_config()
-
-
-# ---------------------------------------------------------------------------
-# Generic helpers
-# ---------------------------------------------------------------------------
-
-def _query_table(
-    db: Session,
-    table_name: str,
-    config: dict,
-    page: int,
-    limit: int,
-    q: str | None,
-) -> dict:
-    """通用分页查询，支持多列模糊搜索。表不存在时返回空结果而非 500。"""
-    pk = config["pk"]
-    offset = (page - 1) * limit
-    params: dict = {}
-
-    where_parts: list[str] = []
-    if q and config.get("search_cols"):
-        for i, col in enumerate(config["search_cols"]):
-            where_parts.append(f'LOWER(CAST("{col}" AS TEXT)) LIKE LOWER(:q_{i})')
-            params[f"q_{i}"] = f"%{q}%"
-    where_clause = ("WHERE " + " OR ".join(where_parts)) if where_parts else ""
-
-    # 仅 SELECT list_cols 中的列，避免拉取大 JSON 字段（diagnosis_json 等）再截断
-    list_cols = config.get("list_cols")
-    select_clause = ", ".join(f'"{c}"' for c in list_cols) if list_cols else "*"
-
-    try:
-        total = db.execute(
-            text(f'SELECT COUNT(*) FROM "{table_name}" {where_clause}'), params
-        ).scalar() or 0
-        params["limit"] = limit
-        params["offset"] = offset
-        rows_raw = db.execute(
-            text(f'SELECT {select_clause} FROM "{table_name}" {where_clause} '
-                 f'ORDER BY "{pk}" DESC LIMIT :limit OFFSET :offset'),
-            params,
-        ).fetchall()
-    except (OperationalError, ProgrammingError):
-        return {"total": 0, "page": page, "limit": limit, "rows": [],
-                "error": "table_not_available"}
-
-    rows = [dict(row._mapping) for row in rows_raw]
-    return {"total": total, "page": page, "limit": limit, "rows": rows}
-
-
-def _get_row(db: Session, table_name: str, config: dict, record_id: str) -> dict:
-    """按主键取单条完整记录（大字段不截断）。"""
-    pk = config["pk"]
-    try:
-        row = db.execute(
-            text(f'SELECT * FROM "{table_name}" WHERE "{pk}" = :pk_val'),
-            {"pk_val": record_id},
-        ).fetchone()
-    except (OperationalError, ProgrammingError) as exc:
-        raise HTTPException(status_code=503, detail="数据库表不可用") from exc
-    if row is None:
-        raise HTTPException(status_code=404, detail="记录不存在")
-    return dict(row._mapping)
-
-
-def _update_row(
-    db: Session,
-    table_name: str,
-    config: dict,
-    record_id: str,
-    update_data: dict,
-) -> dict:
-    """按字段白名单更新记录。assessments.status 有额外约束。"""
-    editable = set(config.get("editable_fields", []))
-
-    if not editable:
-        raise HTTPException(status_code=403,
-                            detail=f"表 {table_name} 为只读，不允许修改")
-
-    if not update_data:
-        raise HTTPException(status_code=400, detail="没有提供任何字段")
-
-    invalid = set(update_data.keys()) - editable
-    if invalid:
-        raise HTTPException(status_code=400,
-                            detail=f"不可编辑的字段: {', '.join(sorted(invalid))}")
-
-    pk = config["pk"]
-    is_status_reset = table_name == "assessments" and "status" in update_data
-
-    if is_status_reset:
-        if update_data["status"] != "analyzed":
-            raise HTTPException(status_code=422,
-                                detail="status 只允许重置为 analyzed")
-        try:
-            current = db.execute(
-                text(f'SELECT status FROM "{table_name}" WHERE "{pk}" = :pk_val'),
-                {"pk_val": record_id},
-            ).fetchone()
-        except (OperationalError, ProgrammingError) as exc:
-            raise HTTPException(status_code=503, detail="数据库表不可用") from exc
-        if current is None:
-            raise HTTPException(status_code=404, detail="记录不存在")
-        if current.status != "generating":
-            raise HTTPException(
-                status_code=422,
-                detail=f"当前 status={current.status}，只有 generating 状态可以重置",
-            )
-
-    set_clause = ", ".join([f'"{k}" = :{k}' for k in update_data.keys()])
-    params = {**update_data, "_pk_val": record_id}
-
-    # 状态重置时 WHERE 加 status='generating'，防并发竞争
-    where_extra = ' AND "status" = \'generating\'' if is_status_reset else ""
-
-    try:
-        result = db.execute(
-            text(f'UPDATE "{table_name}" SET {set_clause} WHERE "{pk}" = :_pk_val{where_extra}'),
-            params,
-        )
-        db.commit()
-    except (OperationalError, ProgrammingError) as exc:
-        raise HTTPException(status_code=503, detail="数据库表不可用") from exc
-
-    if result.rowcount == 0:
-        if is_status_reset:
-            raise HTTPException(status_code=422,
-                                detail="记录不存在或状态已变更，无法重置")
-        raise HTTPException(status_code=404, detail="记录不存在")
-
-    return {"ok": True, "updated": record_id}
 
 
 # ---------------------------------------------------------------------------
@@ -312,13 +56,11 @@ def _update_row(
 # ---------------------------------------------------------------------------
 
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
-    """Allow when DEV_MODE is on, otherwise require X-Admin-Token to match ADMIN_TOKEN."""
     if os.environ.get("DEV_MODE", "").lower() == "true":
         return
     expected = os.environ.get("ADMIN_TOKEN", "")
     if expected and x_admin_token == expected:
         return
-    # Hide the existence of the panel from unauthenticated callers.
     raise HTTPException(status_code=404)
 
 
@@ -329,16 +71,16 @@ def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
 @router.get("", include_in_schema=False)
 @router.get("/", include_in_schema=False)
 async def admin_root(_: None = Depends(require_admin)) -> RedirectResponse:
-    """管理面板入口，重定向到前端 SPA。"""
     return RedirectResponse(url="/static/admin/index.html")
 
 
 @router.get("/api/overview", include_in_schema=False)
+@limiter.limit("30/minute")
 async def admin_overview(
+    request: Request,
     db: Session = Depends(get_db),
     _: None = Depends(require_admin),
 ) -> dict:
-    """各业务表统计数据 + 最近 5 条 assessments。"""
     today_start = _utc_today_start()
     result: dict = {"tables": {}, "recent_assessments": []}
 
@@ -384,7 +126,6 @@ async def list_audits(
     db: Session = Depends(get_db),
     _: None = Depends(require_admin),
 ):
-    """报告质量审计列表 + 概览统计（Phase D.2）。"""
     overall_stats = db.query(
         func.count(ReportQualityAudit.id),
         func.avg(ReportQualityAudit.overall_score),
@@ -395,18 +136,12 @@ async def list_audits(
 
     rows = (
         db.query(
-            ReportQualityAudit.id,
-            ReportQualityAudit.created_at,
-            ReportQualityAudit.assessment_id,
-            ReportQualityAudit.judge_model,
-            ReportQualityAudit.prompt_version,
-            ReportQualityAudit.coherence_score,
-            ReportQualityAudit.readability_score,
-            ReportQualityAudit.factual_score,
-            ReportQualityAudit.overall_score,
-            ReportQualityAudit.summary,
-            ReportQualityAudit.duration_ms,
-            Assessment.personality_type,
+            ReportQualityAudit.id, ReportQualityAudit.created_at,
+            ReportQualityAudit.assessment_id, ReportQualityAudit.judge_model,
+            ReportQualityAudit.prompt_version, ReportQualityAudit.coherence_score,
+            ReportQualityAudit.readability_score, ReportQualityAudit.factual_score,
+            ReportQualityAudit.overall_score, ReportQualityAudit.summary,
+            ReportQualityAudit.duration_ms, Assessment.personality_type,
         )
         .outerjoin(Assessment, Assessment.id == ReportQualityAudit.assessment_id)
         .order_by(desc(ReportQualityAudit.created_at))
@@ -419,26 +154,22 @@ async def list_audits(
 
     return {
         "stats": {
-            "total":             overall_stats[0] or 0,
-            "avg_overall":       _avg(overall_stats[1]),
-            "avg_coherence":     _avg(overall_stats[2]),
-            "avg_readability":   _avg(overall_stats[3]),
-            "avg_factual":       _avg(overall_stats[4]),
+            "total": overall_stats[0] or 0,
+            "avg_overall": _avg(overall_stats[1]),
+            "avg_coherence": _avg(overall_stats[2]),
+            "avg_readability": _avg(overall_stats[3]),
+            "avg_factual": _avg(overall_stats[4]),
         },
         "rows": [
             {
-                "id":                r.id,
-                "created_at":        r.created_at.isoformat() if r.created_at else None,
-                "assessment_id":     r.assessment_id,
-                "judge_model":       r.judge_model,
-                "prompt_version":    r.prompt_version,
-                "coherence_score":   r.coherence_score,
-                "readability_score": r.readability_score,
-                "factual_score":     r.factual_score,
-                "overall_score":     r.overall_score,
-                "summary":           r.summary,
-                "duration_ms":       r.duration_ms,
-                "personality_type":  r.personality_type,
+                "id": r.id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "assessment_id": r.assessment_id, "judge_model": r.judge_model,
+                "prompt_version": r.prompt_version,
+                "coherence_score": r.coherence_score, "readability_score": r.readability_score,
+                "factual_score": r.factual_score, "overall_score": r.overall_score,
+                "summary": r.summary, "duration_ms": r.duration_ms,
+                "personality_type": r.personality_type,
             }
             for r in rows
         ],
@@ -447,164 +178,116 @@ async def list_audits(
 
 @router.get("/api/metrics/llm", include_in_schema=False)
 async def metrics_llm(
-    hours:  int = Query(default=24, ge=1, le=168),  # 最多 1 周
-    top_n:  int = Query(default=10, ge=1, le=50),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    hours: int = Query(default=24, ge=1, le=168),
+    top_n: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ):
-    """LLM 调用监控指标（Phase D.1）。
-
-    返回结构：
-      window_hours, duration{p50,p95,p99,avg,max,count}, hourly_trend[],
-      top_users[{user_id, openid_masked, prompt/completion/total_tokens}],
-      by_agent[{agent, total, success, error, error_rate}]
-    """
     return compute_llm_metrics(db, hours=hours, top_n=top_n)
 
 
 @router.get("/api/metrics/business", include_in_schema=False)
 async def metrics_business(
     days: int = Query(default=7, ge=1, le=90),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ):
-    """业务指标聚合（仪表盘 Phase D.3）：用户/订单/16类/漏斗。
-
-    返回结构：
-      window_days,
-      daily_users[{date, new_users, completed_assessments}],
-      personality_distribution[{type_code, count, d1_group}],
-      funnel{stages{pending,generating,analyzed,complete}, total},
-      daily_orders[{date, paid, failed, pending, revenue_yuan}]
-    """
     return compute_business_metrics(db, days=days)
 
 
 @router.get("/api/metrics/quality", include_in_schema=False)
 async def metrics_quality(
     days: int = Query(default=30, ge=1, le=180),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ):
-    """报告质量评分分布（LLM-as-judge overall_score 三段分布 + 均分）。
-
-    返回结构：
-      window_days, buckets{excellent,good,poor}, total, avg_score
-    """
     return compute_quality_score_distribution(db, days=days)
 
 
 @router.get("/api/{table_name}", include_in_schema=False)
+@limiter.limit("30/minute")
 async def admin_table_list(
-    table_name: str = Path(...),
-    page: int = Query(default=1, ge=1),
-    limit: int = Query(default=50, ge=1, le=200),
-    q: str | None = Query(default=None),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    request: Request,
+    table_name: str = Path(...), page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200), q: str | None = Query(default=None),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ) -> dict:
     if table_name not in TABLE_CONFIG:
         raise HTTPException(status_code=404, detail=f"未知的表: {table_name}")
-    return _query_table(db, table_name, TABLE_CONFIG[table_name], page, limit, q)
+    return query_table(db, table_name, TABLE_CONFIG[table_name], page, limit, q)
 
 
 @router.get("/api/{table_name}/{record_id}", include_in_schema=False)
 async def admin_table_detail(
-    table_name: str = Path(...),
-    record_id: str = Path(...),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    table_name: str = Path(...), record_id: str = Path(...),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ) -> dict:
     if table_name not in TABLE_CONFIG:
         raise HTTPException(status_code=404, detail=f"未知的表: {table_name}")
-    return _get_row(db, table_name, TABLE_CONFIG[table_name], record_id)
+    return get_row(db, table_name, TABLE_CONFIG[table_name], record_id)
 
 
 @router.put("/api/{table_name}/{record_id}", include_in_schema=False)
+@limiter.limit("30/minute")
 async def admin_table_update(
-    table_name: str = Path(...),
-    record_id: str = Path(...),
+    request: Request,
+    table_name: str = Path(...), record_id: str = Path(...),
     body: dict = Body(...),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ) -> dict:
     if table_name not in TABLE_CONFIG:
         raise HTTPException(status_code=404, detail=f"未知的表: {table_name}")
-    return _update_row(db, table_name, TABLE_CONFIG[table_name], record_id, body)
+    return update_row(db, table_name, TABLE_CONFIG[table_name], record_id, body)
 
 
 @router.get("/logs/api/{log_id}", include_in_schema=False)
 async def log_detail(
     log_id: int = Path(...),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ):
     row = db.query(AiCallLog).filter(AiCallLog.id == log_id).first()
     if row is None:
         raise HTTPException(status_code=404)
-
     messages = None
     if row.messages_json:
         try:
             messages = json.loads(row.messages_json)
         except Exception:
             messages = row.messages_json
-
     response_parsed = None
     if row.response_preview:
         try:
             response_parsed = json.loads(row.response_preview)
         except Exception:
             response_parsed = row.response_preview
-
     return {
-        "id":                row.id,
-        "ts":                row.ts.isoformat() if row.ts else None,
-        "agent":             row.agent,
-        "session_id":        row.session_id,
-        "model":             row.model,
-        "temperature":       row.temperature,
-        "retry_index":       row.retry_index,
-        "status":            row.status,
-        "error_message":     row.error_message,
-        "http_status_code":  row.http_status_code,
+        "id": row.id, "ts": row.ts.isoformat() if row.ts else None,
+        "agent": row.agent, "session_id": row.session_id,
+        "model": row.model, "temperature": row.temperature,
+        "retry_index": row.retry_index, "status": row.status,
+        "error_message": row.error_message, "http_status_code": row.http_status_code,
         "system_prompt_len": row.system_prompt_len,
-        "messages":          messages,
-        "response":          response_parsed,
-        "response_len":      row.response_len,
-        "duration_ms":       row.duration_ms,
-        "prompt_tokens":     row.prompt_tokens,
-        "completion_tokens": row.completion_tokens,
-        "total_tokens":      row.total_tokens,
+        "messages": messages, "response": response_parsed,
+        "response_len": row.response_len, "duration_ms": row.duration_ms,
+        "prompt_tokens": row.prompt_tokens, "completion_tokens": row.completion_tokens,
+        "total_tokens": row.total_tokens,
     }
 
 
 @router.get("/logs/api", include_in_schema=False)
 async def logs_api(
-    agent:  str | None = Query(default=None),
+    agent: str | None = Query(default=None),
     status: str | None = Query(default=None),
-    limit:  int        = Query(default=100, ge=1, le=500),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db), _: None = Depends(require_admin),
 ):
     today_start = _utc_today_start()
-
-    # Aggregate in SQL — earlier code loaded every row of today_rows just to len/sum/avg.
     stats_row = db.query(
         func.count(AiCallLog.id),
         func.sum(case((AiCallLog.status == "success", 1), else_=0)),
         func.avg(AiCallLog.duration_ms),
         func.sum(AiCallLog.total_tokens),
     ).filter(AiCallLog.ts >= today_start).one()
-    total_today        = stats_row[0] or 0
-    success_today      = stats_row[1] or 0
-    avg_dur            = float(stats_row[2] or 0)
-    total_tokens_today = stats_row[3] or 0
 
-    # 列表视图不需要大字段，用 defer 跳过避免每页拉几 MB JSON
     q = db.query(AiCallLog).options(
-        defer(AiCallLog.messages_json),
-        defer(AiCallLog.response_preview),
+        defer(AiCallLog.messages_json), defer(AiCallLog.response_preview),
     )
     if agent:
         q = q.filter(AiCallLog.agent == agent)
@@ -614,30 +297,21 @@ async def logs_api(
 
     return {
         "stats": {
-            "total":           total_today,
-            "success":         success_today,
-            "error":           total_today - success_today,
-            "avg_duration_ms": round(avg_dur, 1),
-            "total_tokens":    total_tokens_today,
+            "total": stats_row[0] or 0, "success": stats_row[1] or 0,
+            "error": (stats_row[0] or 0) - (stats_row[1] or 0),
+            "avg_duration_ms": round(float(stats_row[2] or 0), 1),
+            "total_tokens": stats_row[3] or 0,
         },
         "rows": [
             {
-                "id":               r.id,
-                "ts":               r.ts.isoformat() if r.ts else None,
-                "agent":            r.agent,
-                "session_id":       r.session_id,
-                "model":            r.model,
-                "temperature":      r.temperature,
-                "status":           r.status,
-                "error_message":    r.error_message,
-                "http_status_code": r.http_status_code,
-                "retry_index":      r.retry_index,
-                "duration_ms":      r.duration_ms,
-                "prompt_tokens":    r.prompt_tokens,
-                "completion_tokens":r.completion_tokens,
-                "total_tokens":     r.total_tokens,
-                "response_len":     r.response_len,
-                "system_prompt_len":r.system_prompt_len,
+                "id": r.id, "ts": r.ts.isoformat() if r.ts else None,
+                "agent": r.agent, "session_id": r.session_id,
+                "model": r.model, "temperature": r.temperature,
+                "status": r.status, "error_message": r.error_message,
+                "http_status_code": r.http_status_code, "retry_index": r.retry_index,
+                "duration_ms": r.duration_ms, "prompt_tokens": r.prompt_tokens,
+                "completion_tokens": r.completion_tokens, "total_tokens": r.total_tokens,
+                "response_len": r.response_len, "system_prompt_len": r.system_prompt_len,
             }
             for r in rows
         ],
@@ -660,587 +334,9 @@ async def console_logs(
         return {"lines": [f"读取失败: {exc}"], "path": log_path, "exists": True}
 
 
-# ---------------------------------------------------------------------------
-# HTML Dashboard
-# ---------------------------------------------------------------------------
-
-_HTML = r"""<!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI 监控</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-     background:#0f1117;color:#e2e8f0;font-size:14px}
-/* header */
-.hdr{padding:16px 24px;border-bottom:1px solid #1e2535;display:flex;
-     align-items:center;gap:12px}
-.hdr h1{font-size:17px;font-weight:600;color:#f1f5f9}
-.hdr .sub{color:#64748b;font-size:12px}
-.hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-.btn{background:#1e40af;color:#fff;border:none;padding:5px 14px;
-     border-radius:6px;cursor:pointer;font-size:13px}
-.btn:hover{background:#1d4ed8}
-.auto-lbl{color:#94a3b8;font-size:12px;display:flex;align-items:center;gap:5px}
-.spin{width:16px;height:16px;border:2px solid #334155;border-top-color:#3b82f6;
-      border-radius:50%;animation:sp .8s linear infinite;display:none}
-.spin.on{display:inline-block}
-@keyframes sp{to{transform:rotate(360deg)}}
-/* tabs */
-.tabs{display:flex;gap:0;padding:0 24px;border-bottom:1px solid #1e2535}
-.tab-btn{padding:10px 18px;cursor:pointer;color:#64748b;font-size:13px;
-         border:none;background:none;border-bottom:2px solid transparent;
-         transition:color .15s}
-.tab-btn.active{color:#3b82f6;border-bottom-color:#3b82f6}
-.tab-btn:hover{color:#94a3b8}
-.tab-pane{display:none}.tab-pane.active{display:block}
-/* stats */
-.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;
-       padding:16px 24px}
-.sc{background:#161b27;border:1px solid #1e2535;border-radius:9px;
-    padding:13px 15px}
-.sc .lbl{color:#64748b;font-size:11px;text-transform:uppercase;
-         letter-spacing:.05em;margin-bottom:5px}
-.sc .val{font-size:22px;font-weight:700;color:#f1f5f9}
-.sc.err .val{color:#f87171}.sc.ok .val{color:#4ade80}
-/* filters */
-.flt{padding:0 24px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.flt select,.flt input{background:#161b27;border:1px solid #1e2535;
-  color:#e2e8f0;padding:5px 9px;border-radius:6px;font-size:13px;outline:none}
-.flt select:focus,.flt input:focus{border-color:#3b82f6}
-.flt label{color:#64748b;font-size:12px}
-/* table */
-.tbl-wrap{overflow-x:auto;padding:0 24px 40px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-thead tr{border-bottom:1px solid #1e2535}
-th{text-align:left;padding:7px 11px;color:#64748b;font-weight:500;
-   font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-td{padding:8px 11px;border-bottom:1px solid #131929;vertical-align:middle}
-tr.data-row{cursor:pointer}
-tr.data-row:hover td{background:#161b27}
-.badge{display:inline-block;padding:2px 7px;border-radius:4px;
-       font-size:11px;font-weight:600}
-.badge.success{background:#14532d;color:#4ade80}
-.badge.error{background:#450a0a;color:#f87171}
-.rc{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;
-    background:#1e293b;color:#94a3b8}
-.rc.r1{background:#422006;color:#fb923c}
-.rc.r2{background:#450a0a;color:#f87171}
-.mono{font-family:"SF Mono","Fira Code",monospace;font-size:12px}
-.dim{color:#64748b}
-.err-cell{color:#f87171;font-size:12px;max-width:220px;
-          overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar{display:inline-block;height:3px;background:#1e40af;border-radius:2px;
-     margin-left:5px;vertical-align:middle;opacity:.7}
-.empty{text-align:center;padding:40px;color:#475569}
-/* modal */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;
-         display:flex;align-items:flex-start;justify-content:center;
-         overflow-y:auto;padding:40px 20px}
-.modal{background:#161b27;border:1px solid #1e2535;border-radius:12px;
-       width:100%;max-width:900px;padding:0}
-.modal-hdr{padding:16px 20px;border-bottom:1px solid #1e2535;
-           display:flex;align-items:center;gap:10px}
-.modal-hdr h3{font-size:15px;font-weight:600}
-.modal-close{margin-left:auto;background:none;border:none;color:#64748b;
-             font-size:20px;cursor:pointer;line-height:1}
-.modal-body{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.modal-full{grid-column:1/-1}
-.panel{background:#0f1117;border:1px solid #1e2535;border-radius:8px;
-       padding:14px}
-.panel h4{font-size:11px;color:#64748b;text-transform:uppercase;
-          letter-spacing:.05em;margin-bottom:10px}
-.kv{display:grid;grid-template-columns:130px 1fr;gap:4px 8px;font-size:12px}
-.kv .k{color:#64748b}
-.kv .v{color:#e2e8f0;word-break:break-all}
-pre.code{background:#0f1117;border:1px solid #1e2535;border-radius:6px;
-         padding:12px;font-size:11px;font-family:"SF Mono","Fira Code",monospace;
-         overflow-x:auto;white-space:pre-wrap;word-break:break-all;
-         max-height:360px;overflow-y:auto;color:#a5f3fc}
-.loading-txt{color:#64748b;font-size:13px;text-align:center;padding:20px}
-/* console tab */
-.console-bar{padding:12px 24px;display:flex;gap:8px;align-items:center}
-.console-bar input{flex:1;background:#161b27;border:1px solid #1e2535;
-  color:#e2e8f0;padding:6px 10px;border-radius:6px;font-size:13px;outline:none}
-.console-bar input:focus{border-color:#3b82f6}
-.log-box{margin:0 24px 40px;background:#0a0d14;border:1px solid #1e2535;
-         border-radius:8px;overflow:auto;height:620px;padding:12px 14px;
-         font-family:"SF Mono","Fira Code",monospace;font-size:12px;
-         line-height:1.6}
-.ll{white-space:pre-wrap;word-break:break-all}
-.ll.info{color:#94a3b8}
-.ll.warn{color:#fbbf24}
-.ll.error{color:#f87171}
-.ll.debug{color:#475569}
-.ll.hi{background:#1e3a5f}
-.last-upd{color:#475569;font-size:12px;margin-left:auto}
-/* metrics tab — trend bar chart */
-.trend-box{background:#0a0d14;border:1px solid #1e2535;border-radius:8px;
-           padding:14px;display:flex;align-items:flex-end;gap:2px;
-           min-height:160px}
-.trend-col{flex:1;display:flex;flex-direction:column;align-items:center;
-           justify-content:flex-end;gap:2px;min-width:0;cursor:default}
-.trend-bar{width:100%;background:linear-gradient(180deg,#3b82f6,#1e40af);
-           border-radius:2px 2px 0 0;min-height:1px;transition:opacity .15s}
-.trend-bar.err{background:linear-gradient(180deg,#f87171,#7f1d1d)}
-.trend-col:hover .trend-bar{opacity:.7}
-.trend-col .lbl{color:#475569;font-size:9px;margin-top:4px;
-                white-space:nowrap;font-family:"SF Mono",monospace}
-</style>
-</head>
-<body>
-
-<div class="hdr">
-  <div><h1>AI 监控</h1><div class="sub">love-profiler · ai_call_logs</div></div>
-  <div id="spin" class="spin"></div>
-  <div class="hdr-right">
-    <label class="auto-lbl"><input type="checkbox" id="autoR" checked> 自动刷新 30s</label>
-    <button class="btn" onclick="refreshAll()">立即刷新</button>
-  </div>
-</div>
-
-<div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('calls',this)">📊 AI 调用</button>
-  <button class="tab-btn" onclick="switchTab('metrics',this)">📈 指标</button>
-  <button class="tab-btn" onclick="switchTab('console',this)">🖥 控制台日志</button>
-</div>
-
-<!-- ── Tab: AI Calls ─────────────────────────────────── -->
-<div id="tab-calls" class="tab-pane active">
-  <div class="stats">
-    <div class="sc"><div class="lbl">今日调用</div><div class="val" id="s-tot">—</div></div>
-    <div class="sc ok"><div class="lbl">成功</div><div class="val" id="s-ok">—</div></div>
-    <div class="sc err"><div class="lbl">失败</div><div class="val" id="s-err">—</div></div>
-    <div class="sc"><div class="lbl">平均耗时</div><div class="val" id="s-dur">—</div><div style="color:#64748b;font-size:11px">ms</div></div>
-    <div class="sc"><div class="lbl">今日 Token</div><div class="val" id="s-tok">—</div></div>
-  </div>
-  <div class="flt">
-    <label>Agent</label>
-    <select id="fa" onchange="loadCalls()">
-      <option value="">全部</option>
-      <option value="agent_a">agent_a</option>
-      <option value="agent_b">agent_b</option>
-    </select>
-    <label>状态</label>
-    <select id="fs" onchange="loadCalls()">
-      <option value="">全部</option>
-      <option value="success">success</option>
-      <option value="error">error</option>
-    </select>
-    <label>条数</label>
-    <select id="fl" onchange="loadCalls()">
-      <option value="50">50</option>
-      <option value="100" selected>100</option>
-      <option value="200">200</option>
-    </select>
-    <span id="lu1" class="last-upd"></span>
-  </div>
-  <div class="tbl-wrap">
-  <table>
-    <thead><tr>
-      <th>时间</th><th>Agent</th><th>模型</th><th>Session</th><th>状态</th>
-      <th>耗时</th><th>Prompt→Comp</th><th>重试</th>
-      <th>System字符</th><th>响应字符</th><th>错误</th>
-    </tr></thead>
-    <tbody id="tbody"><tr><td colspan="11" class="empty">加载中…</td></tr></tbody>
-  </table>
-  </div>
-</div>
-
-<!-- ── Tab: Metrics (Phase D.1) ──────────────────────── -->
-<div id="tab-metrics" class="tab-pane">
-  <div class="flt" style="padding-top:16px">
-    <label>窗口</label>
-    <select id="mw" onchange="loadMetrics()">
-      <option value="6">最近 6h</option>
-      <option value="24" selected>最近 24h</option>
-      <option value="72">最近 3 天</option>
-      <option value="168">最近 7 天</option>
-    </select>
-    <label>Top N 用户</label>
-    <select id="mtn" onchange="loadMetrics()">
-      <option value="5">5</option>
-      <option value="10" selected>10</option>
-      <option value="20">20</option>
-    </select>
-    <span id="lu3" class="last-upd"></span>
-  </div>
-
-  <!-- 延迟分位数卡片 -->
-  <div class="stats" style="grid-template-columns:repeat(6,1fr)">
-    <div class="sc"><div class="lbl">P50</div><div class="val" id="md-p50">—</div>
-      <div style="color:#64748b;font-size:11px">ms</div></div>
-    <div class="sc"><div class="lbl">P95</div><div class="val" id="md-p95">—</div>
-      <div style="color:#64748b;font-size:11px">ms</div></div>
-    <div class="sc"><div class="lbl">P99</div><div class="val" id="md-p99">—</div>
-      <div style="color:#64748b;font-size:11px">ms</div></div>
-    <div class="sc"><div class="lbl">Max</div><div class="val" id="md-max">—</div>
-      <div style="color:#64748b;font-size:11px">ms</div></div>
-    <div class="sc"><div class="lbl">Avg</div><div class="val" id="md-avg">—</div>
-      <div style="color:#64748b;font-size:11px">ms</div></div>
-    <div class="sc"><div class="lbl">成功样本</div><div class="val" id="md-cnt">—</div></div>
-  </div>
-
-  <!-- 调用趋势：bar chart -->
-  <div style="padding:0 24px 8px">
-    <h4 style="color:#64748b;font-size:11px;text-transform:uppercase;
-               letter-spacing:.05em;margin-bottom:8px">调用趋势</h4>
-    <div class="trend-box" id="trend"></div>
-  </div>
-
-  <!-- by_agent 表格 + top_users 表格 并排 -->
-  <div style="padding:0 24px 30px;display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px">
-    <div class="panel">
-      <h4>按 Agent 错误率</h4>
-      <table style="width:100%;font-size:12px;margin-top:6px">
-        <thead><tr>
-          <th>Agent</th><th>总数</th><th>成功</th><th>失败</th><th>错误率</th>
-        </tr></thead>
-        <tbody id="agent-tbody"><tr><td colspan="5" class="empty">—</td></tr></tbody>
-      </table>
-    </div>
-    <div class="panel">
-      <h4>今日 Token 消耗 Top 用户</h4>
-      <table style="width:100%;font-size:12px;margin-top:6px">
-        <thead><tr>
-          <th>用户</th><th>Prompt</th><th>Comp</th><th>Total</th>
-        </tr></thead>
-        <tbody id="topu-tbody"><tr><td colspan="4" class="empty">—</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ── Tab: Console ──────────────────────────────────── -->
-<div id="tab-console" class="tab-pane">
-  <div class="console-bar">
-    <input id="search" placeholder="关键词过滤（支持正则）" oninput="filterConsole()">
-    <label class="auto-lbl" style="white-space:nowrap">
-      <input type="checkbox" id="autoScroll" checked> 滚动到底
-    </label>
-    <label>行数</label>
-    <select id="cl" onchange="loadConsole()">
-      <option value="200">200</option>
-      <option value="500" selected>500</option>
-      <option value="1000">1000</option>
-    </select>
-    <span id="lu2" class="last-upd"></span>
-  </div>
-  <div class="log-box" id="logbox"></div>
-</div>
-
-<!-- ── Detail Modal ──────────────────────────────────── -->
-<div id="overlay" class="overlay" style="display:none" onclick="closeModal(event)">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-hdr">
-      <h3 id="m-title">调用详情</h3>
-      <span id="m-badge"></span>
-      <button class="modal-close" onclick="closeModal()">×</button>
-    </div>
-    <div class="modal-body" id="m-body">
-      <div class="loading-txt">加载中…</div>
-    </div>
-  </div>
-</div>
-
-<script>
-// ── utils ──────────────────────────────────────────────
-let _rawLines = [];
-
-function fmtNum(n){
-  if(n>=10000) return (n/1000).toFixed(1)+'k';
-  return (n||0).toLocaleString();
-}
-function fmtTs(iso){
-  const d=new Date(iso);
-  const p=n=>String(n).padStart(2,'0');
-  return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
-function fmt(ms){
-  if(ms<1000) return ms+' ms';
-  return (ms/1000).toFixed(2)+' s';
-}
-function esc(s){
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-function prettyJson(v){
-  if(typeof v==='string') return esc(v);
-  try{ return esc(JSON.stringify(v,null,2)); }catch(e){ return esc(String(v)); }
-}
-
-// ── tabs ───────────────────────────────────────────────
-function switchTab(name, btn){
-  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab-'+name).classList.add('active');
-  btn.classList.add('active');
-  if(name==='console') loadConsole();
-  if(name==='metrics') loadMetrics();
-}
-
-// ── spinner ────────────────────────────────────────────
-let _loading=0;
-function startLoad(){ _loading++; document.getElementById('spin').classList.add('on'); }
-function endLoad(){ if(--_loading<=0){ _loading=0; document.getElementById('spin').classList.remove('on'); } }
-
-// ── AI Calls tab ───────────────────────────────────────
-async function loadCalls(){
-  const agent=document.getElementById('fa').value;
-  const status=document.getElementById('fs').value;
-  const limit=document.getElementById('fl').value;
-  startLoad();
-  try{
-    const p=new URLSearchParams({limit});
-    if(agent) p.set('agent',agent);
-    if(status) p.set('status',status);
-    const r=await fetch('/admin/logs/api?'+p);
-    const data=await r.json();
-    renderStats(data.stats);
-    renderTable(data.rows);
-    document.getElementById('lu1').textContent='更新于 '+new Date().toLocaleTimeString();
-  }finally{ endLoad(); }
-}
-
-function renderStats(s){
-  document.getElementById('s-tot').textContent=fmtNum(s.total);
-  document.getElementById('s-ok').textContent=fmtNum(s.success);
-  document.getElementById('s-err').textContent=fmtNum(s.error);
-  document.getElementById('s-dur').textContent=s.avg_duration_ms?Math.round(s.avg_duration_ms):'—';
-  document.getElementById('s-tok').textContent=fmtNum(s.total_tokens);
-}
-
-function renderTable(rows){
-  const tb=document.getElementById('tbody');
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="11" class="empty">暂无数据</td></tr>'; return; }
-  const maxDur=Math.max(...rows.map(r=>r.duration_ms),1);
-  tb.innerHTML=rows.map(r=>{
-    const badge=`<span class="badge ${r.status}">${r.status}</span>`;
-    const rc=r.retry_index;
-    const retry=`<span class="rc${rc>0?' r'+rc:''}">#${rc}</span>`;
-    const err=r.error_message
-      ?`<span class="err-cell" title="${esc(r.error_message)}">${esc(r.error_message)}</span>`
-      :'<span class="dim">—</span>';
-    const sess=r.session_id
-      ?`<span class="mono dim" title="${r.session_id}">${r.session_id.slice(0,8)}</span>`
-      :'<span class="dim">—</span>';
-    const w=Math.min(50,Math.round(r.duration_ms/maxDur*50));
-    const model=r.model?r.model.split('/').pop():'—';
-    return `<tr class="data-row" onclick="openDetail(${r.id})">
-      <td class="mono dim">${fmtTs(r.ts)}</td>
-      <td><b>${esc(r.agent)}</b></td>
-      <td class="mono dim" title="${esc(r.model||'')}">${esc(model)}</td>
-      <td>${sess}</td>
-      <td>${badge}</td>
-      <td>${fmt(r.duration_ms)}<span class="bar" style="width:${w}px"></span></td>
-      <td class="dim">${fmtNum(r.prompt_tokens)} → ${fmtNum(r.completion_tokens)}</td>
-      <td>${retry}</td>
-      <td class="dim">${fmtNum(r.system_prompt_len)}</td>
-      <td class="dim">${fmtNum(r.response_len)}</td>
-      <td>${err}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ── Detail Modal ───────────────────────────────────────
-async function openDetail(id){
-  const ov=document.getElementById('overlay');
-  const mb=document.getElementById('m-body');
-  ov.style.display='flex';
-  mb.innerHTML='<div class="loading-txt">加载中…</div>';
-  startLoad();
-  try{
-    const r=await fetch(`/admin/logs/api/${id}`);
-    const d=await r.json();
-    document.getElementById('m-title').textContent=
-      `#${d.id} · ${d.agent} · ${d.ts?fmtTs(d.ts):''}`;
-    document.getElementById('m-badge').innerHTML=
-      `<span class="badge ${d.status}">${d.status}</span>`;
-
-    mb.innerHTML=`
-      <div class="panel">
-        <h4>基本信息</h4>
-        <div class="kv">
-          <span class="k">Agent</span><span class="v">${esc(d.agent)}</span>
-          <span class="k">Session</span><span class="v mono">${esc(d.session_id||'—')}</span>
-          <span class="k">Model</span><span class="v">${esc(d.model)}</span>
-          <span class="k">Temperature</span><span class="v">${d.temperature}</span>
-          <span class="k">Retry</span><span class="v">#${d.retry_index}</span>
-          <span class="k">耗时</span><span class="v">${fmt(d.duration_ms)}</span>
-          <span class="k">HTTP状态</span><span class="v">${d.http_status_code||'—'}</span>
-        </div>
-      </div>
-      <div class="panel">
-        <h4>Token 消耗</h4>
-        <div class="kv">
-          <span class="k">Prompt</span><span class="v">${fmtNum(d.prompt_tokens)}</span>
-          <span class="k">Completion</span><span class="v">${fmtNum(d.completion_tokens)}</span>
-          <span class="k">Total</span><span class="v"><b>${fmtNum(d.total_tokens)}</b></span>
-          <span class="k">System Prompt</span><span class="v">${fmtNum(d.system_prompt_len)} 字符</span>
-          <span class="k">响应长度</span><span class="v">${fmtNum(d.response_len)} 字符</span>
-        </div>
-        ${d.error_message?`<div style="margin-top:10px;color:#f87171;font-size:12px">错误: ${esc(d.error_message)}</div>`:''}
-      </div>
-      <div class="panel modal-full">
-        <h4>请求 Messages（发送给 API 的用户消息）</h4>
-        <pre class="code">${prettyJson(d.messages)}</pre>
-      </div>
-      <div class="panel modal-full">
-        <h4>响应 Response（LLM 返回内容${d.response_len>2000?' — 仅显示前2000字':''}）</h4>
-        <pre class="code">${prettyJson(d.response)}</pre>
-      </div>
-    `;
-  }finally{ endLoad(); }
-}
-
-function closeModal(e){
-  if(!e||e.target===document.getElementById('overlay'))
-    document.getElementById('overlay').style.display='none';
-}
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
-
-// ── Console tab ────────────────────────────────────────
-const LEVEL_RE=/\[(ERROR|WARNING|WARN|INFO|DEBUG)\]/i;
-
-function colorLine(raw){
-  const m=raw.match(LEVEL_RE);
-  if(!m) return `<div class="ll info">${esc(raw)}</div>`;
-  const lv=m[1].toUpperCase();
-  const cls=lv==='ERROR'?'error':lv==='WARNING'||lv==='WARN'?'warn':lv==='DEBUG'?'debug':'info';
-  return `<div class="ll ${cls}">${esc(raw)}</div>`;
-}
-
-function filterConsole(){
-  const q=document.getElementById('search').value.trim();
-  const box=document.getElementById('logbox');
-  let lines=_rawLines;
-  if(q){
-    try{
-      const re=new RegExp(q,'i');
-      lines=lines.filter(l=>re.test(l));
-    }catch(e){
-      lines=lines.filter(l=>l.toLowerCase().includes(q.toLowerCase()));
-    }
-  }
-  box.innerHTML=lines.map(colorLine).join('');
-  if(document.getElementById('autoScroll').checked)
-    box.scrollTop=box.scrollHeight;
-}
-
-async function loadConsole(){
-  const lines=document.getElementById('cl').value;
-  startLoad();
-  try{
-    const r=await fetch(`/admin/console?lines=${lines}`);
-    const d=await r.json();
-    _rawLines=d.lines||[];
-    filterConsole();
-    document.getElementById('lu2').textContent='更新于 '+new Date().toLocaleTimeString();
-  }finally{ endLoad(); }
-}
-
-// ── Metrics tab (Phase D.1) ────────────────────────────
-async function loadMetrics(){
-  const hours=document.getElementById('mw').value;
-  const topN=document.getElementById('mtn').value;
-  startLoad();
-  try{
-    const r=await fetch(`/admin/api/metrics/llm?hours=${hours}&top_n=${topN}`);
-    if(!r.ok){
-      document.getElementById('md-cnt').textContent='—';
-      return;
-    }
-    const d=await r.json();
-    renderMetricsDuration(d.duration);
-    renderTrend(d.hourly_trend);
-    renderAgentBreakdown(d.by_agent);
-    renderTopUsers(d.top_users);
-    document.getElementById('lu3').textContent='更新于 '+new Date().toLocaleTimeString();
-  }finally{ endLoad(); }
-}
-
-function renderMetricsDuration(d){
-  document.getElementById('md-p50').textContent=d.p50||'—';
-  document.getElementById('md-p95').textContent=d.p95||'—';
-  document.getElementById('md-p99').textContent=d.p99||'—';
-  document.getElementById('md-max').textContent=d.max||'—';
-  document.getElementById('md-avg').textContent=d.avg||'—';
-  document.getElementById('md-cnt').textContent=fmtNum(d.count||0);
-}
-
-function renderTrend(buckets){
-  const box=document.getElementById('trend');
-  if(!buckets||!buckets.length){ box.innerHTML='<div class="empty">无数据</div>'; return; }
-  const max=Math.max(...buckets.map(b=>b.total),1);
-  // 容器内总高度 = 140 px（min-height 160 - padding）；最高柱 = 100% 高度
-  box.innerHTML=buckets.map(b=>{
-    const h=Math.round(b.total/max*140);
-    const errH=b.total?Math.round((b.error/b.total)*h):0;
-    const successH=h-errH;
-    const hr=b.hour.slice(11,13);
-    const title=`${b.hour}\n总数 ${b.total} · 成功 ${b.success} · 失败 ${b.error} · ${fmtNum(b.total_tokens)} tokens`;
-    return `<div class="trend-col" title="${esc(title)}">
-      <div class="trend-bar err" style="height:${errH}px"></div>
-      <div class="trend-bar" style="height:${successH}px"></div>
-      <div class="lbl">${hr}</div>
-    </div>`;
-  }).join('');
-}
-
-function renderAgentBreakdown(rows){
-  const tb=document.getElementById('agent-tbody');
-  if(!rows||!rows.length){ tb.innerHTML='<tr><td colspan="5" class="empty">无数据</td></tr>'; return; }
-  tb.innerHTML=rows.map(r=>{
-    const rate=(r.error_rate*100).toFixed(1)+'%';
-    const cls=r.error_rate>=0.1?'err':(r.error_rate>0?'':'ok');
-    return `<tr>
-      <td><b>${esc(r.agent)}</b></td>
-      <td class="mono">${fmtNum(r.total)}</td>
-      <td class="mono" style="color:#4ade80">${fmtNum(r.success)}</td>
-      <td class="mono" style="color:#f87171">${fmtNum(r.error)}</td>
-      <td><span class="badge ${cls==='err'?'error':(cls==='ok'?'success':'')}">${rate}</span></td>
-    </tr>`;
-  }).join('');
-}
-
-function renderTopUsers(rows){
-  const tb=document.getElementById('topu-tbody');
-  if(!rows||!rows.length){ tb.innerHTML='<tr><td colspan="4" class="empty">今日尚无消耗</td></tr>'; return; }
-  tb.innerHTML=rows.map(r=>{
-    const label=r.openid_masked?`<span class="mono">${esc(r.openid_masked)}</span>`
-                              :`<span class="dim">#${r.user_id}</span>`;
-    return `<tr>
-      <td>${label}</td>
-      <td class="mono">${fmtNum(r.prompt_tokens)}</td>
-      <td class="mono">${fmtNum(r.completion_tokens)}</td>
-      <td class="mono"><b>${fmtNum(r.total_tokens)}</b></td>
-    </tr>`;
-  }).join('');
-}
-
-// ── auto refresh ───────────────────────────────────────
-function refreshAll(){
-  const tab=document.querySelector('.tab-pane.active');
-  if(!tab) return;
-  if(tab.id==='tab-calls') loadCalls();
-  else if(tab.id==='tab-metrics') loadMetrics();
-  else loadConsole();
-}
-
-let _timer=null;
-document.getElementById('autoR').addEventListener('change',function(){
-  if(this.checked){ _timer=setInterval(refreshAll,30000); }
-  else{ clearInterval(_timer); _timer=null; }
-});
-
-loadCalls();
-_timer=setInterval(refreshAll,30000);
-</script>
-</body>
-</html>"""
+_LOGS_HTML_PATH = pathlib.Path(__file__).parents[2] / "static" / "admin" / "logs.html"
 
 
 @router.get("/logs", response_class=HTMLResponse, include_in_schema=False)
 async def logs_dashboard(_: None = Depends(require_admin)):
-    return HTMLResponse(content=_HTML)
+    return HTMLResponse(content=_LOGS_HTML_PATH.read_text(encoding="utf-8"))

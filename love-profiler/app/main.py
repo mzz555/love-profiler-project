@@ -50,7 +50,14 @@ from app.limiter import limiter
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    mode = "DEV" if os.environ.get("DEV_MODE", "").lower() == "true" else "PROD"
+    is_dev = os.environ.get("DEV_MODE", "").lower() == "true"
+    mode = "DEV" if is_dev else "PROD"
+    if is_dev:
+        logger.warning("=" * 60)
+        logger.warning("  DEV_MODE IS ON")
+        logger.warning("  免登录 / 免支付 / 免验签 / admin 免鉴权")
+        logger.warning("  生产环境绝不可设置 DEV_MODE=true")
+        logger.warning("=" * 60)
     logger.info("启动中 [%s mode] — 初始化数据库表...", mode)
     create_tables()
     logger.info("数据库就绪，服务启动完成")
@@ -61,9 +68,12 @@ app = FastAPI(title="Love Profiler API", version="0.1.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+_cors_origins = ["*"] if os.environ.get("DEV_MODE", "").lower() == "true" else [
+    o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins or ["https://your-production-domain.com"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>报告卡片 · 4 种国内小程序风格对比</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #ECECEC;
+    padding: 40px 20px 80px;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    margin-bottom: 32px;
+    font-size: 13px;
+  }
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(4, 380px);
+    gap: 28px;
+    justify-content: center;
+  }
+  .col {
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  .col-head {
+    padding: 18px 20px;
+    font-weight: 600;
+    color: #fff;
+    font-size: 15px;
+  }
+  .col-head .tag {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.85;
+    margin-top: 2px;
+  }
+  .col-1 .col-head { background: linear-gradient(135deg, #FFB8B8, #FFD4C5); }
+  .col-2 .col-head { background: linear-gradient(135deg, #6B73C8, #9B7BD8); }
+  .col-3 .col-head { background: linear-gradient(135deg, #FFB3E0, #B8C7FF); }
+  .col-4 .col-head { background: linear-gradient(135deg, #2C2C2C, #555); }
+
+  .phone {
+    width: 380px;
+    padding: 16px;
+    min-height: 1200px;
+  }
+  /* 共享的样例数据视觉 */
+  .stub-img {
+    width: 96px; height: 96px;
+    background: linear-gradient(135deg, #FFC9A9, #B8D8C0);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* =================== 风格①小红书软糯风 =================== */
+  .col-1 .phone { background: #FFF9F5; }
+  .s1-hero {
+    background: linear-gradient(160deg, #FFF1E8, #FFE4D6);
+    border-radius: 24px;
+    padding: 24px 20px;
+    margin-bottom: 16px;
+  }
+  .s1-hero-top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .s1-hero-name { font-size: 22px; font-weight: 600; color: #4A3528; line-height: 1.4; }
+  .s1-hero-sub {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 3px 10px;
+    background: rgba(255,255,255,0.65);
+    border-radius: 12px;
+    font-size: 11px;
+    color: #8B6B5B;
+  }
+  .s1-hero-detail { font-size: 13px; color: #6B5045; line-height: 1.7; margin-top: 6px; }
+  .s1-card {
+    background: #fff;
+    border-radius: 24px;
+    padding: 22px 20px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(255,180,140,0.08);
+  }
+  .s1-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .s1-card-emoji { font-size: 18px; }
+  .s1-card-title { font-size: 15px; font-weight: 600; color: #3A2A20; }
+  .s1-card-tag {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 3px 8px;
+    background: #E8F5EA;
+    color: #5A8C6C;
+    border-radius: 10px;
+  }
+  .s1-card-body { font-size: 13px; line-height: 1.75; color: #5A4A40; }
+  .s1-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .s1-chip {
+    font-size: 10px;
+    padding: 4px 10px;
+    background: #F5F0EC;
+    color: #8B7568;
+    border-radius: 10px;
+  }
+  .s1-hl-num {
+    width: 22px; height: 22px;
+    background: #FFB89C;
+    color: #fff;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+    margin-right: 8px;
+  }
+  .s1-quote {
+    background: linear-gradient(160deg, #E8F5EA, #F0F7E8);
+    border-radius: 24px;
+    padding: 26px 22px 20px;
+    margin: 0 auto;
+    width: 88%;
+    position: relative;
+  }
+  .s1-quote-mark { font-size: 36px; color: #B8D8C0; font-family: Georgia, serif; line-height: 0.6; }
+  .s1-quote-body { font-size: 13px; line-height: 1.8; color: #4A5C50; margin: 8px 0 14px; }
+  .s1-quote-foot { text-align: center; font-size: 11px; color: #6B8C75; letter-spacing: 2px; }
+
+  /* =================== 风格②测评H5/星座条卡风 =================== */
+  .col-2 .phone { background: #F5F3FA; }
+  .s2-hero {
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 16px rgba(107,115,200,0.12);
+  }
+  .s2-banner {
+    background: linear-gradient(135deg, #6B73C8 0%, #9B7BD8 50%, #C58FE0 100%);
+    padding: 32px 24px 38px;
+    color: #fff;
+    position: relative;
+  }
+  .s2-banner::before {
+    content: '"';
+    position: absolute;
+    top: 8px; left: 14px;
+    font-size: 56px;
+    color: rgba(255,255,255,0.3);
+    font-family: Georgia, serif;
+    line-height: 1;
+  }
+  .s2-banner-no { font-size: 11px; opacity: 0.85; letter-spacing: 3px; margin-bottom: 8px; }
+  .s2-banner-name { font-size: 26px; font-weight: 700; letter-spacing: 4px; }
+  .s2-hero-body { padding: 20px 22px 24px; }
+  .s2-hero-detail { font-size: 13px; line-height: 1.8; color: #555; }
+  .s2-card {
+    background: #fff;
+    border-radius: 16px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(107,115,200,0.08);
+  }
+  .s2-card-head {
+    padding: 16px 20px 12px;
+    display: flex; align-items: baseline; gap: 10px;
+    border-bottom: 1px dashed #E8E4F0;
+  }
+  .s2-card-no {
+    font-size: 24px;
+    font-weight: 700;
+    color: #6B73C8;
+    font-family: Georgia, serif;
+    line-height: 1;
+  }
+  .s2-card-title { font-size: 16px; font-weight: 600; color: #2A2540; letter-spacing: 2px; }
+  .s2-card-body { padding: 16px 20px 20px; font-size: 13px; line-height: 1.85; color: #4A4258; }
+  .s2-marker {
+    background: linear-gradient(transparent 60%, #FFE680 60%);
+    padding: 0 2px;
+  }
+  .s2-divider {
+    text-align: center;
+    margin: 8px 0 14px;
+    font-size: 10px;
+    color: #9B7BD8;
+    letter-spacing: 4px;
+  }
+  .s2-divider::before, .s2-divider::after {
+    content: '── ';
+    color: #C9C0E0;
+  }
+  .s2-divider::after { content: ' ──'; }
+  .s2-quote {
+    background: linear-gradient(135deg, #6B73C8, #9B7BD8);
+    border-radius: 16px;
+    padding: 28px 24px 22px;
+    color: #fff;
+    text-align: center;
+    width: 88%;
+    margin: 0 auto;
+  }
+  .s2-quote-body { font-size: 13px; line-height: 1.85; }
+  .s2-quote-foot {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.3);
+    font-size: 11px;
+    letter-spacing: 4px;
+    opacity: 0.9;
+  }
+
+  /* =================== 风格③弥散光/3D立体风 =================== */
+  .col-3 .phone {
+    background:
+      radial-gradient(circle at 20% 10%, rgba(255,179,224,0.45), transparent 40%),
+      radial-gradient(circle at 80% 30%, rgba(184,199,255,0.45), transparent 40%),
+      radial-gradient(circle at 30% 80%, rgba(200,255,220,0.4), transparent 40%),
+      #FAF8FF;
+    position: relative;
+  }
+  .s3-deco {
+    position: absolute;
+    border: 1px solid rgba(255,255,255,0.6);
+    border-radius: 50%;
+  }
+  .s3-hero {
+    background: rgba(255,255,255,0.55);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.8);
+    border-radius: 28px;
+    padding: 26px 22px;
+    margin-bottom: 16px;
+    box-shadow:
+      0 12px 36px rgba(155,123,216,0.15),
+      0 2px 8px rgba(255,179,224,0.1),
+      inset 0 1px 0 rgba(255,255,255,0.9);
+  }
+  .s3-hero-top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .s3-hero-name {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #9B7BD8, #FF8FB8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.4;
+  }
+  .s3-hero-sub {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 4px 12px;
+    background: rgba(155,123,216,0.15);
+    color: #8B6FC0;
+    border-radius: 14px;
+    font-size: 11px;
+  }
+  .s3-hero-detail { font-size: 13px; color: #5A5070; line-height: 1.75; }
+  .s3-card {
+    background: rgba(255,255,255,0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.7);
+    border-radius: 28px;
+    padding: 22px 22px 24px;
+    margin-bottom: 14px;
+    box-shadow:
+      0 10px 30px rgba(155,123,216,0.12),
+      inset 0 1px 0 rgba(255,255,255,0.85);
+    position: relative;
+  }
+  .s3-card::after {
+    content: '';
+    position: absolute;
+    top: -8px; right: 20px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #FFC9E0, #FF8FB8);
+    opacity: 0.7;
+  }
+  .s3-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .s3-card-icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #FFB3E0, #B8C7FF);
+    box-shadow: 0 4px 12px rgba(155,123,216,0.3);
+  }
+  .s3-card-title { font-size: 15px; font-weight: 600; color: #3A2A50; }
+  .s3-card-body { font-size: 13px; line-height: 1.8; color: #4A4060; }
+  .s3-quote {
+    background: linear-gradient(135deg, rgba(255,179,224,0.4), rgba(184,199,255,0.4));
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.6);
+    border-radius: 28px;
+    padding: 28px 26px 22px;
+    text-align: center;
+    width: 88%;
+    margin: 0 auto;
+    box-shadow: 0 12px 36px rgba(155,123,216,0.2);
+  }
+  .s3-quote-body { font-size: 13px; line-height: 1.85; color: #4A3560; }
+  .s3-quote-foot {
+    margin-top: 14px;
+    font-size: 11px;
+    color: #8B6FC0;
+    letter-spacing: 4px;
+  }
+
+  /* =================== 风格④极简纸感阅读风 =================== */
+  .col-4 .phone { background: #F5F3EF; }
+  .s4-hero {
+    background: #fff;
+    border-radius: 4px;
+    padding: 28px 22px 24px;
+    margin-bottom: 14px;
+    border: 1px solid #E8E4DC;
+  }
+  .s4-hero-top { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .s4-hero-name {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1A1A1A;
+    line-height: 1.3;
+    letter-spacing: -0.5px;
+  }
+  .s4-hero-sub {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #999;
+    letter-spacing: 2px;
+  }
+  .s4-hero-detail {
+    font-size: 13px;
+    line-height: 1.85;
+    color: #444;
+    padding-top: 14px;
+    border-top: 1px solid #EEE;
+  }
+  .s4-card {
+    background: #fff;
+    border-radius: 4px;
+    padding: 24px 22px;
+    margin-bottom: 14px;
+    border: 1px solid #E8E4DC;
+  }
+  .s4-card-head { margin-bottom: 14px; }
+  .s4-card-no {
+    display: inline-block;
+    font-size: 10px;
+    color: #999;
+    letter-spacing: 3px;
+    margin-bottom: 4px;
+  }
+  .s4-card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1A1A1A;
+    letter-spacing: -0.3px;
+  }
+  .s4-card-line { width: 32px; height: 2px; background: #1A1A1A; margin-top: 8px; }
+  .s4-card-body { font-size: 13px; line-height: 1.95; color: #333; }
+  .s4-pull {
+    border-left: 2px solid #1A1A1A;
+    padding-left: 12px;
+    margin: 14px 0;
+    font-size: 13px;
+    color: #1A1A1A;
+    font-weight: 500;
+    line-height: 1.75;
+  }
+  .s4-quote {
+    background: #fff;
+    border: 1px solid #E8E4DC;
+    border-radius: 4px;
+    padding: 30px 24px;
+    width: 88%;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .s4-quote-body { font-size: 13px; line-height: 1.95; color: #1A1A1A; }
+  .s4-quote-foot {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #EEE;
+    font-size: 11px;
+    color: #999;
+    letter-spacing: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>报告卡片 · 4 种国内小程序视觉风格对比</h1>
+<p class="subtitle">同一份内容跑在 4 种风格里，从左到右依次为：小红书软糯 / 测评H5星座条卡 / 弥散光3D立体 / 极简纸感阅读</p>
+
+<div class="columns">
+
+  <!-- ============= 风格①小红书软糯风 ============= -->
+  <div class="col col-1">
+    <div class="col-head">① 小红书软糯风<span class="tag">强圆角 · 淡彩 · emoji + 胶囊标签 · 大留白</span></div>
+    <div class="phone">
+
+      <!-- hero -->
+      <div class="s1-hero">
+        <div class="s1-hero-top">
+          <div class="stub-img"></div>
+          <div>
+            <div class="s1-hero-name">高敏感的清醒者</div>
+            <span class="s1-hero-sub">MS-BL-H</span>
+          </div>
+        </div>
+        <div class="s1-hero-detail">用柔软缝合裂缝，用爱意安放旧伤。你在亲密关系里既渴望靠近，又警觉地观察着每一次互动的细节。</div>
+      </div>
+
+      <!-- dim card -->
+      <div class="s1-card">
+        <div class="s1-card-head">
+          <span class="s1-card-emoji">🌿</span>
+          <span class="s1-card-title">依恋画像</span>
+          <span class="s1-card-tag">健康端</span>
+        </div>
+        <div class="s1-card-body">你在亲密关系里会本能地放大伴侣的回复速度、用词、表情。这种敏感不是问题，而是你长出来的一种探照灯，照亮关系里那些容易被忽略的小裂缝。当感到不安时，你会主动开口说出来。</div>
+        <div class="s1-chips">
+          <span class="s1-chip">#柔软</span>
+          <span class="s1-chip">#清醒</span>
+          <span class="s1-chip">#成长型</span>
+        </div>
+      </div>
+
+      <!-- highlight card -->
+      <div class="s1-card">
+        <div class="s1-card-head">
+          <span class="s1-hl-num">1</span>
+          <span class="s1-card-title">追逃循环</span>
+        </div>
+        <div class="s1-card-body">在恋爱中，你越想确认对方还在，越容易做出让对方想退后一步的动作。比如反复问"你是不是不爱我了"，或者突然消失测试对方会不会找你。这不是矫情，而是一种你正在练习用却还没练熟的语言。</div>
+      </div>
+
+      <!-- quote card -->
+      <div class="s1-quote">
+        <span class="s1-quote-mark">"</span>
+        <div class="s1-quote-body">从今天开始，当你感到不安时，先停三秒，再说出来——不是质问对方，而是描述自己。这一个动作，能让你和对方都松一口气。</div>
+        <div class="s1-quote-foot">── 关系观察手记 ──</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============= 风格②测评H5/星座条卡风 ============= -->
+  <div class="col col-2">
+    <div class="col-head">② 测评H5 / 星座条卡风<span class="tag">渐变 banner · 大序号 · 黄色 marker · 居中较窄</span></div>
+    <div class="phone">
+
+      <!-- hero -->
+      <div class="s2-hero">
+        <div class="s2-banner">
+          <div class="s2-banner-no">YOUR TYPE</div>
+          <div class="s2-banner-name">高敏感的清醒者</div>
+        </div>
+        <div class="s2-hero-body">
+          <div class="s2-hero-detail">用柔软缝合裂缝，用爱意安放旧伤。你在亲密关系里既渴望靠近，又警觉地观察着每一次互动的细节。</div>
+        </div>
+      </div>
+
+      <div class="s2-divider">维 度 展 开</div>
+
+      <!-- dim card -->
+      <div class="s2-card">
+        <div class="s2-card-head">
+          <span class="s2-card-no">01</span>
+          <span class="s2-card-title">依 恋 画 像</span>
+        </div>
+        <div class="s2-card-body">你在亲密关系里会本能地放大伴侣的回复速度、用词、表情。<span class="s2-marker">这种敏感不是问题，而是你长出来的一种探照灯</span>，照亮关系里那些容易被忽略的小裂缝。当感到不安时，你会主动开口说出来。</div>
+      </div>
+
+      <div class="s2-divider">深 层 洞 察</div>
+
+      <!-- highlight card -->
+      <div class="s2-card">
+        <div class="s2-card-head">
+          <span class="s2-card-no">01</span>
+          <span class="s2-card-title">追 逃 循 环</span>
+        </div>
+        <div class="s2-card-body">在恋爱中，你越想确认对方还在，越容易做出让对方想退后一步的动作。<span class="s2-marker">这不是矫情，而是一种你正在练习用却还没练熟的语言。</span></div>
+      </div>
+
+      <!-- quote card -->
+      <div class="s2-quote">
+        <div class="s2-quote-body">从今天开始，当你感到不安时，先停三秒，再说出来——不是质问对方，而是描述自己。</div>
+        <div class="s2-quote-foot">关 系 观 察 手 记</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============= 风格③弥散光/3D立体风 ============= -->
+  <div class="col col-3">
+    <div class="col-head">③ 弥散光 / 3D立体风<span class="tag">高斯光斑底 · 毛玻璃 · 多重投影 · 装饰圆点</span></div>
+    <div class="phone">
+
+      <!-- hero -->
+      <div class="s3-hero">
+        <div class="s3-hero-top">
+          <div class="stub-img"></div>
+          <div>
+            <div class="s3-hero-name">高敏感的清醒者</div>
+            <span class="s3-hero-sub">MS-BL-H</span>
+          </div>
+        </div>
+        <div class="s3-hero-detail">用柔软缝合裂缝，用爱意安放旧伤。你在亲密关系里既渴望靠近，又警觉地观察着每一次互动的细节。</div>
+      </div>
+
+      <!-- dim card -->
+      <div class="s3-card">
+        <div class="s3-card-head">
+          <span class="s3-card-icon"></span>
+          <span class="s3-card-title">依恋画像</span>
+        </div>
+        <div class="s3-card-body">你在亲密关系里会本能地放大伴侣的回复速度、用词、表情。这种敏感不是问题，而是你长出来的一种探照灯，照亮关系里那些容易被忽略的小裂缝。当感到不安时，你会主动开口说出来。</div>
+      </div>
+
+      <!-- highlight card -->
+      <div class="s3-card">
+        <div class="s3-card-head">
+          <span class="s3-card-icon" style="background: linear-gradient(135deg, #FFD4A8, #FFB3E0);"></span>
+          <span class="s3-card-title">追逃循环</span>
+        </div>
+        <div class="s3-card-body">在恋爱中，你越想确认对方还在，越容易做出让对方想退后一步的动作。比如反复问"你是不是不爱我了"，或者突然消失测试对方会不会找你。这不是矫情，而是一种你正在练习用却还没练熟的语言。</div>
+      </div>
+
+      <!-- quote card -->
+      <div class="s3-quote">
+        <div class="s3-quote-body">从今天开始，当你感到不安时，先停三秒，再说出来——不是质问对方，而是描述自己。</div>
+        <div class="s3-quote-foot">关 系 观 察 手 记</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============= 风格④极简纸感阅读风 ============= -->
+  <div class="col col-4">
+    <div class="col-head">④ 极简纸感阅读风<span class="tag">纸白卡 · 字号强层级 · 几乎无装饰 · 阅读优先</span></div>
+    <div class="phone">
+
+      <!-- hero -->
+      <div class="s4-hero">
+        <div class="s4-hero-top">
+          <div class="stub-img" style="border-radius: 4px;"></div>
+          <div>
+            <div class="s4-hero-name">高敏感的清醒者</div>
+            <div class="s4-hero-sub">MS · BL · H</div>
+          </div>
+        </div>
+        <div class="s4-hero-detail">用柔软缝合裂缝，用爱意安放旧伤。你在亲密关系里既渴望靠近，又警觉地观察着每一次互动的细节。</div>
+      </div>
+
+      <!-- dim card -->
+      <div class="s4-card">
+        <div class="s4-card-head">
+          <div class="s4-card-no">DIMENSION 01</div>
+          <div class="s4-card-title">依恋画像</div>
+          <div class="s4-card-line"></div>
+        </div>
+        <div class="s4-card-body">你在亲密关系里会本能地放大伴侣的回复速度、用词、表情。</div>
+        <div class="s4-pull">这种敏感不是问题，而是你长出来的一种探照灯，照亮关系里那些容易被忽略的小裂缝。</div>
+        <div class="s4-card-body">当感到不安时，你会主动开口说出来。</div>
+      </div>
+
+      <!-- highlight card -->
+      <div class="s4-card">
+        <div class="s4-card-head">
+          <div class="s4-card-no">INSIGHT 01</div>
+          <div class="s4-card-title">追逃循环</div>
+          <div class="s4-card-line"></div>
+        </div>
+        <div class="s4-card-body">在恋爱中，你越想确认对方还在，越容易做出让对方想退后一步的动作。比如反复问"你是不是不爱我了"，或者突然消失测试对方会不会找你。这不是矫情，而是一种你正在练习用却还没练熟的语言。</div>
+      </div>
+
+      <!-- quote card -->
+      <div class="s4-quote">
+        <div class="s4-quote-body">从今天开始，当你感到不安时，先停三秒，再说出来——不是质问对方，而是描述自己。</div>
+        <div class="s4-quote-foot">关 系 观 察 手 记</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

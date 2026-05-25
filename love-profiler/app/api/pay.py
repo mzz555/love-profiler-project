@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from app.limiter import limiter
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -49,7 +51,9 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/create_order", response_model=CreateOrderResponse)
+@limiter.limit("5/minute")
 async def create_order(
+    request: Request,
     body: CreateOrderRequest,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
@@ -81,7 +85,7 @@ async def create_order(
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
                 _CREATE_ORDER_URL,
-                json={"app_id": app_id, "secret": app_secret, **payload},
+                json={"secret": app_secret, **payload},
             )
             resp.raise_for_status()
     except httpx.HTTPError as exc:
@@ -104,17 +108,24 @@ async def create_order(
 
 
 @router.post("/callback")
+@limiter.limit("10/minute")
 async def payment_callback(request: Request, db: Session = Depends(get_db)):
     """Receive ByteDance async payment notification and mark order as paid."""
     body_bytes = await request.body()
 
-    # Verify HMAC signature from ByteDance
+    # Verify HMAC signature from ByteDance (fail-closed: 缺 token 直接拒绝)
     token = os.environ.get("DOUYIN_PAY_TOKEN", "")
-    timestamp = request.headers.get("timestamp", "")
-    nonce = request.headers.get("nonce", "")
-    signature = request.headers.get("msg_signature", "")
+    if not token:
+        if os.environ.get("DEV_MODE", "").lower() == "true":
+            logger.warning("[/pay/callback] DEV_MODE: 跳过验签")
+        else:
+            logger.error("[/pay/callback] DOUYIN_PAY_TOKEN 未配置，拒绝回调（fail-closed）")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signature verification not configured")
 
     if token:
+        timestamp = request.headers.get("timestamp", "")
+        nonce = request.headers.get("nonce", "")
+        signature = request.headers.get("msg_signature", "")
         items = sorted([token, timestamp, nonce, body_bytes.decode()])
         expected = hashlib.sha256("".join(items).encode()).hexdigest()
         if not hmac.compare_digest(expected, signature):
@@ -132,6 +143,11 @@ async def payment_callback(request: Request, db: Session = Depends(get_db)):
     if out_trade_no and pay_status == "PAY_SUCCESS":
         order = db.query(Order).filter(Order.out_trade_no == out_trade_no).first()
         if order and order.status == "pending":
+            callback_amount = data.get("total_amount")
+            if callback_amount is not None and int(callback_amount) != order.amount:
+                logger.error("[/pay/callback] 金额不匹配 order=%s回调=%s out_trade_no=%s",
+                             order.amount, callback_amount, out_trade_no)
+                return {"message": "amount mismatch"}
             order.status = "paid"
             db.commit()
             logger.info("[/pay/callback] 订单已标记为已支付 out_trade_no=%s", out_trade_no)
@@ -140,7 +156,9 @@ async def payment_callback(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/query", response_model=QueryResponse)
+@limiter.limit("10/minute")
 async def query_order(
+    request: Request,
     body: QueryRequest,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),

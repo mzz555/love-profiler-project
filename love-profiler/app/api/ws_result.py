@@ -1,6 +1,10 @@
 """
 WebSocket result endpoint — streams report writer report generation token by token.
-GET /ws/result?token=<jwt>
+GET /ws/result?ticket=<one-time-ticket>
+
+Flow:
+  1. POST /ws/ticket  (Bearer JWT) → {"ticket": "xxx"}  (30s 有效，一次性)
+  2. WS   /ws/result?ticket=xxx    → stream
 
 Protocol (server → client JSON messages):
   {"type": "meta",          "personality_type": "...", "type_name": "...", "type_detail": "...", "dim_chart": {...}}
@@ -19,10 +23,11 @@ import asyncio
 import json
 import logging
 import re
+import secrets
 import time
 
 import jwt
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.agents.report_writer import (
@@ -31,8 +36,16 @@ from app.agents.report_writer import (
     REPORT_VERSION,
     run_stream as report_stream,
 )
+from app.api.ws_helpers import (
+    SectionStreamer,
+    all_labels,
+    dim_chart,
+    highlights_meta,
+    send as _send,
+)
 from app.database import get_db
-from app.middleware.auth import TOKEN_ALGORITHM, _jwt_secret
+from app.limiter import limiter
+from app.middleware.auth import TOKEN_ALGORITHM, _jwt_secret, get_current_user_id
 from app.models.assessment import Assessment
 from app.services.access_control import is_unlocked
 from app.services.llm_client import LLMError
@@ -52,300 +65,133 @@ router = APIRouter()
 _REPLAY_CHUNK = 32
 _REPLAY_DELAY = 0.01
 
+_MAX_WS_CONCURRENT = 50
+_ws_active = 0
+
+_TICKET_TTL = 30
+_tickets: dict[str, tuple[int, float]] = {}
+
+
+def _cleanup_tickets() -> None:
+    now = time.time()
+    expired = [k for k, (_, ts) in _tickets.items() if now - ts > _TICKET_TTL]
+    for k in expired:
+        del _tickets[k]
+
+
+def _consume_ticket(ticket: str) -> int | None:
+    _cleanup_tickets()
+    entry = _tickets.pop(ticket, None)
+    if entry is None:
+        return None
+    user_id, created = entry
+    if time.time() - created > _TICKET_TTL:
+        return None
+    return user_id
+
+
+@router.post("/ws/ticket")
+@limiter.limit("10/minute")
+async def create_ws_ticket(
+    request: Request,
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
+    _cleanup_tickets()
+    ticket = secrets.token_urlsafe(32)
+    _tickets[ticket] = (user_id, time.time())
+    return {"ticket": ticket}
+
 
 @router.websocket("/ws/result")
 async def ws_result(websocket: WebSocket, db: Session = Depends(get_db)) -> None:
     """Accept WebSocket, stream report writer portrait text token by token, then send full report."""
-    token = websocket.query_params.get("token", "")
-    try:
-        payload = jwt.decode(token, _jwt_secret(), algorithms=[TOKEN_ALGORITHM])
-        user_id = int(payload["sub"])
-    except Exception:
+    global _ws_active
+    if _ws_active >= _MAX_WS_CONCURRENT:
         await websocket.accept()
-        await websocket.close(code=4001)
+        await _send(websocket, {"type": "error", "code": 503, "message": "服务器繁忙，请稍后重试"})
+        await websocket.close(code=1013)
         return
-
-    await websocket.accept()
-    logger.info("[ws/result] user_id=%s 连接建立", user_id)
+    _ws_active += 1
 
     try:
-        raw = await websocket.receive_text()
-        data = json.loads(raw)
-        session_id = data.get("session_id", "")
-
-        assessment = (
-            db.query(Assessment)
-            .filter(Assessment.session_id == session_id, Assessment.user_id == user_id)
-            .first()
-        )
-        if assessment is None:
-            await _send(websocket, {"type": "error", "code": 404, "message": "Assessment not found"})
-            return
-
-        if assessment.status == "pending":
-            await _send(websocket, {"type": "error", "code": 400, "message": "Quiz not submitted"})
-            return
-
-        if not is_unlocked(db, assessment.id, user_id):
-            await _send(websocket, {"type": "error", "code": 402, "message": "报告未解锁"})
-            return
-
-        if assessment.status == "complete" and assessment.report_text:
-            await _stream_cached(websocket, assessment)
-        elif assessment.status == "analyzed" and assessment.diagnosis_json:
+        ticket = websocket.query_params.get("ticket", "")
+        token = websocket.query_params.get("token", "")
+        user_id = None
+        if ticket:
+            user_id = _consume_ticket(ticket)
+        if user_id is None and token:
             try:
-                check_quota(db, user_id=user_id)
-            except QuotaExceededError as exc:
-                logger.warning("[ws/result] user_id=%s 配额超限 used=%d limit=%d",
-                               user_id, exc.used, exc.limit)
-                await _send(websocket, {
-                    "type": "error", "code": 429,
-                    "message": "今日测评次数已达上限，请明天再来",
-                })
-                return
-            await _stream_agent_b(websocket, db, assessment, session_id, user_id=user_id)
-        elif assessment.status == "generating":
-            # Another connection (or the polling endpoint) is already running report writer.
-            # The frontend should reconnect once it sees a "complete" via /result.
-            await _send(websocket, {"type": "error", "code": 409, "message": "报告正在生成中，请稍后重连"})
-        else:
-            await _send(websocket, {"type": "error", "code": 400, "message": "Diagnosis not available"})
+                payload = jwt.decode(token, _jwt_secret(), algorithms=[TOKEN_ALGORITHM])
+                user_id = int(payload["sub"])
+            except Exception:
+                pass
+        if user_id is None:
+            await websocket.accept()
+            await websocket.close(code=4001)
+            return
 
-    except WebSocketDisconnect:
-        logger.info("[ws/result] user_id=%s 断开", user_id)
-    except Exception as exc:
-        logger.exception("[ws/result] 未预期错误: %s", exc)
+        await websocket.accept()
+        logger.info("[ws/result] user_id=%s 连接建立", user_id)
+
         try:
-            await _send(websocket, {"type": "error", "code": 500})
-        except Exception:
-            pass
+            raw = await websocket.receive_text()
+            data = json.loads(raw)
+            session_id = data.get("session_id", "")
 
+            assessment = (
+                db.query(Assessment)
+                .filter(Assessment.session_id == session_id, Assessment.user_id == user_id)
+                .first()
+            )
+            if assessment is None:
+                await _send(websocket, {"type": "error", "code": 404, "message": "Assessment not found"})
+                return
 
-async def _send(ws: WebSocket, data: dict) -> None:
-    await ws.send_text(json.dumps(data, ensure_ascii=False))
+            if assessment.status == "pending":
+                await _send(websocket, {"type": "error", "code": 400, "message": "Quiz not submitted"})
+                return
 
+            if not is_unlocked(db, assessment.id, user_id):
+                await _send(websocket, {"type": "error", "code": 402, "message": "报告未解锁"})
+                return
 
-_SEC_RE = re.compile(r'--([A-Za-z]+)--')
+            if assessment.status == "complete" and assessment.report_text:
+                await _stream_cached(websocket, assessment)
+            elif assessment.status == "analyzed" and assessment.diagnosis_json:
+                try:
+                    check_quota(db, user_id=user_id)
+                except QuotaExceededError as exc:
+                    logger.warning("[ws/result] user_id=%s 配额超限 used=%d limit=%d",
+                                   user_id, exc.used, exc.limit)
+                    await _send(websocket, {
+                        "type": "error", "code": 429,
+                        "message": "今日测评次数已达上限，请明天再来",
+                    })
+                    return
+                await _stream_agent_b(websocket, db, assessment, session_id, user_id=user_id)
+            elif assessment.status == "generating":
+                await _send(websocket, {"type": "error", "code": 409, "message": "报告正在生成中，请稍后重连"})
+            else:
+                await _send(websocket, {"type": "error", "code": 400, "message": "Diagnosis not available"})
 
-
-class _SectionStreamer:
-    """Detects --Section-- markers in streaming text and sends typed WS messages.
-
-    Phase C.1：可选 ``on_section_complete`` 回调在每个 section_end 触发，
-    入参 (section_name, full_text)；ws_result 用它把段文本写入
-    assessments.partial_sections 实现断点续传。
-    """
-
-    def __init__(self, ws, send_fn, on_section_complete=None):
-        self._ws = ws
-        self._send = send_fn
-        self._buf = ""
-        self._cur = None
-        self._cur_text = ""  # 当前 section 累积文本，用于 on_section_complete
-        self._on_section_complete = on_section_complete
-
-    async def feed(self, text: str) -> None:
-        self._buf += text
-        await self._process()
-
-    async def _emit_chunk(self, section: str, text: str) -> None:
-        await self._send(self._ws, {
-            "type": "section_chunk", "section": section, "text": text,
-        })
-        self._cur_text += text
-
-    async def _finish_current_section(self) -> None:
-        if not self._cur:
-            return
-        await self._send(self._ws, {"type": "section_end", "section": self._cur})
-        if self._on_section_complete is not None:
+        except WebSocketDisconnect:
+            logger.info("[ws/result] user_id=%s 断开", user_id)
+        except Exception as exc:
+            logger.exception("[ws/result] 未预期错误: %s", exc)
             try:
-                await self._on_section_complete(self._cur, self._cur_text)
-            except Exception as exc:
-                logger.warning("[ws/result] on_section_complete 回调失败 section=%s: %s",
-                               self._cur, exc)
-        self._cur_text = ""
-
-    async def _process(self) -> None:
-        while True:
-            m = _SEC_RE.search(self._buf)
-            if not m:
-                safe = max(0, len(self._buf) - 20)
-                if safe > 0 and self._cur:
-                    chunk = self._buf[:safe]
-                    if chunk:
-                        await self._emit_chunk(self._cur, chunk)
-                    self._buf = self._buf[safe:]
-                break
-
-            pre = self._buf[:m.start()]
-            if pre and self._cur:
-                await self._emit_chunk(self._cur, pre)
-            await self._finish_current_section()
-            self._cur = m.group(1)
-            await self._send(self._ws, {"type": "section_start", "section": self._cur})
-            self._buf = self._buf[m.end():]
-
-    async def done(self) -> None:
-        remaining = self._buf.strip()
-        if remaining and self._cur:
-            await self._emit_chunk(self._cur, remaining)
-        await self._finish_current_section()
-        self._buf = ""
-        self._cur = None
+                await _send(websocket, {"type": "error", "code": 500})
+            except Exception:
+                pass
+    finally:
+        _ws_active -= 1
 
 
-def _aware_score(d4: dict) -> float:
-    """自我认知连续量：declared 在 normalized 中的得分 / 最高分。
-
-    - declared 是 top1 → 1.0
-    - declared 远低于 top1 → 趋近 0.0
-    - 缺数据（declared 空 或 normalized 全 0）→ 0.5 兜底
-    """
-    declared = d4.get("declared", "")
-    normalized = d4.get("normalized", {}) or {}
-    if not declared or not normalized:
-        return 0.5
-    max_val = max(normalized.values()) if normalized.values() else 0.0
-    if max_val <= 0:
-        return 0.5
-    return min(1.0, max(0.0, normalized.get(declared, 0.0) / max_val))
+_SectionStreamer = SectionStreamer
 
 
-def _style_clarity_score(d5: dict) -> float:
-    """表达成熟（风格明确度）：(|s1| + |s2|) / 12。
-
-    s1/s2 都接近 0 → 风格模糊 → 0；都接近 ±6 → 风格鲜明 → 1。
-    不评价方向（高直接 vs 高含蓄都算"清晰风格"）。
-    """
-    s1 = d5.get("s1_raw", 0) or 0
-    s2 = d5.get("s2_raw", 0) or 0
-    return min(1.0, (abs(s1) + abs(s2)) / 12.0)
-
-
-def _dim_chart(diagnosis: dict) -> dict:
-    """Convert diagnosis dimensions to structured chart data.
-
-    新方案（三件套）：
-    - health_radar: 5 维"高=好"健康度雷达（替换旧 10 轴 combined-radar）
-    - d4_preference: 五瓣花数据（爱的语言偏好，top2 高亮）
-    - d5_quadrant: 象限点图数据（直接性 × 分享欲 2D 平面）
-
-    兼容：保留旧 d123/d4/d5 字段供老客户端用。
-    """
-    dims = diagnosis.get("dimensions", {})
-
-    # ── 旧字段（保留兼容）────────────────────────────────────────────────
-    _names = {"D1": "依恋安全", "D2": "边界清晰", "D3": "冲突健康"}
-    d123 = [
-        {
-            "key": k,
-            "name": _names[k],
-            "raw": dims.get(k, {}).get("raw", 0),
-            "interp": dims.get(k, {}).get("interp", "mixed"),
-        }
-        for k in ("D1", "D2", "D3")
-    ]
-    d4_norm = dims.get("D4", {}).get("normalized", {t: 0.0 for t in ("T1","T2","T3","T4","T5")})
-    d5 = dims.get("D5", {})
-
-    # ── 新字段 1：5 维健康度雷达 ─────────────────────────────────────────
-    d1_raw = dims.get("D1", {}).get("raw", 0) or 0
-    d2_raw = dims.get("D2", {}).get("raw", 0) or 0
-    d3_raw = dims.get("D3", {}).get("raw", 0) or 0
-    health_radar = [
-        {"key": "D1",    "name": "依恋安全", "value": min(1.0, max(0.0, (d1_raw + 12) / 24))},
-        {"key": "D2",    "name": "边界清晰", "value": min(1.0, max(0.0, (d2_raw + 12) / 24))},
-        {"key": "D3",    "name": "冲突健康", "value": min(1.0, max(0.0, (d3_raw + 12) / 24))},
-        {"key": "AWARE", "name": "自我认知", "value": _aware_score(dims.get("D4", {}))},
-        {"key": "STYLE", "name": "表达成熟", "value": _style_clarity_score(d5)},
-    ]
-
-    # ── 新字段 2：D4 爱的语言偏好（五瓣花数据）──────────────────────────
-    d4_block = dims.get("D4", {}) or {}
-    top2 = d4_block.get("top2", []) or []
-    d4_details = diagnosis.get("D4_details", []) or []
-    name_by_code = {d.get("code", ""): d.get("name", "") for d in d4_details}
-    d4_preference = {
-        "items": [
-            {
-                "code":    code,
-                "name":    name_by_code.get(code, code),
-                "value":   float(d4_norm.get(code, 0.0) or 0.0),
-                "is_top2": code in top2,
-            }
-            for code in ("T1", "T2", "T3", "T4", "T5")
-        ],
-        "top2_names": [name_by_code.get(c, c) for c in top2],
-    }
-
-    # ── 新字段 3：D5 风格象限点图 ────────────────────────────────────────
-    d5_quadrant = {
-        "s1_raw":     d5.get("s1_raw", 0) or 0,
-        "s2_raw":     d5.get("s2_raw", 0) or 0,
-        "s1_label":   d5.get("s1", "中直接"),
-        "s2_label":   d5.get("s2", "中分享"),
-        "quadrant":   d5.get("quadrant", ""),
-        "style_name": diagnosis.get("D5_style_name", "") or "",
-    }
-
-    return {
-        "d123": d123,
-        "d4": d4_norm,
-        "d5": {
-            "s1":     d5.get("s1", "中直接"),
-            "s2":     d5.get("s2", "中分享"),
-            "s1_raw": d5.get("s1_raw", 0),
-            "s2_raw": d5.get("s2_raw", 0),
-        },
-        "health_radar":  health_radar,
-        "d4_preference": d4_preference,
-        "d5_quadrant":   d5_quadrant,
-    }
-
-
-def _all_labels(diagnosis: dict) -> list:
-    """
-    组合 D1-D5 全部维度的人格卡展示标签，随 meta 消息下发。
-    - D1/D2/D3: 来自 segment_decode，带 is_healthy（健康/问题端配色）
-    - D4:       top2 爱的语言名称，is_neutral=True（蓝色调，无健康属性）
-    - D5:       亲密风格象限名，is_neutral=True
-    """
-    labels = list(diagnosis.get("segment_decode", []))
-
-    # D4: top2 爱的语言，各显示一枚标签
-    for item in diagnosis.get("D4_details", []):
-        labels.append({
-            "dimension":  "D4",
-            "code":       item.get("code", ""),
-            "label_cn":   item.get("name", ""),
-            "is_neutral": True,
-        })
-
-    # D5: 一枚象限风格标签
-    d5_style = diagnosis.get("D5_style_name", "")
-    d5_quadrant = (diagnosis.get("dimensions", {}) or {}).get("D5", {}).get("quadrant", "")
-    if d5_style or d5_quadrant:
-        labels.append({
-            "dimension":  "D5",
-            "code":       d5_quadrant,
-            "label_cn":   d5_style or d5_quadrant,
-            "is_neutral": True,
-        })
-
-    return labels
-
-
-def _highlights_meta(diagnosis: dict) -> list:
-    """从诊断结果提取 highlights 标题与正负向，随 meta 消息下发，无需等 report writer。"""
-    return [
-        {
-            "idx":         i + 1,
-            "title":       h.get("name_cn", ""),
-            "is_positive": h.get("is_positive", False),
-        }
-        for i, h in enumerate(diagnosis.get("highlights", []))
-    ]
+_dim_chart = dim_chart
+_all_labels = all_labels
+_highlights_meta = highlights_meta
 
 
 def _release_claim(db: Session, assessment_id: int) -> None:
