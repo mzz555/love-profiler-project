@@ -1,5 +1,15 @@
+import pytest
+
 from app.middleware.auth import create_access_token
 from app.models.user import User
+
+
+@pytest.fixture(autouse=True)
+def _reset_couple_limiter():
+    """每个用例前重置 slowapi 限流预算，避免文件内多次 create 累积触发 429。"""
+    from app.limiter import limiter
+    limiter.reset()
+    yield
 
 
 def _headers(db_session, openid):
@@ -69,3 +79,25 @@ def test_answer_forbidden_for_outsider(client, db_session, monkeypatch):
     sid = client.post("/couple/create", headers=a).json()["session_id"]
     r = client.post("/couple/answer", headers=c, json={"session_id": sid, "self": []})
     assert r.status_code == 403
+
+
+def test_result_incomplete_409(client, db_session, monkeypatch):
+    _mock_q(monkeypatch)
+    a = _headers(db_session, "uA")
+    sid = client.post("/couple/create", headers=a).json()["session_id"]
+    assert client.get(f"/couple/result?session_id={sid}", headers=a).status_code == 409
+
+
+def test_result_complete_returns_cards(client, db_session, monkeypatch):
+    _mock_q(monkeypatch)
+    a = _headers(db_session, "uA")
+    sid = client.post("/couple/create", headers=a).json()["session_id"]
+    from app.models.couple_session import CoupleSession
+    row = db_session.query(CoupleSession).filter_by(session_id=sid).first()
+    row.status = "complete"
+    row.report_json = '{"blindspot_cards":[{"dimension_id":"money"}]}'
+    db_session.commit()
+    r = client.get(f"/couple/result?session_id={sid}", headers=a)
+    assert r.status_code == 200
+    assert r.json()["report"]["blindspot_cards"][0]["dimension_id"] == "money"
+    assert "a_answers_json" not in r.json() and "b_answers_json" not in r.json()

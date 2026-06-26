@@ -110,3 +110,19 @@ async def couple_answer(request: Request, body: AnswerRequest,
             await _compute_and_launch(db, body.session_id, sess.a_answers_json, sess.b_answers_json)
     db.refresh(sess)
     return {"status": sess.status}
+
+
+@router.get("/result")
+@limiter.limit("30/minute")
+async def couple_result(request: Request, session_id: str,
+                        user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)) -> dict:
+    sess = db.query(CoupleSession).filter(CoupleSession.session_id == session_id).first()
+    if sess is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="测评不存在")
+    if user_id not in (sess.initiator_user_id, sess.partner_user_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="无权查看")
+    if sess.status in ("waiting_partner", "computing"):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="对方尚未完成作答")
+    if sess.status != "complete" or not sess.report_json:
+        return {"status": "generating"}
+    return {"status": "complete", "report": json.loads(sess.report_json)}
