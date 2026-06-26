@@ -42,5 +42,6 @@ env/
 node_modules/
 package-lock.json
 
-# Claude
-.claude/
+# Claude — 本地工具配置不入库，但版本化项目专属 skill
+.claude/*
+!.claude/skills/
