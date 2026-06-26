@@ -1,0 +1,9 @@
+{
+  "_meta": { "calibrated": false, "note": "MVP 临时默认阈值，DRSA 未跑，全维度 topic_only" },
+  "_defaults": {
+    "calibrated_relevant": false,
+    "gap_thresholds": { "small": 18, "moderate": 40 },
+    "effect_size": 0.0,
+    "direction_hurts": "incongruent"
+  }
+}

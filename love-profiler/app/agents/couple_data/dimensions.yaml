@@ -1,0 +1,157 @@
+# 双人测评维度注册表（18 维度）——引擎与前端的「维度真相源」。
+# 来源 couples_question_bank.xlsx；reverse/apply_prediction 等算法标志以本文件为准。
+# ===== Cluster A：高风险生活领域期望（7 维度）=====
+- id: money
+  cluster: A
+  name_cn: 金钱观
+  apply_prediction: true
+  anchors: { low: 存下来更安心, high: 花在当下更值得 }
+  items:
+    - { id: A1-1, type: slider,  reverse: false }
+    - { id: A1-2, type: slider,  reverse: false }
+    - { id: A1-3, type: likert7, reverse: true }
+- id: intimacy_freq
+  cluster: A
+  name_cn: 亲密与性需求
+  apply_prediction: true
+  anchors: { low: 需要的亲密更少, high: 需要的亲密更多 }
+  items:
+    - { id: A2-1, type: slider,  reverse: false }
+    - { id: A2-2, type: slider,  reverse: false }
+    - { id: A2-3, type: likert7, reverse: false }
+- id: chores
+  cluster: A
+  name_cn: 家务与责任分工
+  apply_prediction: true
+  anchors: { low: 应明确对半, high: 谁有空谁做 }
+  items:
+    - { id: A3-1, type: slider,  reverse: false }
+    - { id: A3-2, type: likert7, reverse: false }
+- id: children
+  cluster: A
+  name_cn: 生育与养育
+  apply_prediction: true
+  anchors: { low: 想要/想早要, high: 不要/不着急 }
+  items:
+    - { id: A4-1, type: slider,  reverse: false }
+    - { id: A4-2, type: slider,  reverse: false }
+    - { id: A4-3, type: likert7, reverse: false }
+- id: inlaws
+  cluster: A
+  name_cn: 与原生家庭/姻亲的边界
+  anchors: { low: 尊重/听取父母, high: 我们俩定 }
+  items:
+    - { id: A5-1, type: slider,  reverse: false }
+    - { id: A5-2, type: slider,  reverse: false }
+    - { id: A5-3, type: likert7, reverse: false }
+- id: time_space
+  cluster: A
+  name_cn: 相处时间与独处空间
+  anchors: { low: 需要独处少/越黏越好, high: 需要独处多 }
+  items:
+    - { id: A6-1, type: slider,  reverse: false }
+    - { id: A6-2, type: likert7, reverse: false }
+- id: career_life
+  cluster: A
+  name_cn: 事业与生活优先级
+  anchors: { low: 拼事业, high: 顾家庭/生活 }
+  items:
+    - { id: A7-1, type: slider,  reverse: false }
+    - { id: A7-2, type: slider,  reverse: false }
+    - { id: A7-3, type: likert7, reverse: false }
+# ===== Cluster B：冲突与沟通方式（4 维度，无 anchors）=====
+- id: confront
+  cluster: B
+  name_cn: 对抗↔回避
+  items:
+    - { id: B1-1, type: likert7, reverse: false }
+    - { id: B1-2, type: likert7, reverse: true }
+    - { id: B1-3, type: likert7, reverse: false }
+- id: withdraw
+  cluster: B
+  name_cn: 退缩倾向
+  items:
+    - { id: B2-1, type: likert7, reverse: false }
+    - { id: B2-2, type: likert7, reverse: false }
+- id: harsh_startup
+  cluster: B
+  name_cn: 强硬开场倾向
+  items:
+    - { id: B3-1, type: likert7, reverse: false }
+    - { id: B3-2, type: likert7, reverse: true }
+- id: constructive
+  cluster: B
+  name_cn: 建设性↔破坏性应对
+  items:
+    - { id: B4-1, type: likert7, reverse: false }
+    - { id: B4-2, type: likert7, reverse: true }
+    - { id: B4-3, type: likert7, reverse: false }
+    - { id: B4-4, type: likert7, reverse: true }
+# ===== Cluster C：价值观（4 维度）=====
+- id: values_transcend
+  cluster: C
+  name_cn: 自我超越↔自我提升
+  apply_prediction: true
+  anchors: { low: 公平/利他, high: 成就/影响力 }
+  items:
+    - { id: C1-1, type: slider,  reverse: false }
+    - { id: C1-2, type: likert7, reverse: false }
+    - { id: C1-3, type: likert7, reverse: true }
+- id: values_openness
+  cluster: C
+  name_cn: 保守↔开放
+  apply_prediction: true
+  complementary: true            # 互补型，禁负面措辞
+  anchors: { low: 稳定/传统, high: 新鲜/冒险 }
+  items:
+    - { id: C2-1, type: slider,  reverse: false }
+    - { id: C2-2, type: likert7, reverse: false }
+- id: religiosity
+  cluster: C
+  name_cn: 信仰/精神生活的重要性
+  skippable: true                # 敏感题，可跳过
+  items:
+    - { id: C3-1, type: likert7, reverse: false }
+    - { id: C3-2, type: likert7, reverse: false }
+- id: filial_authority
+  cluster: C
+  name_cn: 孝道-权威取向
+  items:
+    - { id: C4-1, type: likert7, reverse: false }
+    - { id: C4-2, type: likert7, reverse: false }
+# ===== Cluster D：依恋取向（2 维度，pairing_role 供组合规则）=====
+- id: attach_anxiety
+  cluster: D
+  name_cn: 依恋-焦虑
+  pairing_role: anxiety
+  items:
+    - { id: D1-1, type: likert7, reverse: false }
+    - { id: D1-2, type: likert7, reverse: false }
+    - { id: D1-3, type: likert7, reverse: false }
+    - { id: D1-4, type: likert7, reverse: false }
+    - { id: D1-5, type: likert7, reverse: false }
+    - { id: D1-6, type: likert7, reverse: false }
+- id: attach_avoid
+  cluster: D
+  name_cn: 依恋-回避
+  pairing_role: avoidance
+  items:
+    - { id: D2-1, type: likert7, reverse: false }
+    - { id: D2-2, type: likert7, reverse: false }
+    - { id: D2-3, type: likert7, reverse: false }
+    - { id: D2-4, type: likert7, reverse: false }
+    - { id: D2-5, type: likert7, reverse: false }
+    - { id: D2-6, type: likert7, reverse: false }
+# ===== Cluster E：情绪稳定性（1 维度，level_only）=====
+- id: emotional_stability
+  cluster: E
+  name_cn: 情绪稳定性
+  level_only: true               # 仅呈现水平，禁判差距
+  items:
+    - { id: E1-1, type: likert7, reverse: true }
+    - { id: E1-2, type: likert7, reverse: true }
+    - { id: E1-3, type: likert7, reverse: false }
+    - { id: E1-4, type: likert7, reverse: true }
+    - { id: E1-5, type: likert7, reverse: false }
+    - { id: E1-6, type: likert7, reverse: false }
+    - { id: E1-7, type: likert7, reverse: false }
