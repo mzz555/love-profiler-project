@@ -31,7 +31,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `app/agents/couple_data/dimensions.yaml` | 维度注册表（58 维度，题库 v1 第二部分落地） |
+| `app/agents/couple_data/dimensions.yaml` | 维度注册表（18 维度，couples_question_bank.xlsx 落地） |
 | `app/agents/couple_data/calibration.json` | 校准表（MVP 临时默认，`_defaults` 兜底） |
 | `app/services/couple_registry.py` | 加载并查询注册表 + calibration（infra service） |
 | `app/services/couple_answer_package_builder.py` | 双方 raw 作答 → `{A,B,skipped}` 标准包（infra） |
@@ -65,7 +65,7 @@
 
 **Interfaces:**
 - Produces:
-  - `DimensionConfig`（frozen dataclass）：`id, cluster, layer, apply_prediction, complementary, level_only, skippable, anchors: dict, items: tuple`
+  - `DimensionConfig`（frozen dataclass）：`id, cluster, name_cn, layer, apply_prediction, complementary, level_only, skippable, pairing_role: str|None, anchors: dict, items: tuple`
   - `all_dimensions() -> list[DimensionConfig]`
   - `get_dimension(dim_id: str) -> DimensionConfig | None`
   - `get_calibration(dim_id: str) -> dict`（含 `calibrated_relevant, gap_thresholds:{small,moderate}, effect_size, direction_hurts`；缺失走 `_defaults`）
@@ -79,6 +79,7 @@ from app.services import couple_registry as reg
 def test_get_dimension_money():
     d = reg.get_dimension("money")
     assert d is not None and d.cluster == "A"
+    assert d.name_cn == "金钱观"
     assert d.apply_prediction is True
     assert d.anchors["low"] and d.anchors["high"]
     assert len(d.items) >= 2
@@ -86,6 +87,11 @@ def test_get_dimension_money():
 def test_level_only_and_skippable_flags():
     assert reg.get_dimension("emotional_stability").level_only is True
     assert reg.get_dimension("religiosity").skippable is True
+
+def test_pairing_role():
+    assert reg.get_dimension("attach_anxiety").pairing_role == "anxiety"
+    assert reg.get_dimension("attach_avoid").pairing_role == "avoidance"
+    assert reg.get_dimension("money").pairing_role is None
 
 def test_get_calibration_missing_falls_back_to_defaults():
     c = reg.get_calibration("money")
@@ -116,35 +122,166 @@ Expected: FAIL — `ModuleNotFoundError: app.services.couple_registry`
 }
 ```
 
-- [ ] **Step 3b: 写 `dimensions.yaml`（录入全部 58 维度）**
+- [ ] **Step 3b: 写 `dimensions.yaml`（录入全部 18 维度）**
 
-把《双人题库v1.md》第二部分 `question_bank_v1.yaml` 的 `dimensions:` 段**逐维度录入**，每维度字段与下方 3 个代表样例（覆盖 apply_prediction / complementary / level_only / skippable 各标志）对齐。缺省值：`layer` 默认 `interpretation`，未标的布尔标志默认 `false`。
+来源 `couples_question_bank.xlsx` 的 dimensions + items sheet，下方是**完整 18 维度真实数据**（直接抄）。缺省：`layer` 默认 `interpretation`，未列布尔标志默认 `false`，未列 `pairing_role` 默认 `null`。
 
 ```yaml
+# ===== Cluster A：高风险生活领域期望（7 维度）=====
 - id: money
   cluster: A
-  layer: interpretation
+  name_cn: 金钱观
   apply_prediction: true
-  anchors: { low: "存下来更安心", high: "花在当下更值得" }
+  anchors: { low: 存下来更安心, high: 花在当下更值得 }
   items:
     - { id: A1-1, type: slider,  reverse: false }
     - { id: A1-2, type: slider,  reverse: false }
     - { id: A1-3, type: likert7, reverse: true }
+- id: intimacy_freq
+  cluster: A
+  name_cn: 亲密与性需求
+  apply_prediction: true
+  anchors: { low: 需要的亲密更少, high: 需要的亲密更多 }
+  items:
+    - { id: A2-1, type: slider,  reverse: false }
+    - { id: A2-2, type: slider,  reverse: false }
+    - { id: A2-3, type: likert7, reverse: false }
+- id: chores
+  cluster: A
+  name_cn: 家务与责任分工
+  apply_prediction: true
+  anchors: { low: 应明确对半, high: 谁有空谁做 }
+  items:
+    - { id: A3-1, type: slider,  reverse: false }
+    - { id: A3-2, type: likert7, reverse: false }
+- id: children
+  cluster: A
+  name_cn: 生育与养育
+  apply_prediction: true
+  anchors: { low: 想要/想早要, high: 不要/不着急 }
+  items:
+    - { id: A4-1, type: slider,  reverse: false }
+    - { id: A4-2, type: slider,  reverse: false }
+    - { id: A4-3, type: likert7, reverse: false }
+- id: inlaws
+  cluster: A
+  name_cn: 与原生家庭/姻亲的边界
+  anchors: { low: 尊重/听取父母, high: 我们俩定 }
+  items:
+    - { id: A5-1, type: slider,  reverse: false }
+    - { id: A5-2, type: slider,  reverse: false }
+    - { id: A5-3, type: likert7, reverse: false }
+- id: time_space
+  cluster: A
+  name_cn: 相处时间与独处空间
+  anchors: { low: 需要独处少/越黏越好, high: 需要独处多 }
+  items:
+    - { id: A6-1, type: slider,  reverse: false }
+    - { id: A6-2, type: likert7, reverse: false }
+- id: career_life
+  cluster: A
+  name_cn: 事业与生活优先级
+  anchors: { low: 拼事业, high: 顾家庭/生活 }
+  items:
+    - { id: A7-1, type: slider,  reverse: false }
+    - { id: A7-2, type: slider,  reverse: false }
+    - { id: A7-3, type: likert7, reverse: false }
+# ===== Cluster B：冲突与沟通方式（4 维度，无 anchors）=====
+- id: confront
+  cluster: B
+  name_cn: 对抗↔回避
+  items:
+    - { id: B1-1, type: likert7, reverse: false }
+    - { id: B1-2, type: likert7, reverse: true }
+    - { id: B1-3, type: likert7, reverse: false }
+- id: withdraw
+  cluster: B
+  name_cn: 退缩倾向
+  items:
+    - { id: B2-1, type: likert7, reverse: false }
+    - { id: B2-2, type: likert7, reverse: false }
+- id: harsh_startup
+  cluster: B
+  name_cn: 强硬开场倾向
+  items:
+    - { id: B3-1, type: likert7, reverse: false }
+    - { id: B3-2, type: likert7, reverse: true }
+- id: constructive
+  cluster: B
+  name_cn: 建设性↔破坏性应对
+  items:
+    - { id: B4-1, type: likert7, reverse: false }
+    - { id: B4-2, type: likert7, reverse: true }
+    - { id: B4-3, type: likert7, reverse: false }
+    - { id: B4-4, type: likert7, reverse: true }
+# ===== Cluster C：价值观（4 维度）=====
+- id: values_transcend
+  cluster: C
+  name_cn: 自我超越↔自我提升
+  apply_prediction: true
+  anchors: { low: 公平/利他, high: 成就/影响力 }
+  items:
+    - { id: C1-1, type: slider,  reverse: false }
+    - { id: C1-2, type: likert7, reverse: false }
+    - { id: C1-3, type: likert7, reverse: true }
 - id: values_openness
   cluster: C
+  name_cn: 保守↔开放
   apply_prediction: true
-  complementary: true            # 禁负面措辞
-  anchors: { low: "稳定/传统", high: "新鲜/冒险" }
+  complementary: true            # 互补型，禁负面措辞
+  anchors: { low: 稳定/传统, high: 新鲜/冒险 }
   items:
     - { id: C2-1, type: slider,  reverse: false }
     - { id: C2-2, type: likert7, reverse: false }
+- id: religiosity
+  cluster: C
+  name_cn: 信仰/精神生活的重要性
+  skippable: true                # 敏感题，可跳过
+  items:
+    - { id: C3-1, type: likert7, reverse: false }
+    - { id: C3-2, type: likert7, reverse: false }
+- id: filial_authority
+  cluster: C
+  name_cn: 孝道-权威取向
+  items:
+    - { id: C4-1, type: likert7, reverse: false }
+    - { id: C4-2, type: likert7, reverse: false }
+# ===== Cluster D：依恋取向（2 维度，pairing_role 供组合规则）=====
+- id: attach_anxiety
+  cluster: D
+  name_cn: 依恋-焦虑
+  pairing_role: anxiety
+  items:
+    - { id: D1-1, type: likert7, reverse: false }
+    - { id: D1-2, type: likert7, reverse: false }
+    - { id: D1-3, type: likert7, reverse: false }
+    - { id: D1-4, type: likert7, reverse: false }
+    - { id: D1-5, type: likert7, reverse: false }
+    - { id: D1-6, type: likert7, reverse: false }
+- id: attach_avoid
+  cluster: D
+  name_cn: 依恋-回避
+  pairing_role: avoidance
+  items:
+    - { id: D2-1, type: likert7, reverse: false }
+    - { id: D2-2, type: likert7, reverse: false }
+    - { id: D2-3, type: likert7, reverse: false }
+    - { id: D2-4, type: likert7, reverse: false }
+    - { id: D2-5, type: likert7, reverse: false }
+    - { id: D2-6, type: likert7, reverse: false }
+# ===== Cluster E：情绪稳定性（1 维度，level_only）=====
 - id: emotional_stability
   cluster: E
+  name_cn: 情绪稳定性
   level_only: true               # 仅呈现水平，禁判差距
   items:
     - { id: E1-1, type: likert7, reverse: true }
+    - { id: E1-2, type: likert7, reverse: true }
     - { id: E1-3, type: likert7, reverse: false }
-# … 其余 55 维度同法录入（religiosity 标 skippable: true）
+    - { id: E1-4, type: likert7, reverse: true }
+    - { id: E1-5, type: likert7, reverse: false }
+    - { id: E1-6, type: likert7, reverse: false }
+    - { id: E1-7, type: likert7, reverse: false }
 ```
 
 - [ ] **Step 3c: 写 `couple_registry.py`（完整）**
@@ -163,9 +300,9 @@ _DATA_DIR = pathlib.Path(__file__).parents[1] / "agents" / "couple_data"
 
 @dataclass(frozen=True)
 class DimensionConfig:
-    id: str; cluster: str; layer: str
+    id: str; cluster: str; name_cn: str; layer: str
     apply_prediction: bool; complementary: bool; level_only: bool; skippable: bool
-    anchors: dict; items: tuple
+    pairing_role: str | None; anchors: dict; items: tuple
 
 
 def _load_dimensions() -> dict[str, DimensionConfig]:
@@ -173,11 +310,13 @@ def _load_dimensions() -> dict[str, DimensionConfig]:
     out: dict[str, DimensionConfig] = {}
     for d in raw:
         out[d["id"]] = DimensionConfig(
-            id=d["id"], cluster=d["cluster"], layer=d.get("layer", "interpretation"),
+            id=d["id"], cluster=d["cluster"], name_cn=d.get("name_cn", ""),
+            layer=d.get("layer", "interpretation"),
             apply_prediction=bool(d.get("apply_prediction", False)),
             complementary=bool(d.get("complementary", False)),
             level_only=bool(d.get("level_only", False)),
             skippable=bool(d.get("skippable", False)),
+            pairing_role=d.get("pairing_role"),
             anchors=d.get("anchors") or {}, items=tuple(d.get("items") or []),
         )
     return out
@@ -205,7 +344,7 @@ def get_calibration(dim_id: str) -> dict:
 - [ ] **Step 4: 运行测试确认通过**
 
 Run: `pytest tests/services/test_couple_registry.py -v`
-Expected: PASS（4 passed）
+Expected: PASS（5 passed）
 
 - [ ] **Step 5: Commit**
 
@@ -1077,7 +1216,7 @@ git commit -m "feat(couple): 引擎入口编排 + 端到端契约组装"
 - **Spec 覆盖**：配置层（Task 1）、builder（Task 2）、引擎 7 步（Task 3–8）、契约+自检（Task 9）、入口编排+盲区轨道解耦（Task 10）全部对应 spec 第三/五/六章。报告 Agent/API/数据层属计划 B，不在本计划。
 - **盲区轨道解耦验证**：Task 10 测试显式断言 `salience_rank == -1`（判决降级）同时 `blindspot.exists is True` 且 `top_blindspots` 含该维度——MVP 主菜成立。
 - **类型一致性**：`DimensionConfig` 字段、`get_calibration` 返回结构、各子函数签名在 Task 1 定义后，Task 3–10 一致引用；维度结果 dict 的键（`salience`/`effect_size`/`apply_prediction`/`blindspot`）被 salience/supercluster/schema 一致消费。
-- **无占位符**：每步含可运行代码与命令；`dimensions.yaml` 全量录入指明来源（题库 v1 第二部分）并给 3 个覆盖全标志的格式锚点。
+- **无占位符**：每步含可运行代码与命令；`dimensions.yaml` 已嵌入真实 18 维度完整数据（来源 couples_question_bank.xlsx）。
 
 ---
 

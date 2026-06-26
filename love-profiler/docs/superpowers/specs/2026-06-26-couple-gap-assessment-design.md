@@ -37,7 +37,7 @@
 
 ### 1.4 本期范围边界
 
-**做**：题干表 + 维度注册表(58 全量) + calibration(临时默认) + 计算引擎(全 7 步) + 契约层 + 报告 Agent(卡片 JSON) + 质检门 + 最小异步配对 API + 测试。
+**做**：题干表 + 维度注册表(18 维度/58 题) + calibration(临时默认) + 计算引擎(全 7 步) + 契约层 + 报告 Agent(卡片 JSON) + 质检门 + 最小异步配对 API + 测试。
 
 **不做**（各自后续 spec）：前端双人作答页 / 支付墙 / 流式 WS / DRSA 真实校准 / admin 编辑双人题库。
 
@@ -70,7 +70,7 @@ app/
 ├── models/
 │   └── couple_session.py            ← 业务表（SQLAlchemy）
 └── agents/couple_data/              ← repo 配置文件（算法参数）
-    ├── dimensions.yaml              ·  维度注册表（58 维度）
+    ├── dimensions.yaml              ·  维度注册表（18 维度）
     └── calibration.json             ·  校准表（MVP 临时默认阈值）
 supabase/migrations/
 └── {date}_create_couple_questions.sql  ← 题干表（配置表，一文件一表）
@@ -86,16 +86,18 @@ supabase/migrations/
 
 ### 3.1 维度注册表 `agents/couple_data/dimensions.yaml`
 
-引擎与未来前端的"维度真相源"，由双人题库 v1 第二部分的 YAML 直接落地（58 维度全量录入）。`couple_registry.py` 启动时加载并校验。单维度结构：
+引擎与未来前端的"维度真相源"，由 `couples_question_bank.xlsx` 的 dimensions sheet 直接落地（18 维度全量录入，含 `name_cn`/`pairing_role`）。`couple_registry.py` 启动时加载并校验。单维度结构：
 
 ```yaml
 - id: money                  # 维度唯一标识
   cluster: A                 # 所属簇 A~E（F 是 apply_prediction 维度自带的第二轮，非独立簇）
+  name_cn: 金钱观            # 维度中文名（报告/前端用）
   layer: interpretation      # interpretation | topic_only（运行时受 calibration 实际控制）
   apply_prediction: true     # 是否加 predicted 轮（自答 + 猜对方）→ 触发盲区计算
   complementary: false       # true 则禁止负面措辞（如 values_openness）
   level_only: false          # true 则只呈现双方水平、禁止对差距判决（如 emotional_stability）
   skippable: false           # true 则允许跳过（如 religiosity），跳过维度不参与该用户落差/盲区
+  pairing_role: null         # 组合规则角色（attach_anxiety=anxiety / attach_avoid=avoidance）
   anchors: { low: "存下来更安心", high: "花在当下更值得" }  # 方向标签来源
   items:                     # 该维度的题目，归一化后取均值合成单维度分
     - { id: A1-1, type: slider,  reverse: false }
@@ -419,36 +421,44 @@ class CoupleBriefing(BaseModel):
 
 对标 `report_writer.py`，但**输出形态改为卡片 JSON**（技术文档 6.4），不走 `--Section--` 纯文本流式——本期不含前端，一次性生成卡片即可；流式 WS 留给前端 spec。`CoupleReportWriterError` 对标 `ReportWriterError`。
 
-### 7.1 输出格式（卡片 JSON）
+### 7.1 输出格式（卡片 JSON，7 段结构）
+
+真实结构（来源：双人测项目报告提示词.md）。报告是**双方共读的同一份**，盲区用 `who_misjudged` 点名（善意提醒，非指责）：
 
 ```jsonc
 {
-  "opening":   { "body": "..." },
+  "opening":     { "headline": "一句温和总览", "body": "概览正文 + 四个方面话题热度" },
+  "how_to_read": { "body": "两三句：基于各自作答 + 互猜，看落差与盲区，不评判合不合适" },
   "blindspot_cards": [
-    { "dimension_id": "money", "title": "金钱观：一个你们没聊透的盲区",
-      "body": "你以为你们在花钱上挺合拍，其实 TA 比你想象中更愿意为当下花费……",
-      "talk_prompt": "如果这个月多出一笔钱，你的第一反应是存起来还是用掉？为什么？" }
+    { "dimension_id": "money", "title": "...", "body": "中性事实 + 为什么值得聊", "talk_prompt": "开放式问题" }
   ],
-  "friction_section":  { "body": "..." },   // high_friction_pairings，每 flag 配中性化模板
-  "strengths_section": { "body": "..." },   // complementary_strengths
-  "closing":   { "body": "..." }
+  "landscape": [                            // 按 4 超类组织
+    { "supercluster": "life_expectations", "title": "...", "body": "两人各自位置 + 落差大小（话题非判决）" }
+  ],
+  "strengths":   { "body": "互补优势正面呈现" },
+  "next_steps":  { "body": "...", "invitations": ["找个轻松时候，也许可以聊聊……"] },
+  "closing":     { "body": "温柔收尾：差异不是问题，是对话起点" }
 }
 ```
 
+> 报告 Agent 输入 = 契约 briefing（5.2）+ `names: {a, b}`；本期 names 回退 `{"a":"你","b":"对方"}`（真实采集留前端 spec），由 api 层注入，不进引擎契约。
+
 ### 7.2 System prompt（反判决铁律，硬编码）
 
-技术文档 6.2 的完整 prompt 落进 `docs/couple-report-system-prompt.md`（对标现有 `docs/agent-b-system-prompt.md`，含 `<!-- prompt-version: x.y -->` 注解，`couple_report_writer` 启动加载）。核心铁律：禁判决性表达、`complementary` 只写优势/中性、`topic_only` 最多轻提、`level_only` 只描述各自节奏、每个落差先中性事实（`narrative_fact`）再开放式引导问题、用 `gap_level` 语义而非念数字。
+**双人测项目报告提示词.md 第二部分的完整 prompt**（9 条铁律 + 7 段结构 + 失败自检）落进 `docs/couple-report-system-prompt.md`（含 `<!-- prompt-version: 1.0 -->` 注解，`couple_report_writer` 启动加载）。9 条铁律：①禁判决；②complementary 只写优势/中性；③topic_only 最多轻提；④level_only 只描述各自节奏；⑤每个落差先中性事实（narrative_fact）再开放式问题；⑥用 gap_level 语义不念数字；⑦保护隐私不暴露裸答案；⑧说中感来自忠实转述非夸张；⑨high_friction_pairings 中性化不渲染危险信号。
 
-### 7.3 分段生成流程（技术文档 6.3）
+### 7.3 分段生成流程（报告提示词第五部分）
 
-逐段调用、每次只喂相关数据（上下文干净、便于单段质检与重试）：
+逐段调用、每段只喂相关数据；call 2/7 可不走 LLM（固定模板）：
 
 ```
-1) 开场段     ← overview（top_blindspots + supercluster_scores）
-2) 盲区卡片[]  ← 逐个 top_blindspot 维度对象 → 一卡（MVP 主菜）
-3) 摩擦组合段  ← high_friction_pairings（每 flag 专属中性模板）
-4) 互补优势段  ← complementary_strengths
-5) 结尾段     ← overview（温和的"接下来怎么做"）
+call 1 开篇概览     ← overview(supercluster_scores+top_blindspots) + names
+call 2 这份报告怎么读 ← 固定模板（不走 LLM）
+call 3 盲区卡片[]    ← 逐个 top_blindspot 维度对象 + names（MVP 主菜）
+call 4 落差全景     ← dimensions 按 cluster 归 4 类 + supercluster_scores
+call 5 互补优势     ← complementary_strengths
+call 6 接下来怎么做  ← 头部话题 talk_prompt 汇总
+call 7 几点说明     ← 固定模板（不走 LLM）
 ```
 
 ### 7.4 质检门 `services/couple_report_quality_gate.py`
@@ -518,7 +528,7 @@ B: POST /couple/answer ─▶ b_answers_json 落库, b_status=done
 
 ### 10.1 本期做 / 不做
 
-**做**：题干表 + 维度注册表(58 全量) + calibration(临时默认) + 计算引擎(全 7 步) + 契约层 + 报告 Agent(卡片) + 质检门 + 最小异步配对 API + 测试。
+**做**：题干表 + 维度注册表(18 维度/58 题) + calibration(临时默认) + 计算引擎(全 7 步) + 契约层 + 报告 Agent(卡片) + 质检门 + 最小异步配对 API + 测试。
 
 **不做**（各自后续独立 spec）：前端双人作答页（predicted 轮 UI、入口挂快速模式报告页后）/ 支付墙 / 流式 WS / DRSA 真实校准 / admin 编辑双人题库。
 
@@ -548,7 +558,7 @@ B: POST /couple/answer ─▶ b_answers_json 落库, b_status=done
 | 1 | 本期聚焦后端"算→判→译"核心闭环 + 最小配对 | 盲区是别人抄不走的核心，前端/支付相对标准化可后置 | 端到端整体蓝图——太大，不利聚焦核心 |
 | 2 | 配置层混合存储（题干进 DB / 注册表+calibration 进文件） | 题干是内容（前端拉、admin 编辑）；注册表与阈值是算法参数，改它=改判断行为，须 code review + 可单测 + 可复现 | 全进 DB——阈值/权重进库后不易单测与版本复现 |
 | 3 | `couple_sessions` 单表承载双方作答+契约+报告 | "双方都 done 才解锁"只读一行最简单；契约/报告是会话级产物 | 拆 participant 多表——解锁判断要跨行 join，更复杂 |
-| 4 | MVP 注册表全量录入 58 维度、引擎全量支持 | 本期不含前端，无答题完成率压力；后端一次到位、未来 calibration 可全量校准 | 仅 A+B+F 核心——省的是前端题量，后端无收益 |
+| 4 | MVP 注册表全量录入 18 维度（58 题）、引擎全量支持 | 本期不含前端，无答题完成率压力；后端一次到位、未来 calibration 可全量校准 | 仅 A+B+F 核心——省的是前端题量，后端无收益 |
 | 5 | 盲区轨道与校准解耦，作 MVP 报告主菜 | 盲区价值不需 DRSA 证明；判决轨道 MVP 必降级，主菜须押在盲区 | 主菜押判决层——MVP 全 topic_only 时报告为空 |
 | 6 | 报告输出卡片 JSON、一次性生成（不流式） | 本期不含前端，无需流式 WS；卡片结构便于前端后续渲染 | 复用 --Section-- 流式——双人是卡片结构，且本期无前端消费 |
 

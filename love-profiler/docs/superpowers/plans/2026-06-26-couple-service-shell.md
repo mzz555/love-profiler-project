@@ -81,7 +81,7 @@ def test_fetch_couple_questions_caches(monkeypatch):
 
 - [ ] **Step 3a: 写 migration（建表 + 录入 58 题）**
 
-按《双人题库v1.md》第一部分**逐题录入全部 58 题**，字段与下方 3 题样例对齐。`item_type` ∈ {slider,likert7}；slider 题填 anchor_low/high，likert 题留空；`apply_prediction` 取该维度的标志。
+下方是**完整 58 题真实数据**（来源 `couples_question_bank.xlsx` items sheet，脚本生成，reverse/apply_prediction/sort_order 已校验，直接抄）。`item_type` ∈ {slider,likert7}；slider 题填 anchor_low/high，likert 题留 NULL。
 
 ```sql
 -- supabase/migrations/20260626_create_couple_questions.sql
@@ -100,10 +100,64 @@ CREATE TABLE IF NOT EXISTS couple_questions (
 );
 
 INSERT INTO couple_questions VALUES
-('A1-1','money','A','slider',FALSE,'对待钱，我更倾向于——','存下来更安心','花在当下更值得',TRUE,1,'v1'),
+('A1-1','money','A','slider',FALSE,'对待钱，我更倾向于','存下来更安心','花在当下更值得',TRUE,1,'v1'),
+('A1-2','money','A','slider',FALSE,'面对一笔意外之财，我的第一反应是','先存起来或还贷','先犒劳一下自己/我们',TRUE,2,'v1'),
 ('A1-3','money','A','likert7',TRUE,'我觉得为了将来，现在省一点是值得的。',NULL,NULL,TRUE,3,'v1'),
-('E1-1','emotional_stability','E','likert7',TRUE,'我的情绪比较容易因为小事起伏。',NULL,NULL,FALSE,50,'v1')
--- … 其余 55 题同法录入
+('A2-1','intimacy_freq','A','slider',FALSE,'我理想中表达亲密（身体和情感上的靠近）的频率','比大多数情侣更少','比大多数情侣更多',TRUE,4,'v1'),
+('A2-2','intimacy_freq','A','slider',FALSE,'当我状态不好时，我更希望','先给我点空间','多抱抱我、多陪陪我',TRUE,5,'v1'),
+('A2-3','intimacy_freq','A','likert7',FALSE,'身体上的亲密对我来说是关系里很重要的一部分。',NULL,NULL,TRUE,6,'v1'),
+('A3-1','chores','A','slider',FALSE,'家里的活儿该怎么分','最好说清楚、尽量对半','谁有空谁顺手做就行',TRUE,7,'v1'),
+('A3-2','chores','A','likert7',FALSE,'我会因为“家务谁做得多”这种事感到不平衡。',NULL,NULL,TRUE,8,'v1'),
+('A4-1','children','A','slider',FALSE,'关于要不要孩子','我挺想要 / 想早点要','我倾向不要 / 不着急',TRUE,9,'v1'),
+('A4-2','children','A','slider',FALSE,'如果有了孩子，我理想中的带法更偏','多立规矩、严格一些','多给自由、宽松一些',TRUE,10,'v1'),
+('A4-3','children','A','likert7',FALSE,'在人生规划里，“有没有孩子”对我是件大事。',NULL,NULL,TRUE,11,'v1'),
+('A5-1','inlaws','A','slider',FALSE,'重大决定（比如买房、换工作）要不要先问问父母','应该尊重、听听他们意见','我们俩商量定了就行',FALSE,12,'v1'),
+('A5-2','inlaws','A','slider',FALSE,'逢年过节、日常往来，我希望和双方父母','走得近一些、常联系','保持点距离、有自己的小家',FALSE,13,'v1'),
+('A5-3','inlaws','A','likert7',FALSE,'另一半和我父母的关系，会明显影响我的心情。',NULL,NULL,FALSE,14,'v1'),
+('A6-1','time_space','A','slider',FALSE,'在亲密关系里，我需要的独处空间','很少，越黏越好','挺多，我需要自己的时间',FALSE,15,'v1'),
+('A6-2','time_space','A','likert7',FALSE,'就算很相爱，我也需要一些完全属于自己的时间。',NULL,NULL,FALSE,16,'v1'),
+('A7-1','career_life','A','slider',FALSE,'在现阶段，我更愿意把精力放在','拼事业、抓机会','顾家庭、过好日子',FALSE,17,'v1'),
+('A7-2','career_life','A','slider',FALSE,'如果工作和两人时间冲突，我通常','先把工作扛过去','优先留给我们俩',FALSE,18,'v1'),
+('A7-3','career_life','A','likert7',FALSE,'为了事业，我可以接受一段时间牺牲相处时间。',NULL,NULL,FALSE,19,'v1'),
+('B1-1','confront','B','likert7',FALSE,'有分歧时，我更可能当场说出来，而不是先憋着。',NULL,NULL,FALSE,20,'v1'),
+('B1-2','confront','B','likert7',TRUE,'我不太喜欢把问题摊开谈，更希望它自己过去。',NULL,NULL,FALSE,21,'v1'),
+('B1-3','confront','B','likert7',FALSE,'就算会有点尴尬，我也愿意把心里的不满讲清楚。',NULL,NULL,FALSE,22,'v1'),
+('B2-1','withdraw','B','likert7',FALSE,'当对方想认真谈一件事时，我容易想岔开或先躲一躲。',NULL,NULL,FALSE,23,'v1'),
+('B2-2','withdraw','B','likert7',FALSE,'吵起来的时候，我更可能选择沉默或离开现场。',NULL,NULL,FALSE,24,'v1'),
+('B3-1','harsh_startup','B','likert7',FALSE,'一有不满，我比较容易一开口语气就冲。',NULL,NULL,FALSE,25,'v1'),
+('B3-2','harsh_startup','B','likert7',TRUE,'提意见时，我一般能先心平气和地说。',NULL,NULL,FALSE,26,'v1'),
+('B4-1','constructive','B','likert7',FALSE,'关系出问题时，我更愿意主动沟通去解决，而不是冷战。',NULL,NULL,FALSE,27,'v1'),
+('B4-2','constructive','B','likert7',TRUE,'遇到矛盾，我有时会用冷暴力或翻旧账。',NULL,NULL,FALSE,28,'v1'),
+('B4-3','constructive','B','likert7',FALSE,'就算很失望，我也会试着给关系一点耐心和时间。',NULL,NULL,FALSE,29,'v1'),
+('B4-4','constructive','B','likert7',TRUE,'不顺心的时候，我容易动“算了不如分开”的念头。',NULL,NULL,FALSE,30,'v1'),
+('C1-1','values_transcend','C','slider',FALSE,'对我更重要的是','公平、帮助他人、与人为善','个人成就、能力、影响力',TRUE,31,'v1'),
+('C1-2','values_transcend','C','likert7',FALSE,'看到别人需要帮助，我常会愿意搭把手，哪怕对自己没好处。',NULL,NULL,TRUE,32,'v1'),
+('C1-3','values_transcend','C','likert7',TRUE,'“做出一番成绩、被人认可”对我很重要。',NULL,NULL,TRUE,33,'v1'),
+('C2-1','values_openness','C','slider',FALSE,'我更看重','稳定、熟悉、按部就班','新鲜、变化、敢于冒险',TRUE,34,'v1'),
+('C2-2','values_openness','C','likert7',FALSE,'比起一成不变，我更喜欢尝试没做过的事。',NULL,NULL,TRUE,35,'v1'),
+('C3-1','religiosity','C','likert7',FALSE,'信仰或某种精神追求，在我的生活里挺重要。',NULL,NULL,FALSE,36,'v1'),
+('C3-2','religiosity','C','likert7',FALSE,'重要的事情上，我会参考自己的信仰或价值信念来做决定。',NULL,NULL,FALSE,37,'v1'),
+('C4-1','filial_authority','C','likert7',FALSE,'就算不完全认同，我也觉得应该尽量顺从父母的意思。',NULL,NULL,FALSE,38,'v1'),
+('C4-2','filial_authority','C','likert7',FALSE,'在重要选择上，父母的期待是我会认真考虑的因素。',NULL,NULL,FALSE,39,'v1'),
+('D1-1','attach_anxiety','D','likert7',FALSE,'我有时会担心，自己在乎这段关系的程度比对方更深。',NULL,NULL,FALSE,40,'v1'),
+('D1-2','attach_anxiety','D','likert7',FALSE,'对方回消息慢一点，我容易胡思乱想。',NULL,NULL,FALSE,41,'v1'),
+('D1-3','attach_anxiety','D','likert7',FALSE,'我需要对方常常确认“还爱我”，才比较安心。',NULL,NULL,FALSE,42,'v1'),
+('D1-4','attach_anxiety','D','likert7',FALSE,'我会害怕对方哪天突然不爱我了。',NULL,NULL,FALSE,43,'v1'),
+('D1-5','attach_anxiety','D','likert7',FALSE,'对方稍微冷淡，我就会很不安。',NULL,NULL,FALSE,44,'v1'),
+('D1-6','attach_anxiety','D','likert7',FALSE,'我很介意自己对对方来说到底有多重要。',NULL,NULL,FALSE,45,'v1'),
+('D2-1','attach_avoid','D','likert7',FALSE,'我不太习惯向对方袒露最深处的感受。',NULL,NULL,FALSE,46,'v1'),
+('D2-2','attach_avoid','D','likert7',FALSE,'太黏太近会让我有点不自在，我需要保持点距离。',NULL,NULL,FALSE,47,'v1'),
+('D2-3','attach_avoid','D','likert7',FALSE,'遇到难事，我更习惯自己扛，而不是依靠对方。',NULL,NULL,FALSE,48,'v1'),
+('D2-4','attach_avoid','D','likert7',FALSE,'让我完全信任、依赖一个人，是件不容易的事。',NULL,NULL,FALSE,49,'v1'),
+('D2-5','attach_avoid','D','likert7',FALSE,'对方想更亲近时，我有时会下意识往后退。',NULL,NULL,FALSE,50,'v1'),
+('D2-6','attach_avoid','D','likert7',FALSE,'比起两个人融为一体，我更看重各自的独立。',NULL,NULL,FALSE,51,'v1'),
+('E1-1','emotional_stability','E','likert7',TRUE,'我的情绪比较容易因为小事起伏。',NULL,NULL,FALSE,52,'v1'),
+('E1-2','emotional_stability','E','likert7',TRUE,'我比一般人更容易感到焦虑或烦躁。',NULL,NULL,FALSE,53,'v1'),
+('E1-3','emotional_stability','E','likert7',FALSE,'大多数时候，我的心态都挺稳的。',NULL,NULL,FALSE,54,'v1'),
+('E1-4','emotional_stability','E','likert7',TRUE,'压力一大，我就容易慌或乱了阵脚。',NULL,NULL,FALSE,55,'v1'),
+('E1-5','emotional_stability','E','likert7',FALSE,'就算遇到糟心事，我也能比较快地平复下来。',NULL,NULL,FALSE,56,'v1'),
+('E1-6','emotional_stability','E','likert7',FALSE,'我很少长时间陷在低落或烦躁里。',NULL,NULL,FALSE,57,'v1'),
+('E1-7','emotional_stability','E','likert7',FALSE,'情绪上来的时候，我能比较好地管住自己。',NULL,NULL,FALSE,58,'v1')
 ON CONFLICT (question_id) DO NOTHING;
 
 COMMENT ON TABLE couple_questions IS '双人题库题干表（58 题）。一行=一道题；item_type=slider/likert7；apply_prediction 标记需 predicted 轮的题';
@@ -247,9 +301,10 @@ def _briefing(comp=False):
             "blindspot": {"narrative_fact": "A 比 B 预想的更倾向「存钱」"}}]}
 
 def _cards(body):
-    return {"opening": {"body": ""},
+    return {"opening": {"headline": "", "body": ""}, "how_to_read": {"body": ""},
             "blindspot_cards": [{"dimension_id": "money", "title": "t", "body": body, "talk_prompt": ""}],
-            "friction_section": {"body": ""}, "strengths_section": {"body": ""}, "closing": {"body": ""}}
+            "landscape": [], "strengths": {"body": ""},
+            "next_steps": {"body": "", "invitations": []}, "closing": {"body": ""}}
 
 def test_banned_word_rejected():
     with pytest.raises(CoupleQualityGateError):
@@ -286,10 +341,15 @@ class CoupleQualityGateError(Exception):
 
 
 def _all_text(cards: dict) -> str:
-    parts = [cards.get(k, {}).get("body", "") for k in
-             ("opening", "friction_section", "strengths_section", "closing")]
+    op = cards.get("opening", {})
+    parts = [op.get("headline", ""), op.get("body", "")]
+    for k in ("how_to_read", "strengths", "next_steps", "closing"):
+        parts.append(cards.get(k, {}).get("body", ""))
+    parts += cards.get("next_steps", {}).get("invitations", [])
     for c in cards.get("blindspot_cards", []):
         parts += [c.get("title", ""), c.get("body", ""), c.get("talk_prompt", "")]
+    for ls in cards.get("landscape", []):
+        parts += [ls.get("title", ""), ls.get("body", "")]
     return "\n".join(parts)
 
 
@@ -338,10 +398,10 @@ git commit -m "feat(couple): 报告卡片质检门"
 - Consumes: `chat_completion`（llm_client）、`check_cards`（Task B3）
 - Produces:
   - `CoupleReportWriterError(Exception)`
-  - `build_card_user_message(dim: dict) -> str`
-  - `async run(briefing: dict, session_id=None) -> dict` → `{opening, blindspot_cards[], friction_section, strengths_section, closing, quality_warnings}`
+  - `build_card_user_message(dim: dict, names: dict) -> str`
+  - `async run(briefing: dict, session_id=None, names=None) -> dict` → **7 段**：`{opening{headline,body}, how_to_read, blindspot_cards[], landscape[], strengths, next_steps{body,invitations}, closing, quality_warnings}`
 
-> MVP：盲区卡片逐个 LLM 生成（主菜），开场/摩擦/互补/结尾用模板；质检 hard fail 直接抛（不重写），由 runner 回退重试。`agent="couple_report"` 是新日志标签（不复用 agent_a/b）。
+> MVP：盲区卡片逐个 LLM 生成（主菜），其余段模板（how_to_read/closing 固定文案，landscape 按 supercluster 列、MVP 全 None 则空）；`names` 默认 `{"a":"你","b":"对方"}`（本期回退，真实采集留前端 spec），点名 who_misjudged。质检 hard fail 直接抛，由 runner 回退重试。`agent="couple_report"` 新日志标签。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -354,21 +414,23 @@ from app.agents import couple_report_writer as crw
 def _briefing():
     return {"session_id": "s",
         "overview": {"top_blindspots": ["money"], "high_friction_pairings": [],
-                     "complementary_strengths": [], "supercluster_scores": {}},
-        "dimensions": [{"dimension_id": "money", "complementary": False, "gap_level": "large",
-            "direction": {"higher_partner": "B", "label_a": "存钱", "label_b": "花钱"},
-            "blindspot": {"narrative_fact": "A 比 B 预想的更倾向「存钱」", "exists": True}}]}
+                     "complementary_strengths": [], "supercluster_scores": {"life_expectations": None}},
+        "dimensions": [{"dimension_id": "money", "cluster": "A", "complementary": False,
+            "gap_level": "large", "direction": {"higher_partner": "B", "label_a": "存钱", "label_b": "花钱"},
+            "blindspot": {"narrative_fact": "A 比 B 预想的更倾向「存钱」", "exists": True, "who_misjudged": "A"}}]}
 
-def test_run_generates_cards(monkeypatch):
+def test_run_generates_7_sections(monkeypatch):
     async def fake_chat(**kw):
         return json.dumps({"title": "金钱观盲区",
             "body": "A 比 B 预想的更倾向存钱，这值得聊聊", "talk_prompt": "多出一笔钱你会怎么花？"})
     monkeypatch.setattr(crw, "chat_completion", fake_chat)
     report = asyncio.run(crw.run(_briefing(), session_id="s"))
-    assert len(report["blindspot_cards"]) == 1
+    assert report["opening"]["headline"] and report["opening"]["body"]
+    assert report["how_to_read"]["body"]
     assert report["blindspot_cards"][0]["dimension_id"] == "money"
-    assert report["quality_warnings"] == []
-    assert "opening" in report and "closing" in report
+    assert isinstance(report["landscape"], list)
+    assert isinstance(report["next_steps"]["invitations"], list)
+    assert report["closing"]["body"] and report["quality_warnings"] == []
 
 def test_run_no_blindspots_raises(monkeypatch):
     monkeypatch.setattr(crw, "chat_completion", lambda **kw: _aret("{}"))
@@ -385,24 +447,41 @@ async def _aret(v): return v
 
 ```markdown
 <!-- prompt-version: 1.0 -->
-你是关系测评报告的撰写助手。你只能基于传入的结构化数据写作，不得引入任何外部信息或自补心理学结论。
+# 角色
+你是一款情侣测评产品的「报告撰写模块」。一对情侣分别独立作答、并互相预测了对方的答案，系统已算好结构化结果。你的任务是把结构化数据翻译成温暖、可信、帮助两人对话的内容。
 
-【铁律，违反即失败】
-1. 禁止判决性表达：不得出现"匹配度/合不合适/注定/般配/及格"等。落差一律框定为"值得一起聊的话题"。
-2. complementary 维度只能写成优势或中性，禁止任何负面措辞。
-3. topic_only / calibrated_relevant=false 维度最多轻提，不做严肃解读。
-4. level_only 维度只描述各自节奏/状态，不把"差距"说成问题。
-5. 每张盲区卡片：先给中性事实（忠实转述 narrative_fact），再给一个开放式引导问题。
-6. 用 gap_level 的语义（小/中/大）说话，不要念出数字分数。
+# 你的世界只有传入的数据
+- 只能基于传入数据写作，禁止联网/检索/补充心理学知识/编造。
+- 不做任何计算。"差多少、算不算大、相不相关、排第几"引擎已做完，你只翻译。
 
-【输出格式】仅输出一个 JSON 对象：{"title":"…","body":"…","talk_prompt":"…"}，不要输出任何额外文字或代码围栏。
+# 九条铁律（违反任意一条即整篇失败）
+1. 禁止判决：不得出现"匹配度/合不合适/般配/注定/及格/不及格/分高分低代表关系好坏"。落差只能框定为"值得一起聊的话题"。
+2. complementary 维度只能写成优势或中性，禁止负面措辞。
+3. topic_only / calibrated_relevant=false 维度最多轻提，不进核心发现、不严肃解读。
+4. level_only 维度只描述各自情绪节奏，不把"差距"说成问题。
+5. 每个落差先给中性事实（基于 narrative_fact），再给一个开放式引导问题。
+6. 用 gap_level 语义（接近/有些不同/差得比较多）说话，不念原始数字。
+7. 保护隐私：用 narrative_fact / direction 的处理后表述，绝不暴露对方裸答案。
+8. 个性化来自忠实转述，不来自夸张、煽情或制造焦虑。
+9. 高摩擦组合用中性化解读（"一种常见互动模式、值得留意沟通"），不渲染成危险信号。
+
+# 称呼
+- 用传入的昵称 names.a / names.b 称呼，让报告有温度（无昵称时用"你/对方"）。
+- 盲区点名 who_misjudged 那一方，但语气善意（"小林，你可能没太意识到……"而非指责）。
+
+# 语气
+口语、亲切、温暖，像懂你们又靠谱的朋友；可信不说教，具体不啰嗦，避免心理学黑话。
+
+# 输出格式（本次只生成一张盲区卡片）
+仅输出一个 JSON 对象，不要多余文字或代码围栏：
+{"title":"...","body":"中性事实 + 为什么值得聊","talk_prompt":"一个能直接问对方的开放式问题"}
 ```
 
 - [ ] **Step 3b: 写 `couple_report_writer.py`**
 
 ```python
 # app/agents/couple_report_writer.py
-"""Couple report writer — briefing → 卡片 JSON。盲区卡片 LLM 生成，其余段模板。"""
+"""Couple report writer — briefing(+names) → 7 段报告 JSON。盲区卡片 LLM，其余模板。"""
 from __future__ import annotations
 import json, pathlib
 from app.services.llm_client import chat_completion
@@ -410,6 +489,7 @@ from app.services.couple_report_quality_gate import check_cards
 
 _PROMPT_FILE = pathlib.Path(__file__).parents[2] / "docs" / "couple-report-system-prompt.md"
 SYSTEM_PROMPT = _PROMPT_FILE.read_text(encoding="utf-8")
+_DEFAULT_NAMES = {"a": "你", "b": "对方"}
 _PAIRING_TEMPLATES = {
     "demand_withdraw": "你们可能出现「一个想立刻谈、一个想先躲开」的节奏差，值得各自说说舒服的方式。",
     "anxious_avoidant": "你们一个更需要靠近确认、一个更需要空间喘息，这不是对错，是不同的安全感来源。",
@@ -420,13 +500,13 @@ class CoupleReportWriterError(Exception):
     pass
 
 
-def build_card_user_message(dim: dict) -> str:
+def build_card_user_message(dim: dict, names: dict) -> str:
     bs = dim.get("blindspot") or {}
     return "\n".join([
         f"# 盲区维度：{dim['dimension_id']}",
+        f"- 昵称：A={names.get('a')} B={names.get('b')}；本卡点名 who_misjudged={bs.get('who_misjudged', '')}",
         f"- 中性事实（必须忠实转述）：{bs.get('narrative_fact', '')}",
-        f"- 落差档位：{dim.get('gap_level', '')}",
-        f"- 方向：{dim.get('direction', {})}",
+        f"- 落差档位：{dim.get('gap_level', '')}；方向：{dim.get('direction', {})}",
         '请按系统要求输出 JSON：{"title":"...","body":"...","talk_prompt":"..."}',
     ])
 
@@ -440,7 +520,17 @@ def _parse_card(raw: str, dim_id: str) -> dict:
             "body": obj.get("body", ""), "talk_prompt": obj.get("talk_prompt", "")}
 
 
-async def run(briefing: dict, session_id: str | None = None) -> dict:
+def _landscape(briefing: dict) -> list[dict]:
+    out = []
+    for sc, val in briefing["overview"].get("supercluster_scores", {}).items():
+        if val is None:          # MVP 判决层全 None → 该项暂略
+            continue
+        out.append({"supercluster": sc, "title": sc, "body": f"这个方面你们的话题热度约为 {val}。"})
+    return out
+
+
+async def run(briefing: dict, session_id: str | None = None, names: dict | None = None) -> dict:
+    names = names or _DEFAULT_NAMES
     ov = briefing["overview"]
     dims = {d["dimension_id"]: d for d in briefing["dimensions"]}
     cards = []
@@ -448,19 +538,26 @@ async def run(briefing: dict, session_id: str | None = None) -> dict:
         if (dim := dims.get(dim_id)) is None:
             continue
         raw = await chat_completion(system_prompt=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": build_card_user_message(dim)}],
+            messages=[{"role": "user", "content": build_card_user_message(dim, names)}],
             temperature=0.6, agent="couple_report", session_id=session_id)
         cards.append(_parse_card(raw, dim_id))
     if not cards:
         raise CoupleReportWriterError("no blindspot cards generated")
+    invitations = [c["talk_prompt"] for c in cards if c.get("talk_prompt")][:4]
+    closing = "差异本身不是问题，几乎所有情侣都有。这份报告是对话的起点，不替代专业咨询。"
+    if ov.get("high_friction_pairings"):
+        closing = "\n".join(_PAIRING_TEMPLATES.get(f, "") for f in ov["high_friction_pairings"]) + "\n" + closing
     report = {
-        "opening": {"body": "下面是你们这次双人测评里最值得一起聊的几个话题。"},
+        "opening": {"headline": "这是你们俩一起读的一份对话指南",
+                    "body": "下面挑出了你们最值得聊的几个地方，不评判合不合适，只帮你们更懂彼此。"},
+        "how_to_read": {"body": "它基于你们各自的作答和「互相猜对方」，看你们在哪不太一样、"
+                                "以及哪些地方你们以为一样其实不一样。"},
         "blindspot_cards": cards,
-        "friction_section": {"body": "\n".join(_PAIRING_TEMPLATES.get(f, "")
-                                               for f in ov.get("high_friction_pairings", []))},
-        "strengths_section": {"body": "你们在一些方面的差异更像互补，是关系里的弹性来源。"
-                              if ov.get("complementary_strengths") else ""},
-        "closing": {"body": "这些话题没有标准答案，重要的是借它们多了解彼此一点。"},
+        "landscape": _landscape(briefing),
+        "strengths": {"body": "你们在一些方面的差异更像互补，是关系里的弹性来源。"
+                      if ov.get("complementary_strengths") else ""},
+        "next_steps": {"body": "找个轻松的时候，也许可以从下面这些聊起：", "invitations": invitations},
+        "closing": {"body": closing},
     }
     report["quality_warnings"] = check_cards(report, briefing)
     return report
@@ -472,7 +569,7 @@ async def run(briefing: dict, session_id: str | None = None) -> dict:
 
 ```bash
 git add docs/couple-report-system-prompt.md app/agents/couple_report_writer.py tests/agents/test_couple_report_writer.py
-git commit -m "feat(couple): 报告 Agent prompt + 卡片生成"
+git commit -m "feat(couple): 报告 Agent prompt + 7段报告生成"
 ```
 
 ---
