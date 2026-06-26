@@ -46,6 +46,7 @@ from app.database import create_tables
 from app.models import ai_call_log  # noqa: F401 — registers AiCallLog with Base
 from app.models import user_token_quota  # noqa: F401 — registers UserTokenQuota
 from app.models import report_quality_audit  # noqa: F401 — registers ReportQualityAudit
+from app.models import couple_session  # noqa: F401 — registers CoupleSession with Base
 from app.limiter import limiter
 
 
