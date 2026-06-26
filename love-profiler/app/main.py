@@ -40,7 +40,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import admin, auth, history, pay, quiz, result, unlock, ws_result
+from app.api import admin, auth, couple, history, pay, quiz, result, unlock, ws_result
 from app.config import settings
 from app.database import create_tables
 from app.models import ai_call_log  # noqa: F401 — registers AiCallLog with Base
@@ -94,6 +94,7 @@ app.include_router(unlock.router)
 app.include_router(ws_result.router)
 app.include_router(history.router)
 app.include_router(quiz.router)
+app.include_router(couple.router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
