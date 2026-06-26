@@ -40,6 +40,31 @@ async def fetch_questions() -> list[dict]:
     return _questions_cache
 
 
+_couple_questions_cache: list[dict] | None = None
+
+
+def clear_couple_questions_cache() -> None:
+    global _couple_questions_cache
+    _couple_questions_cache = None
+
+
+def _fetch_couple_questions_sync() -> list[dict]:
+    db = SessionLocal()
+    try:
+        result = db.execute(text("SELECT * FROM couple_questions ORDER BY sort_order ASC"))
+        return [dict(row._mapping) for row in result]
+    finally:
+        db.close()
+
+
+async def fetch_couple_questions() -> list[dict]:
+    """Fetch 双人题库题干（首次后进程内缓存）。"""
+    global _couple_questions_cache
+    if _couple_questions_cache is None:
+        _couple_questions_cache = await run_in_threadpool(_fetch_couple_questions_sync)
+    return _couple_questions_cache
+
+
 def _fetch_love_type_sync(type_code: str) -> dict | None:
     db = SessionLocal()
     try:
