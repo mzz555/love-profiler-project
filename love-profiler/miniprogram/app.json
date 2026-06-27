@@ -6,7 +6,11 @@
     "pages/unlock/unlock",
     "pages/loading/loading",
     "pages/report/report",
-    "pages/history/history"
+    "pages/history/history",
+    "pages/couple-invite/couple-invite",
+    "pages/couple-quiz/couple-quiz",
+    "pages/couple-wait/couple-wait",
+    "pages/couple-report/couple-report"
   ],
   "window": {
     "navigationBarTitleText": "恋爱深度侧写",

@@ -400,3 +400,30 @@
     transform: translateY(0);
   }
 }
+
+/* ── Couple entry ───────────────────────────── */
+.card-couple {
+  margin-top: 24rpx;
+}
+.couple-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 20rpx;
+}
+.couple-btn {
+  flex: 1;
+  height: 84rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+}
+.couple-btn-primary {
+  background: #3A8A8A;
+  color: #fff;
+}
+.couple-btn-ghost {
+  border: 2rpx solid #3A8A8A;
+  color: #3A8A8A;
+}

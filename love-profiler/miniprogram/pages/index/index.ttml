@@ -82,6 +82,19 @@
       </view>
     </view>
 
+    <view class="card card-couple">
+      <view class="card-top">
+        <view class="card-left">
+          <text class="card-title">双人模式</text>
+          <text class="card-desc">和 TA 一起测，看看你们最该聊的几件事</text>
+        </view>
+      </view>
+      <view class="couple-actions">
+        <view class="couple-btn couple-btn-primary" bindtap="goCoupleInvite"><text>发起测评</text></view>
+        <view class="couple-btn couple-btn-ghost" bindtap="goCoupleJoin"><text>我有邀请码</text></view>
+      </view>
+    </view>
+
     <!-- Footer -->
     <view class="footer" bindtap="goHistory">
       <view class="footer-line" />

@@ -33,10 +33,10 @@ Page({
   _allTypes: [],
   _rotateTimer: null,
 
-  async onLoad() {
+  async onLoad(options) {
+    this._inviteToken = (options && options.invite_token) || '';
     if (app.globalData.token) {
-      this.setData({ loginReady: true });
-      this._loadPortraits();
+      this._enterAfterLogin();
       return;
     }
     // 1) DEV 环境先试 /auth/dev-login，生产环境直接跳过避免无谓 401
@@ -45,8 +45,7 @@ Page({
         const res = await app.request({ url: '/auth/dev-login' });
         app.setToken(res.token);
         console.log('[login] dev-login OK');
-        this.setData({ loginReady: true });
-        this._loadPortraits();
+        this._enterAfterLogin();
         return;
       } catch (e) {
         console.log('[login] dev-login 不可用，走真实 OAuth', e && e.statusCode);
@@ -72,8 +71,7 @@ Page({
       });
       app.setToken(res.token);
       console.log('[login] OAuth 登录 OK');
-      this.setData({ loginReady: true });
-      this._loadPortraits();
+      this._enterAfterLogin();
     } catch (e) {
       console.error('[login] 真实登录失败', e);
       tt.showToast({ title: '登录失败，请检查网络后重启', icon: 'none', duration: 3000 });
@@ -171,5 +169,42 @@ Page({
 
   goHistory() {
     tt.navigateTo({ url: '/pages/history/history' });
+  },
+
+  _enterAfterLogin() {
+    this.setData({ loginReady: true });
+    if (this._inviteToken) {
+      this._joinByToken(this._inviteToken);
+      return;
+    }
+    this._loadPortraits();
+  },
+
+  goCoupleInvite() {
+    if (!app.globalData.token) {
+      tt.showToast({ title: '登录失败，请重启小程序', icon: 'none' });
+      return;
+    }
+    tt.navigateTo({ url: '/pages/couple-invite/couple-invite' });
+  },
+
+  goCoupleJoin() {
+    if (!app.globalData.token) {
+      tt.showToast({ title: '登录失败，请重启小程序', icon: 'none' });
+      return;
+    }
+    tt.navigateTo({ url: '/pages/couple-invite/couple-invite?mode=join' });
+  },
+
+  async _joinByToken(token) {
+    try {
+      const res = await app.request({ url: '/couple/join', data: { pairing_token: token } });
+      app.globalData.couple = { sessionId: res.session_id, questions: res.questions };
+      tt.redirectTo({ url: '/pages/couple-quiz/couple-quiz?session_id=' + res.session_id });
+    } catch (e) {
+      const msg = (e && e.data && e.data.detail) || '加入失败，请重试';
+      tt.showToast({ title: msg, icon: 'none', duration: 2500 });
+      this._loadPortraits();
+    }
   },
 });
