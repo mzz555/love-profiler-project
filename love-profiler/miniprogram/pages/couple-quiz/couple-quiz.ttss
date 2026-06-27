@@ -1,0 +1,21 @@
+.page { min-height: 100vh; background: #08080F; padding: 48rpx 40rpx; box-sizing: border-box; }
+.loading { color: #9aa; text-align: center; margin-top: 200rpx; }
+.quiz { display: flex; flex-direction: column; min-height: 80vh; }
+.topbar { display: flex; justify-content: space-between; align-items: center; }
+.phase-tag { color: #3A8A8A; font-size: 26rpx; }
+.progress { color: #9aa; font-size: 26rpx; }
+.stem { color: #fff; font-size: 40rpx; line-height: 1.5; margin: 80rpx 0 100rpx; }
+.anchors { display: flex; justify-content: space-between; color: #9aa; font-size: 26rpx; }
+.track { position: relative; height: 8rpx; background: #2a2a3a; border-radius: 8rpx; margin: 48rpx 0; }
+.track-fill { position: absolute; height: 100%; background: #3A8A8A; border-radius: 8rpx; }
+.thumb { position: absolute; top: 50%; width: 56rpx; height: 56rpx; margin-left: -28rpx; margin-top: -28rpx; background: #35d6e6; border-radius: 50%; }
+.likert-row { display: flex; justify-content: space-between; }
+.dot { width: 72rpx; height: 72rpx; border-radius: 50%; border: 2rpx solid #3A8A8A; color: #3A8A8A; display: flex; align-items: center; justify-content: center; font-size: 28rpx; }
+.dot-on { background: #3A8A8A; color: #fff; }
+.likert-ends { display: flex; justify-content: space-between; color: #9aa; font-size: 24rpx; margin-top: 20rpx; }
+.actions { display: flex; gap: 24rpx; margin-top: auto; padding-top: 80rpx; }
+.btn { flex: 1; height: 92rpx; border-radius: 18rpx; display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
+.btn-primary { background: #3A8A8A; color: #fff; }
+.btn-ghost { border: 2rpx solid #3A8A8A; color: #3A8A8A; }
+.btn-disabled { opacity: 0.5; }
+.dev-fill { text-align: center; color: #ffd24a; font-size: 24rpx; margin-top: 32rpx; }
