@@ -4,7 +4,7 @@
 本脚本造一个不同于 A 的 B 用户，join 指定/最新「等待中」的 session 并随机作答，
 从而触发引擎计算 + 报告生成，让 A 的等待页刷出报告。仅供本地联调验收。
 
-用法（在 love-profiler/ 目录下，后端需已启动）：
+用法（后端需已启动，可从任意目录运行）：
     python scripts/dev_play_partner_b.py                  # 自动找最新等待中的 session
     python scripts/dev_play_partner_b.py --session <id>   # 指定 session_id（前缀匹配）
     python scripts/dev_play_partner_b.py --token <pairing_token>
@@ -12,13 +12,16 @@
 """
 import argparse
 import io
+import os
 import random
 import sys
 import time
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parents[1]  # love-profiler/
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(_ROOT))
+os.chdir(_ROOT)  # 切到 love-profiler/，让 settings 按 cwd 找到 .env（不挑剔从哪个目录运行）
 
 import httpx
 
