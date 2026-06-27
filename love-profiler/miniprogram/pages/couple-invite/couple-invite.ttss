@@ -1,13 +1,15 @@
-.page { min-height: 100vh; background: #08080F; padding: 48rpx 40rpx; box-sizing: border-box; }
-.loading { color: #9aa; text-align: center; margin-top: 200rpx; }
+.page { min-height: 100vh; background: #F5F0EB; padding: 48rpx 40rpx; box-sizing: border-box; }
+.loading { color: #9A9AAA; text-align: center; margin-top: 200rpx; }
 .invite { display: flex; flex-direction: column; gap: 28rpx; margin-top: 80rpx; }
-.title { color: #fff; font-size: 44rpx; font-weight: 600; }
-.desc { color: #9aa; font-size: 28rpx; line-height: 1.6; }
+.title { color: #1C1C2E; font-size: 44rpx; font-weight: 600; }
+.desc { color: #9A9AAA; font-size: 28rpx; line-height: 1.6; }
 .btn { height: 92rpx; border-radius: 18rpx; display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
-.btn-primary { background: #3A8A8A; color: #fff; }
-.btn-ghost { border: 2rpx solid #3A8A8A; color: #3A8A8A; background: transparent; }
-.token-box { display: flex; align-items: center; gap: 16rpx; background: #14141f; border-radius: 16rpx; padding: 24rpx; }
-.token-label { color: #9aa; font-size: 26rpx; }
-.token-val { color: #ffd24a; font-size: 30rpx; flex: 1; word-break: break-all; }
-.btn-copy { color: #3A8A8A; font-size: 28rpx; padding: 8rpx 16rpx; }
-.join-input { background: #14141f; color: #fff; border-radius: 16rpx; padding: 28rpx; font-size: 30rpx; }
+.btn-primary { background: #4FAFAF; color: #FFFFFF; box-shadow: 0 6rpx 20rpx rgba(79,175,175,0.30); }
+.btn-ghost { border: 2rpx solid #BFD8D8; color: #3A8A8A; background: #FFFFFF; }
+button.btn { border: none; line-height: normal; padding: 0; }
+button.btn::after { border: none; }
+.token-box { display: flex; align-items: center; gap: 16rpx; background: #FFFFFF; border-radius: 16rpx; padding: 28rpx; box-shadow: 0 4rpx 24rpx rgba(79,175,175,0.10); }
+.token-label { color: #9A9AAA; font-size: 26rpx; }
+.token-val { color: #3A8A8A; font-size: 30rpx; font-weight: 600; flex: 1; word-break: break-all; }
+.btn-copy { color: #4FAFAF; font-size: 28rpx; padding: 8rpx 16rpx; }
+.join-input { background: #FFFFFF; color: #2A2A3A; border-radius: 16rpx; padding: 28rpx; font-size: 30rpx; box-shadow: 0 4rpx 24rpx rgba(79,175,175,0.10); }
