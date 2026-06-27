@@ -1,0 +1,7 @@
+<view class="page">
+  <view class="wait">
+    <view class="spinner" />
+    <text class="status">{{statusText}}</text>
+    <view class="btn-exit" tt:if="{{canExit}}" bindtap="exitWait"><text>稍后再来看</text></view>
+  </view>
+</view>
