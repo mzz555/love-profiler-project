@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>双人落差测评 · 底层逻辑落差仪</title>
+<style>
+/* ============ 设计令牌：落差仪 The Gap Instrument ============ */
+:root{
+  --ink:#0b0f14; --panel:#121b22; --panel2:#0f171d; --inset:#18232b;
+  --line:#26343d; --line2:#34474f;
+  --a:#35d6e6; --a-dim:#1c5b62;      /* Person A · 电青 */
+  --b:#ff6f91; --b-dim:#7a3a48;      /* Person B · 暖玫红 */
+  --blind:#ffd24a; --blind-soft:#2c2913;  /* 盲区轨道 · 点亮金 */
+  --judge:#5d7681;                   /* 判决轨道 · 降级灰蓝 */
+  --text:#e9f1f4; --muted:#93a7b1; --faint:#5f727c;
+  --ok:#63d68f; --warn:#ffb454; --bad:#ff6f6f;
+  --mono:'Cascadia Code','Consolas',ui-monospace,monospace;
+  --sans:'Inter','Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+  --maxw:1080px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:
+    radial-gradient(1200px 600px at 80% -10%, #13202738, transparent),
+    radial-gradient(900px 500px at -5% 20%, #1a141d33, transparent),
+    var(--ink);
+  color:var(--text); font-family:var(--sans);
+  font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+section{padding:72px 0; border-top:1px solid var(--line)}
+section:first-of-type{border-top:0}
+h1,h2,h3{font-weight:680; letter-spacing:-.02em; line-height:1.12; margin:0}
+p{margin:.6em 0; color:var(--muted)}
+a{color:var(--a)}
+/* 仪表标签：等宽大写，作为仪器刻度语 */
+.eyebrow{
+  font-family:var(--mono); font-size:12px; letter-spacing:.32em;
+  text-transform:uppercase; color:var(--faint); margin:0 0 14px;
+  display:flex; align-items:center; gap:10px;
+}
+.eyebrow::before{content:""; width:26px; height:1px; background:var(--line2)}
+.mono{font-family:var(--mono)}
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.sec-title{font-size:clamp(26px,4vw,40px); margin-bottom:8px}
+.sec-lead{max-width:62ch; font-size:17px}
+.grid{display:grid; gap:18px}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel2));
+  border:1px solid var(--line); border-radius:14px; padding:20px}
+.tag{font-family:var(--mono); font-size:11px; letter-spacing:.06em;
+  padding:3px 9px; border-radius:999px; border:1px solid var(--line2);
+  color:var(--muted); white-space:nowrap}
+.tag.a{color:var(--a); border-color:var(--a-dim)}
+.tag.b{color:var(--b); border-color:var(--b-dim)}
+.tag.blind{color:var(--blind); border-color:#5a4f1d}
+.tag.judge{color:var(--judge); border-color:var(--line2)}
+.divider{height:1px;background:var(--line);margin:14px 0}
+:focus-visible{outline:2px solid var(--a); outline-offset:3px; border-radius:4px}
+@media (max-width:720px){ section{padding:54px 0} .wrap{padding:0 18px} }
+@media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important; scroll-behavior:auto} }
+/* ===== Hero ===== */
+.hero{padding:96px 0 64px}
+.hero h1{font-size:clamp(34px,6.4vw,68px); letter-spacing:-.03em}
+.hero h1 .gp{background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .sec-lead{margin-top:18px;font-size:18px}
+.diffs{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:34px}
+.diff{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.diff b{display:block;font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--blind);margin-bottom:6px}
+.diff span{font-size:14px;color:var(--muted)}
+.mvp{margin-top:26px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+  background:linear-gradient(90deg,#1c1908,transparent);border:1px solid #5a4f1d;border-left:3px solid var(--blind);border-radius:10px;padding:14px 18px}
+.mvp b{color:var(--blind);font-family:var(--mono)}
+/* ===== 状态机 ===== */
+.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin-top:22px}
+.node{flex:1;min-width:120px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;position:relative}
+.node .st{font-family:var(--mono);font-size:11px;color:var(--a);letter-spacing:.04em}
+.node h4{margin:6px 0 4px;font-size:15px}
+.node p{margin:0;font-size:13px}
+.arrow{align-self:center;color:var(--faint);font-family:var(--mono);padding:0 6px}
+.statebar{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.pill{font-family:var(--mono);font-size:12px;padding:5px 11px;border-radius:999px;border:1px solid var(--line2);color:var(--muted)}
+.pill.on{color:var(--ink);background:var(--a);border-color:var(--a);font-weight:600}
+/* ===== 签名：落差轨 ===== */
+.dim{margin:0 0 16px}
+.dim__head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.dim__head h3{font-size:18px}
+.track{position:relative;height:58px;margin:6px 0 4px}
+.track__rail{position:absolute;left:0;right:0;top:50%;height:4px;transform:translateY(-50%);background:var(--inset);border-radius:2px;border:1px solid var(--line)}
+.track__band{position:absolute;top:50%;height:8px;transform:translateY(-50%);background:linear-gradient(90deg,var(--a),var(--b));border-radius:4px;box-shadow:0 0 16px #7fb6cc66;transition:left .12s,width .12s}
+.track__mk{position:absolute;top:50%;width:18px;height:18px;border-radius:50%;transform:translate(-50%,-50%);transition:left .12s;z-index:3}
+.track__mk.a{background:var(--a);box-shadow:0 0 12px var(--a)}
+.track__mk.b{background:var(--b);box-shadow:0 0 12px var(--b)}
+.track__mk small{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:11px;color:var(--muted)}
+.track__ghost{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;transform:translate(-50%,-50%);background:transparent;border:2px dashed var(--faint);transition:left .12s;z-index:2}
+.track__err{position:absolute;top:50%;height:2px;transform:translateY(-50%);background:repeating-linear-gradient(90deg,var(--blind),var(--blind) 4px,transparent 4px,transparent 8px);opacity:.8;transition:left .12s,width .12s;z-index:1}
+.track__ends{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:2px}
+/* 滑块 */
+.rngrow{display:grid;grid-template-columns:88px 1fr 46px;gap:10px;align-items:center;margin:7px 0;font-size:13px}
+.rngrow label{font-family:var(--mono);font-size:12px}
+.rng{-webkit-appearance:none;appearance:none;height:4px;border-radius:3px;background:var(--inset);outline-offset:4px}
+.rng::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;cursor:pointer;border:2px solid var(--ink)}
+.rng.a::-webkit-slider-thumb{background:var(--a)} .rng.b::-webkit-slider-thumb{background:var(--b)}
+.rng.ga::-webkit-slider-thumb{background:transparent;border:2px dashed var(--a)} .rng.gb::-webkit-slider-thumb{background:transparent;border:2px dashed var(--b)}
+.rng::-moz-range-thumb{width:16px;height:16px;border-radius:50%;cursor:pointer;border:2px solid var(--ink)}
+.rng.a::-moz-range-thumb{background:var(--a)} .rng.b::-moz-range-thumb{background:var(--b)}
+.rngval{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--text)}
+/* 维度读数 */
+.readout{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:12px}
+.kv{background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:4px 9px}
+.kv b{color:var(--text);font-weight:600}
+.kv.lit{border-color:#5a4f1d;background:var(--blind-soft);color:var(--blind)}
+.kv.dim{opacity:.55}
+/* 流水线 */
+.pipe{display:grid;gap:9px;counter-reset:s}
+.step{display:grid;grid-template-columns:30px 150px 1fr;gap:12px;align-items:center;background:var(--inset);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.step__n{font-family:var(--mono);color:var(--faint)}
+.step__t{font-family:var(--mono);font-size:13px;color:var(--text)}
+.step__d{font-size:13px;color:var(--muted)}
+/* 双轨道 */
+.lanes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+.lane{border-radius:12px;padding:16px;position:relative;overflow:hidden}
+.lane--blind{border:1px solid #5a4f1d;background:linear-gradient(180deg,#1d1908,#14110a);box-shadow:0 0 0 1px #ffd24a1f,0 10px 40px #ffd24a12}
+.lane--judge{border:1px solid var(--line);background:var(--panel2);opacity:.66;filter:saturate(.45)}
+.lane h4{font-family:var(--mono);font-size:13px;letter-spacing:.04em;margin:0 0 10px;display:flex;gap:8px;align-items:center}
+.lane--blind h4{color:var(--blind)} .lane--judge h4{color:var(--judge)}
+.stamp{position:absolute;top:14px;right:-30px;transform:rotate(12deg);font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--judge);border:1px solid var(--judge);padding:3px 30px;opacity:.8}
+/* 契约 JSON */
+.json{font-family:var(--mono);font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:18px;max-height:420px;overflow:auto}
+.json .k{color:var(--a)} .json .s{color:#9ad29a} .json .n{color:var(--blind)} .json .b{color:var(--b)} .json .nl{color:var(--faint)}
+.checks{display:grid;gap:8px;margin-top:14px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:13px}
+.check b{color:var(--ok);font-family:var(--mono)}
+/* 报告 7 段 */
+.rep{display:grid;gap:10px}
+.rep__sec{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.rep__sec .lbl{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em}
+.rep__sec.llm{border-left:3px solid var(--blind)} .rep__sec.tpl{border-left:3px solid var(--judge)}
+.laws{columns:2;column-gap:18px;font-size:13px;margin-top:10px}
+.laws div{break-inside:avoid;margin-bottom:7px;color:var(--muted)}
+.laws b{color:var(--text);font-family:var(--mono);margin-right:6px}
+footer{padding:40px 0 70px;color:var(--faint);font-size:13px}
+footer code{font-family:var(--mono);color:var(--muted)}
+@media (max-width:760px){.diffs{grid-template-columns:repeat(2,1fr)}.lanes{grid-template-columns:1fr}.laws{columns:1}.step{grid-template-columns:26px 1fr;grid-auto-rows:auto}.step__d{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<header class="hero wrap">
+  <p class="eyebrow">love-profiler · 双人落差测评引擎</p>
+  <h1>两个人，一把<span class="gp">落差仪</span><br>量出你们以为一致、其实差很远的地方</h1>
+  <p class="sec-lead">一对情侣分别独立作答、并互相预测对方的答案。引擎用纯代码算出两人在少数几个维度上的<b style="color:var(--text)">落差</b>，并特别抓出<b style="color:var(--blind)">盲区</b>——你以为你懂，其实没猜中。它不评判合不合适，只给你们一份能一起聊的对话指南。</p>
+  <div class="diffs">
+    <div class="diff"><b>异步配对</b><span>A 答完→邀请链接→B 答完→才解锁，不是即时出结果。</span></div>
+    <div class="diff"><b>predicted 轮</b><span>每个核心维度多答一遍"我猜对方"，这是盲区的数据来源。</span></div>
+    <div class="diff"><b>全新题库</b><span>slider / likert7 + reverse / anchors / 互补 / 只看水平。</span></div>
+    <div class="diff"><b>calibration</b><span>没跑 DRSA 校准前，绝不对差距下判决（铁律）。</span></div>
+  </div>
+  <div class="mvp"><b>MVP 现实</b><span>校准表全未通过 → 判决轨道整条降级（salience 全 −1、超类全 None）。<b style="color:var(--blind)">盲区轨道是报告主菜</b>，独立于校准，照常输出。这就是这把仪器现在真实的读数方式。</span></div>
+</header>
+
+<section class="wrap" id="states">
+  <p class="eyebrow">① 异步配对 · 状态机</p>
+  <h2 class="sec-title">两端各自作答，"使双方都完成的那一次"点火</h2>
+  <p class="sec-lead">身份走 JWT，配对靠 <span class="mono">pairing_token</span>。触发不绑定"B 的提交"，而绑定"使双方都 done 的那次提交"——A/B 顺序任意。条件更新 <span class="mono">waiting_partner→computing</span> 保证并发双触发只算一次。</p>
+  <div class="flow">
+    <div class="node"><div class="st">POST /couple/create</div><h4>发起 · A</h4><p>建会话，生成 pairing_token；a/b_status=pending。</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="st">POST /couple/join</div><h4>加入 · B</h4><p>校验 token、防自配对、防占用；写 partner。</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="st">POST /couple/answer ×2</div><h4>各自作答</h4><p>按 user_id 写 A 列 / B 列；都不是→403。</p></div>
+    <div class="arrow">→</div>
+    <div class="node" style="border-color:#5a4f1d"><div class="st" style="color:var(--blind)">条件更新 · 只一次</div><h4>点火计算</h4><p>同步算引擎→briefing；后台调度报告。</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="st">GET /couple/result</div><h4>轮询取结果</h4><p>未齐 409 · 生成中 202 · 完成 200 卡片。</p></div>
+  </div>
+  <p class="eyebrow" style="margin-top:26px">status 流转</p>
+  <div class="statebar">
+    <span class="pill">waiting_partner</span><span class="arrow">→</span>
+    <span class="pill">computing</span><span class="arrow">→</span>
+    <span class="pill">generating</span><span class="arrow">→</span>
+    <span class="pill on">complete</span>
+    <span class="pill" style="margin-left:10px;border-style:dashed">analyzed = 报告失败回退·下次轮询重试</span>
+  </div>
+  <div class="mvp" style="background:var(--panel2);border-color:var(--line);border-left-color:var(--b)">
+    <b style="color:var(--b)">隐私红线</b><span>任何端点都不下发对方的裸答案 <span class="mono">a/b_answers_json</span>；<span class="mono">result</span> 只返回经报告 Agent 处理过的卡片。作答分列存，隐私隔离。</span></div>
+</section>
+<section class="wrap" id="engine">
+  <p class="eyebrow">② 计算引擎 · 交互 playground</p>
+  <h2 class="sec-title">拖动滑块，看七步纯算流水线实时跑通</h2>
+  <p class="sec-lead">引擎是<b style="color:var(--text)">确定性纯代码</b>：无 LLM、无 DB。下面每个维度有两位作答者的滑块（青=A，玫红=B）；标 <span class="mono">apply_prediction</span> 的维度还有"互猜"滑块（虚线幽灵标记）。所有读数都由 JS 忠实镜像 <span class="mono">app/agents/couple_scoring/*.py</span> 的公式实时算出。</p>
+
+  <div class="card" style="margin-top:8px">
+    <p class="eyebrow" style="margin:0 0 14px">七步流水线 · 数据自上而下流过</p>
+    <div class="pipe">
+      <div class="step"><span class="step__n num">01</span><span class="step__t">normalize</span><span class="step__d">slider 直通 · likert7→(x−1)/6×100 · reverse→100−x</span></div>
+      <div class="step"><span class="step__n num">02</span><span class="step__t">aggregate</span><span class="step__d">同维度多题归一化后取均值 ⇒ s_A · s_B · p<sub>A→B</sub> · p<sub>B→A</sub></span></div>
+      <div class="step"><span class="step__n num">03</span><span class="step__t">triplet</span><span class="step__d">gap=|s_A−s_B| · 方向(锚点语义) · levels(双方水平，永不只给裸差值)</span></div>
+      <div class="step"><span class="step__n num">04</span><span class="step__t">blindspot ★</span><span class="step__d">仅 apply_prediction：互猜误差→who / severity / assumed_close / narrative_fact</span></div>
+      <div class="step"><span class="step__n num">05</span><span class="step__t">gap_level</span><span class="step__d">none&lt;8 · small&lt;18 · moderate&lt;40 · large</span></div>
+      <div class="step"><span class="step__n num">06</span><span class="step__t">salience ▼</span><span class="step__d">校准闸门：未校准→−1（判决降级）；relevant 才按 effect_size 排序赋秩</span></div>
+      <div class="step"><span class="step__n num">07</span><span class="step__t">supercluster + pairings</span><span class="step__d">4 超类(MVP 全 None) · 组合 flag(demand_withdraw / anxious_avoidant)</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <p class="eyebrow" style="margin:0 0 12px">step 01 · 归一化小件（先看单题怎么变成 0–100）</p>
+    <div class="rngrow"><label>原始值</label><input id="nz-raw" class="rng a" type="range" min="1" max="100" value="18"><span class="rngval"><span id="nz-raw-v">18</span></span></div>
+    <div class="readout" style="margin-top:4px">
+      <span class="kv">题型 <select id="nz-type" style="background:var(--inset);color:var(--text);border:1px solid var(--line);border-radius:6px;font-family:var(--mono)"><option value="slider">slider(0–100)</option><option value="likert7">likert7(1–7)</option></select></span>
+      <span class="kv">reverse <input id="nz-rev" type="checkbox" style="vertical-align:middle"></span>
+      <span class="kv lit">归一化 = <b id="nz-out">18.00</b></span>
+    </div>
+  </div>
+
+  <div class="readout" style="margin:22px 0 6px">
+    <span class="kv"><span class="track__mk a" style="position:static;display:inline-block;width:12px;height:12px;vertical-align:middle"></span> A 实测</span>
+    <span class="kv"><span class="track__mk b" style="position:static;display:inline-block;width:12px;height:12px;vertical-align:middle"></span> B 实测</span>
+    <span class="kv">○ 幽灵标记 = 互猜（predicted）</span>
+    <span class="kv">▰ 渐变带 = gap 落差</span>
+    <span class="kv lit">★ 盲区轨道</span>
+    <span class="kv dim">▼ 判决轨道（降级）</span>
+  </div>
+  <div id="play" class="grid"></div>
+</section>
+<section class="wrap" id="dualtrack">
+  <p class="eyebrow">③ 双轨道解耦 · 决定 MVP 成败</p>
+  <h2 class="sec-title">盲区轨道点亮，判决轨道降级</h2>
+  <p class="sec-lead">MVP 阶段 calibration 全 false → 判决轨道整条降级（salience 全 −1、超类全 None、所有维度强制 topic_only）。若报告押在判决层就是空的。破解：盲区价值不需 DRSA 证明——"你以为一致、其实不一致"本身就成立。于是<b style="color:var(--blind)">盲区轨道与判决轨道彻底解耦</b>，照常输出，成为主菜。</p>
+  <div class="lanes">
+    <div class="lane lane--blind">
+      <h4>★ 盲区轨道 · 独立于校准</h4>
+      <p style="font-size:13px;margin:0 0 10px;color:var(--muted)">top_blindspots = 按 accuracy_error 降序取前 3。随滑块实时刷新：</p>
+      <div id="ov-blind" class="readout"></div>
+    </div>
+    <div class="lane lane--judge">
+      <div class="stamp">未校准 · 降级</div>
+      <h4>▼ 判决轨道 · 受校准闸门</h4>
+      <p style="font-size:13px;margin:0 0 10px;color:var(--muted)">salience 全 −1、超类全 None。未来 DRSA 跑完自动激活，无需改引擎：</p>
+      <div id="ov-judge" class="readout"></div>
+    </div>
+  </div>
+  <div class="readout" style="margin-top:14px">
+    <span class="kv">high_friction_pairings <b id="ov-pair">—</b></span>
+    <span class="kv">complementary_strengths <b id="ov-comp">—</b></span>
+    <span class="kv dim">supercluster_scores <b>全 None</b></span>
+  </div>
+</section>
+
+<section class="wrap" id="contract">
+  <p class="eyebrow">④ 契约层 · 引擎↔报告 唯一接口</p>
+  <h2 class="sec-title">引擎产出即被 pydantic 校验，把铁律编码成不可绕过的约束</h2>
+  <p class="sec-lead">下面是 playground 当前状态序列化出的 <span class="mono">CoupleBriefing</span>（实时）。校验失败显式拒绝，避免静默退化喂给报告 Agent。</p>
+  <div class="json" id="briefing-json"></div>
+  <p class="eyebrow" style="margin-top:18px">model_validator · 4 道产出前自检</p>
+  <div class="checks">
+    <div class="check"><b>✓ 01</b><div>盲区事实必填：<span class="mono">blindspot.exists=true</span> 的维度，<span class="mono">narrative_fact</span> 非空。</div></div>
+    <div class="check"><b>✓ 02</b><div>判决须有校准：<span class="mono">layer=interpretation</span> 必须 <span class="mono">calibrated_relevant</span>，否则降级 topic_only。</div></div>
+    <div class="check"><b>✓ 03</b><div>互补型禁负面：<span class="mono">complementary</span> 维度方向标签不得命中负面词典。</div></div>
+    <div class="check"><b>✓ 04</b><div>salience 连续唯一：relevant 维度的 <span class="mono">salience_rank</span> 从 1 连续且不重复。</div></div>
+  </div>
+</section>
+<section class="wrap" id="report">
+  <p class="eyebrow">⑤ 报告 Agent · 卡片 JSON（7 段）</p>
+  <h2 class="sec-title">briefing → 翻译成一份双方共读的对话指南</h2>
+  <p class="sec-lead">报告 Agent <b style="color:var(--text)">只翻译、不计算</b>。盲区卡片逐个 LLM 生成（主菜），其余段模板组装（省钱、零波动）。盲区用 <span class="mono">who_misjudged</span> 善意点名，不是指责。</p>
+  <div class="rep">
+    <div class="rep__sec tpl"><span class="lbl">opening · 模板</span><div>一句温和总览 + 概览正文</div></div>
+    <div class="rep__sec tpl"><span class="lbl">how_to_read · 模板</span><div>基于各自作答 + 互猜，看落差与盲区，不评判合不合适</div></div>
+    <div class="rep__sec llm"><span class="lbl">blindspot_cards[] · LLM ★ 主菜</span><div>逐个 top_blindspot 维度：中性事实 + 为什么值得聊 + 开放式 talk_prompt。<br><span class="mono" style="font-size:12px;color:var(--blind)" id="rep-cards">当前：—</span></div></div>
+    <div class="rep__sec tpl"><span class="lbl">landscape · 模板（按超类）</span><div>MVP 超类全 None → 本段暂略</div></div>
+    <div class="rep__sec tpl"><span class="lbl">strengths · 模板</span><div>互补优势正面呈现（complementary_strengths 非空时）</div></div>
+    <div class="rep__sec tpl"><span class="lbl">next_steps · 模板</span><div>invitations = 各盲区卡片 talk_prompt 汇总</div></div>
+    <div class="rep__sec tpl"><span class="lbl">closing · 模板</span><div>差异不是问题，是对话起点；high_friction 时中性化提示</div></div>
+  </div>
+
+  <p class="eyebrow" style="margin-top:26px">九条反判决铁律（system prompt 硬编码）</p>
+  <div class="laws">
+    <div><b>1</b>禁判决：不出现匹配度/合不合适/般配/注定/及格，落差只框定为"值得聊的话题"</div>
+    <div><b>2</b>complementary 维度只写优势或中性，禁负面措辞</div>
+    <div><b>3</b>topic_only / 未校准维度最多轻提，不严肃解读</div>
+    <div><b>4</b>level_only 维度只描述各自节奏，不把差距说成问题</div>
+    <div><b>5</b>每个落差先给中性事实（narrative_fact），再给开放式问题</div>
+    <div><b>6</b>用 gap_level 语义（接近/有些不同/差得比较多），不念原始数字</div>
+    <div><b>7</b>保护隐私，绝不暴露对方裸答案</div>
+    <div><b>8</b>说中感来自忠实转述，不来自夸张煽情</div>
+    <div><b>9</b>高摩擦组合中性化解读，不渲染成危险信号</div>
+  </div>
+
+  <p class="eyebrow" style="margin-top:24px">质检门 · 硬失败即重写 / 软警告仅日志</p>
+  <div class="readout">
+    <span class="kv" style="border-color:var(--bad);color:var(--bad)">硬 · BANNED 反判决词表</span>
+    <span class="kv" style="border-color:var(--bad);color:var(--bad)">硬 · complementary 维度出现负面</span>
+    <span class="kv">软 · 盲区卡片是否忠实引用 narrative_fact</span>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div class="divider"></div>
+  本页 JS 忠实镜像后端公式（<code>normalize / triplet / blindspot / salience / pairings / supercluster</code>），阈值同 <code>THRESH_BLINDSPOT{15,35}</code>、<code>gap_thresholds{18,40}</code>、<code>HIGH=60</code>、<code>calibrated_relevant=false</code>。<br>
+  真相源：<code>love-profiler/app/agents/couple_scoring/*.py</code> · <code>app/schemas/couple_briefing.py</code> · <code>docs/couple-report-system-prompt.md</code>。本页仅供理解，非生产代码。
+</footer>
+<script>
+/* ===== 维度配置（镜像 dimensions.yaml 代表子集）===== */
+const DIMS = [
+  {id:'money', cn:'金钱观', cluster:'A', pred:true, anchors:{low:'存下来更安心', high:'花在当下更值得'}, init:{a:19,b:78,ab:24,ba:70}},
+  {id:'values_openness', cn:'保守↔开放', cluster:'C', pred:true, complementary:true, anchors:{low:'稳定/传统', high:'新鲜/冒险'}, init:{a:30,b:74,ab:34,ba:68}},
+  {id:'confront', cn:'对抗↔回避', cluster:'B', init:{a:72,b:18}},
+  {id:'withdraw', cn:'退缩倾向', cluster:'B', init:{a:14,b:80}},
+  {id:'attach_anxiety', cn:'依恋-焦虑', cluster:'D', role:'anxiety', init:{a:70,b:24}},
+  {id:'attach_avoid', cn:'依恋-回避', cluster:'D', role:'avoidance', init:{a:20,b:76}},
+];
+/* calibration：MVP 全未校准（couple_registry _defaults 兜底） */
+const CALIB = {calibrated_relevant:false, gap_thresholds:{small:18, moderate:40}, effect_size:0.0};
+
+/* ===== 引擎公式（镜像 couple_scoring/*.py）===== */
+const r2 = x => Math.round(x*100)/100;
+function normalizeItem(raw, type, reverse){
+  let x = type==='slider' ? +raw : (+raw-1)/6*100;
+  return r2(reverse ? 100-x : x);
+}
+function anchorLabel(score, anchors){
+  if(!anchors) return '';
+  const low = anchors.low||'', high = anchors.high||'';
+  if(!low && !high) return '';
+  if(score < 40) return low;
+  if(score > 60) return high;
+  return '介于两者之间';
+}
+function severityBucket(err){
+  if(err < 8) return 'none';
+  if(err < 15) return 'low';
+  if(err < 35) return 'moderate';
+  return 'high';
+}
+function gapLevel(gap, th){
+  if(gap < 8) return 'none';
+  if(gap < th.small) return 'small';
+  if(gap < th.moderate) return 'moderate';
+  return 'large';
+}
+function buildFact(who, anchors, sA, sB){
+  const other = who==='A' ? 'B' : 'A';
+  const label = anchorLabel(other==='B' ? sB : sA, anchors);
+  if(!label || label==='介于两者之间') return `${other} 的真实态度与 ${who} 的预想存在明显落差`;
+  return `${other} 比 ${who} 预想的更倾向「${label}」`;
+}
+function triplet(sA, sB, anchors){
+  return {gap:r2(Math.abs(sA-sB)),
+    dir:{higher:sA>sB?'A':'B', la:anchorLabel(sA,anchors), lb:anchorLabel(sB,anchors)},
+    levels:{a:sA, b:sB}};
+}
+function blindspot(sA, sB, pAB, pBA, anchors){
+  const gap = Math.abs(sA-sB);
+  const accA = Math.abs(pAB-sB), accB = Math.abs(pBA-sA);
+  const who = accA>=accB ? 'A' : 'B';
+  const err = Math.max(accA, accB);
+  const assumed = who==='A' ? Math.abs(sA-pAB) : Math.abs(sB-pBA);
+  const sev = severityBucket(err);
+  return {exists:sev!=='none', severity:sev, who_misjudged:who,
+    assumed_close:assumed<gap, accuracy_error:r2(err),
+    narrative_fact: sev!=='none' ? buildFact(who, anchors, sA, sB) : ''};
+}
+function pairings(scores){
+  const HIGH=60, A=scores.A||{}, B=scores.B||{};
+  const cross=(x,y)=>(A[x]>HIGH&&B[y]>HIGH)||(B[x]>HIGH&&A[y]>HIGH);
+  const out=[];
+  if(cross('confront','withdraw')) out.push('demand_withdraw');
+  if(cross('attach_anxiety','attach_avoid')) out.push('anxious_avoidant');
+  return out;
+}
+/* ===== 状态 ===== */
+const ST = {}; DIMS.forEach(d => ST[d.id] = {...d.init});
+const REF = {};
+const play = document.getElementById('play');
+
+function cardHTML(d){
+  const tags = [`<span class="tag">cluster ${d.cluster}</span>`]
+    .concat(d.pred ? ['<span class="tag blind">apply_prediction</span>'] : [])
+    .concat(d.complementary ? ['<span class="tag b">complementary</span>'] : [])
+    .concat(d.role ? [`<span class="tag">role: ${d.role}</span>`] : []).join('');
+  const ends = d.anchors
+    ? `<div class="track__ends"><span>◀ ${d.anchors.low}</span><span>${d.anchors.high} ▶</span></div>`
+    : `<div class="track__ends"><span>◀ 低</span><span>高 ▶</span></div>`;
+  const ghosts = d.pred ? `<div class="track__err" data-el="err"></div>
+      <div class="track__ghost" data-el="gAB"></div><div class="track__ghost" data-el="gBA"></div>` : '';
+  const predRows = d.pred ? `
+    <div class="rngrow"><label style="color:var(--a)">A 猜 B</label><input class="rng ga" type="range" min="0" max="100" data-el="ab"><span class="rngval" data-el="abv"></span></div>
+    <div class="rngrow"><label style="color:var(--b)">B 猜 A</label><input class="rng gb" type="range" min="0" max="100" data-el="ba"><span class="rngval" data-el="bav"></span></div>` : '';
+  return `<div class="dim__head"><h3>${d.cn}</h3><span class="mono" style="color:var(--faint);font-size:12px">${d.id}</span>${tags}</div>
+    <div class="track">
+      <div class="track__rail"></div><div class="track__band" data-el="band"></div>${ghosts}
+      <div class="track__mk a" data-el="mA"><small data-el="mAv"></small></div>
+      <div class="track__mk b" data-el="mB"><small data-el="mBv"></small></div>
+    </div>${ends}
+    <div class="rngrow"><label style="color:var(--a)">A 实测</label><input class="rng a" type="range" min="0" max="100" data-el="a"><span class="rngval" data-el="av"></span></div>
+    <div class="rngrow"><label style="color:var(--b)">B 实测</label><input class="rng b" type="range" min="0" max="100" data-el="b"><span class="rngval" data-el="bv"></span></div>
+    ${predRows}
+    <div class="readout" data-el="out"></div>`;
+}
+
+play.innerHTML = DIMS.map(d => `<div class="card dim" data-id="${d.id}">${cardHTML(d)}</div>`).join('');
+DIMS.forEach(d => {
+  const card = play.querySelector(`.dim[data-id="${d.id}"]`);
+  const q = el => card.querySelector(`[data-el="${el}"]`);
+  const refs = {card, band:q('band'), mA:q('mA'), mB:q('mB'), mAv:q('mAv'), mBv:q('mBv'),
+    a:q('a'), b:q('b'), av:q('av'), bv:q('bv'), out:q('out')};
+  if(d.pred) Object.assign(refs, {ab:q('ab'), ba:q('ba'), abv:q('abv'), bav:q('bav'), gAB:q('gAB'), gBA:q('gBA'), err:q('err')});
+  refs.a.value = ST[d.id].a; refs.b.value = ST[d.id].b;
+  if(d.pred){ refs.ab.value = ST[d.id].ab; refs.ba.value = ST[d.id].ba; }
+  ['a','b','ab','ba'].forEach(k => { if(refs[k]) refs[k].addEventListener('input', () => { ST[d.id][k] = +refs[k].value; recompute(); }); });
+  REF[d.id] = refs;
+});
+
+/* 归一化小件 */
+const nz = {raw:document.getElementById('nz-raw'), rawv:document.getElementById('nz-raw-v'),
+  type:document.getElementById('nz-type'), rev:document.getElementById('nz-rev'), out:document.getElementById('nz-out')};
+function updNz(){
+  const lk = nz.type.value==='likert7';
+  nz.raw.min = lk?1:0; nz.raw.max = lk?7:100;
+  if(+nz.raw.value > +nz.raw.max) nz.raw.value = nz.raw.max;
+  if(+nz.raw.value < +nz.raw.min) nz.raw.value = nz.raw.min;
+  nz.rawv.textContent = nz.raw.value;
+  nz.out.textContent = normalizeItem(nz.raw.value, nz.type.value, nz.rev.checked).toFixed(2);
+}
+[nz.raw, nz.type, nz.rev].forEach(el => ['input','change'].forEach(e => el.addEventListener(e, updNz)));
+updNz();
+/* ===== 核心更新循环 ===== */
+const pct = v => Math.max(0, Math.min(100, v)) + '%';
+
+function dimChips(r){
+  const c = [`<span class="kv">gap <b>${r.t.gap}</b></span>`,
+             `<span class="kv">gap_level <b>${r.gl}</b></span>`];
+  const dl = (r.t.dir.la || r.t.dir.lb) ? ` · A「${r.t.dir.la||'—'}」B「${r.t.dir.lb||'—'}」` : '';
+  c.push(`<span class="kv">更高=<b>${r.t.dir.higher}</b>${dl}</span>`);
+  if(r.bs){
+    if(r.bs.exists){
+      c.push(`<span class="kv lit">★ 盲区 who=<b>${r.bs.who_misjudged}</b> · err <b>${r.bs.accuracy_error}</b> · ${r.bs.severity}${r.bs.assumed_close?' · 以为接近':''}</span>`);
+      c.push(`<span class="kv lit">“${r.bs.narrative_fact}”</span>`);
+    } else { c.push(`<span class="kv">盲区 none（互猜准）</span>`); }
+  }
+  c.push(`<span class="kv dim">salience <b>−1</b> · ${r.layer}</span>`);
+  return c.join('');
+}
+
+function buildBriefing(rs, top, pf, comp){
+  return {session_id:'demo',
+    overview:{ top_blindspots: top.map(r=>r.d.id),
+      supercluster_scores:{life_expectations:null, conflict_process:null, values_attachment:null, perceptual_blindspot:null},
+      high_friction_pairings: pf, complementary_strengths: comp },
+    dimensions: rs.map(r=>({ dimension_id:r.d.id, cluster:r.d.cluster, layer:r.layer,
+      calibrated_relevant:false, complementary:!!r.d.complementary, level_only:false,
+      gap:r.t.gap, gap_level:r.gl,
+      direction:{higher_partner:r.t.dir.higher, label_a:r.t.dir.la, label_b:r.t.dir.lb},
+      levels:{a:r.sA, b:r.sB},
+      blindspot: r.bs ? {exists:r.bs.exists, severity:r.bs.severity, who_misjudged:r.bs.who_misjudged,
+        assumed_close:r.bs.assumed_close, accuracy_error:r.bs.accuracy_error, narrative_fact:r.bs.narrative_fact} : null,
+      salience_rank:-1 })),
+    question_set_version:'v1'};
+}
+
+function renderJSON(obj){
+  let s = JSON.stringify(obj, null, 2).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  s = s.replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (m,str,colon)=>
+    colon ? `<span class="k">${str}</span>${colon}` : `<span class="s">${str}</span>`);
+  s = s.replace(/(?<=[\s:\[,])(-?\d+(?:\.\d+)?)(?=[\s,\]\n])/g, '<span class="n">$1</span>');
+  s = s.replace(/\b(true|false)\b/g, '<span class="b">$1</span>').replace(/\bnull\b/g, '<span class="nl">null</span>');
+  return s;
+}
+
+function recompute(){
+  const scores = {A:{}, B:{}}, rs = [];
+  DIMS.forEach(d=>{
+    const s = ST[d.id], sA = +s.a, sB = +s.b;
+    scores.A[d.id] = sA; scores.B[d.id] = sB;
+    const t = triplet(sA, sB, d.anchors), gl = gapLevel(t.gap, CALIB.gap_thresholds);
+    const bs = d.pred ? blindspot(sA, sB, +s.ab, +s.ba, d.anchors) : null;
+    const r = {d, sA, sB, t, gl, bs, layer: CALIB.calibrated_relevant?'interpretation':'topic_only'};
+    rs.push(r);
+    const R = REF[d.id];
+    R.mA.style.left = pct(sA); R.mB.style.left = pct(sB);
+    R.mAv.textContent = 'A'+sA; R.mBv.textContent = 'B'+sB;
+    R.av.textContent = sA; R.bv.textContent = sB;
+    R.band.style.left = pct(Math.min(sA,sB)); R.band.style.width = Math.abs(sA-sB)+'%';
+    if(d.pred){
+      R.abv.textContent = s.ab; R.bav.textContent = s.ba;
+      R.gAB.style.left = pct(+s.ab); R.gBA.style.left = pct(+s.ba);
+      R.gAB.style.borderColor = 'var(--a)'; R.gBA.style.borderColor = 'var(--b)';
+      const from = bs.who_misjudged==='A' ? +s.ab : +s.ba;
+      const to = bs.who_misjudged==='A' ? sB : sA;
+      R.err.style.left = pct(Math.min(from,to)); R.err.style.width = Math.abs(from-to)+'%';
+      R.err.style.opacity = bs.exists ? .9 : 0;
+    }
+    R.out.innerHTML = dimChips(r);
+  });
+  const top = rs.filter(r=>r.bs&&r.bs.exists).sort((a,b)=>b.bs.accuracy_error-a.bs.accuracy_error).slice(0,3);
+  const pf = pairings(scores);
+  const comp = rs.filter(r=>r.d.complementary && r.gl==='large').map(r=>r.d.id);
+  document.getElementById('ov-blind').innerHTML = top.length
+    ? top.map((r,i)=>`<span class="kv lit">#${i+1} ${r.d.cn} · err <b>${r.bs.accuracy_error}</b> · ${r.bs.severity}</span>`).join('')
+    : '<span class="kv">当前无盲区（双方互猜都很准）</span>';
+  document.getElementById('ov-judge').innerHTML =
+    rs.map(r=>`<span class="kv dim">${r.d.cn} −1</span>`).join('') + '<span class="kv dim">超类 ×4 = None</span>';
+  document.getElementById('ov-pair').textContent = pf.length ? pf.join(' · ') : '无';
+  document.getElementById('ov-comp').textContent = comp.length ? comp.join(' · ') : '无';
+  document.getElementById('briefing-json').innerHTML = renderJSON(buildBriefing(rs, top, pf, comp));
+  document.getElementById('rep-cards').textContent = '当前 LLM 会生成：' + (top.length ? top.map(r=>r.d.cn).join('、') : '—（无盲区）');
+}
+
+recompute();
+if(!matchMedia('(prefers-reduced-motion:reduce)').matches){
+  const io = new IntersectionObserver(es=>es.forEach(e=>{
+    if(e.isIntersecting){ e.target.style.opacity=1; e.target.style.transform='none'; io.unobserve(e.target); }
+  }), {threshold:0.06});
+  document.querySelectorAll('section').forEach(s=>{
+    s.style.opacity=0; s.style.transform='translateY(16px)';
+    s.style.transition='opacity .55s ease, transform .55s ease'; io.observe(s);
+  });
+}
+</script>
+</body>
+</html>
