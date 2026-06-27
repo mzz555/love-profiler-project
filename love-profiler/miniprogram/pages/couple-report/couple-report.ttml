@@ -1,0 +1,53 @@
+<view class="page">
+  <view class="loading" tt:if="{{loading}}"><text>加载中…</text></view>
+
+  <scroll-view scroll-y class="report" tt:if="{{!loading && report}}">
+    <view class="sec sec-opening">
+      <text class="headline">{{report.opening.headline}}</text>
+      <text class="body">{{report.opening.body}}</text>
+    </view>
+
+    <view class="sec" tt:if="{{report.how_to_read.body}}">
+      <text class="body dim">{{report.how_to_read.body}}</text>
+    </view>
+
+    <view class="sec">
+      <text class="sec-title">最值得聊的几件事</text>
+      <view class="card" tt:for="{{report.blindspot_cards}}" tt:key="dimension_id">
+        <text class="card-title">{{item.title}}</text>
+        <text class="card-body">{{item.body}}</text>
+        <view class="talk" tt:if="{{item.talk_prompt}}"><text>💬 {{item.talk_prompt}}</text></view>
+      </view>
+    </view>
+
+    <view class="sec" tt:if="{{report.landscape.length}}">
+      <text class="sec-title">你们的关系地形</text>
+      <view class="land" tt:for="{{report.landscape}}" tt:key="supercluster">
+        <text class="land-title">{{item.title}}</text>
+        <text class="body">{{item.body}}</text>
+      </view>
+    </view>
+
+    <view class="sec" tt:if="{{report.strengths.body}}">
+      <text class="sec-title">你们的互补面</text>
+      <text class="body">{{report.strengths.body}}</text>
+    </view>
+
+    <view class="sec" tt:if="{{report.next_steps.body}}">
+      <text class="sec-title">可以从这里聊起</text>
+      <text class="body">{{report.next_steps.body}}</text>
+      <view class="invite-item" tt:for="{{report.next_steps.invitations}}" tt:key="*this"><text>· {{item}}</text></view>
+    </view>
+
+    <view class="sec sec-closing" tt:if="{{report.closing.body}}">
+      <text class="body dim">{{report.closing.body}}</text>
+    </view>
+
+    <view class="sec warn" tt:if="{{isDev && report.quality_warnings.length}}">
+      <text class="warn-title">「DEV」质检告警</text>
+      <text class="body" tt:for="{{report.quality_warnings}}" tt:key="*this">{{item}}</text>
+    </view>
+
+    <view class="btn-home" bindtap="backHome"><text>回到首页</text></view>
+  </scroll-view>
+</view>
