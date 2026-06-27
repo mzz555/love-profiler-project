@@ -1,6 +1,8 @@
 """Couple 报告卡片质检门（对标 report_quality_gate 的硬失败/软警告双层）。"""
 from __future__ import annotations
 
+import re
+
 BANNED = ("匹配度", "合适吗", "不合适", "注定", "分数低", "及格", "不及格", "般配")
 _NEGATIVE = ("缺陷", "糟", "失败", "不足", "病态")
 
@@ -25,6 +27,11 @@ def _all_text(cards: dict) -> str:
 
 
 def _fact_referenced(fact: str, body: str) -> bool:
+    # 优先：narrative_fact 里「」内的语义锚点才是"忠实转述"的核心，
+    # 而开头是字母 A/B + 模板词（LLM 本就该用昵称替换、不会逐字复现）。
+    if (m := re.search(r"「(.+?)」", fact)):
+        return m.group(1) in body
+    # 无锚点的泛化 fact（如"存在明显落差"）：退回宽松的开头 4-gram 检查。
     key = fact.strip()
     if len(key) < 4:
         return key in body

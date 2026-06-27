@@ -31,3 +31,25 @@ def test_fact_reference_soft_warning():
 
 def test_clean_card_passes():
     assert check_cards(_cards("A 比 B 预想的更倾向存钱，这值得聊聊"), _briefing()) == []
+
+
+def test_anchor_referenced_via_nickname_no_warning():
+    # 真实场景：body 用昵称/不同引号忠实转述了语义锚点「存钱」，但不含字母模板 "A 比 B"。
+    # 旧实现只查 fact 开头模板会误报；新实现应认出锚点已被转述 → 无警告。
+    body = "对方比你预想的更倾向‘存钱’，这点很值得一起聊聊"
+    assert check_cards(_cards(body), _briefing()) == []
+
+
+def test_anchor_missing_still_warns():
+    # body 完全没提到锚点「存钱」→ 仍应告警。
+    assert any("fact_not_referenced" in w
+               for w in check_cards(_cards("我们随便聊聊天气吧"), _briefing()))
+
+
+def test_fact_without_anchor_falls_back():
+    # 无「」锚点的泛化 fact：退回宽松的开头检查。
+    brief = {"dimensions": [{"dimension_id": "money", "complementary": False,
+             "blindspot": {"narrative_fact": "B 的真实态度与 A 的预想存在明显落差"}}]}
+    assert check_cards(_cards("B 的真实态度与你预想的有明显落差"), brief) == []
+    assert any("fact_not_referenced" in w
+               for w in check_cards(_cards("我们随便聊聊天气吧"), brief))
