@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="loading" tt:if="{{loading}}"><text>加载中…</text></view>
+
+  <view class="invite" tt:if="{{!loading && mode === 'create'}}">
+    <text class="title">邀请 TA 一起测</text>
+    <text class="desc">把邀请发给对方，你也可以现在先开始作答。</text>
+    <button class="btn btn-primary" open-type="share">分享给 TA</button>
+    <view class="token-box">
+      <text class="token-label">邀请码</text>
+      <text class="token-val">{{pairingToken}}</text>
+      <view class="btn-copy" bindtap="copyToken"><text>复制</text></view>
+    </view>
+    <view class="btn btn-ghost" bindtap="startAnswer"><text>开始我的作答</text></view>
+  </view>
+
+  <view class="invite" tt:if="{{!loading && mode === 'join'}}">
+    <text class="title">输入邀请码</text>
+    <text class="desc">粘贴对方给你的邀请码，加入这次双人测评。</text>
+    <input class="join-input" placeholder="粘贴邀请码" value="{{joinInput}}" bindinput="onJoinInput" />
+    <view class="btn btn-primary" bindtap="submitJoin"><text>加入</text></view>
+  </view>
+</view>

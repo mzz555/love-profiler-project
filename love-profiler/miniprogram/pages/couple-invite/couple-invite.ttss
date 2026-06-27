@@ -1,0 +1,13 @@
+.page { min-height: 100vh; background: #08080F; padding: 48rpx 40rpx; box-sizing: border-box; }
+.loading { color: #9aa; text-align: center; margin-top: 200rpx; }
+.invite { display: flex; flex-direction: column; gap: 28rpx; margin-top: 80rpx; }
+.title { color: #fff; font-size: 44rpx; font-weight: 600; }
+.desc { color: #9aa; font-size: 28rpx; line-height: 1.6; }
+.btn { height: 92rpx; border-radius: 18rpx; display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
+.btn-primary { background: #3A8A8A; color: #fff; }
+.btn-ghost { border: 2rpx solid #3A8A8A; color: #3A8A8A; background: transparent; }
+.token-box { display: flex; align-items: center; gap: 16rpx; background: #14141f; border-radius: 16rpx; padding: 24rpx; }
+.token-label { color: #9aa; font-size: 26rpx; }
+.token-val { color: #ffd24a; font-size: 30rpx; flex: 1; word-break: break-all; }
+.btn-copy { color: #3A8A8A; font-size: 28rpx; padding: 8rpx 16rpx; }
+.join-input { background: #14141f; color: #fff; border-radius: 16rpx; padding: 28rpx; font-size: 30rpx; }
